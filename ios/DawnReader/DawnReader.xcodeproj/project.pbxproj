@@ -1,0 +1,506 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		12A3BC4BF5A2A1F9AD0D1E52 /* AIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413D22ACE52133231A06F30D /* AIClient.swift */; };
+		17FAC269EA8947E58D801EEF /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = B506E5C4CBEF47C41DA2C16C /* ReadiumNavigator */; };
+		1D56555DEE337A88032FA0D4 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40096CF8E32B4120764C61B /* KeychainStore.swift */; };
+		2115C590BAEFBA423F295E72 /* ReadiumService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7025733A63D9EFE517EBFBC /* ReadiumService.swift */; };
+		4EB8F81D3134727C45E98690 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3F7D05BDE8255EBA28B62B /* Palette.swift */; };
+		627516B8D54AA3913BEE7BDF /* BookRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */; };
+		6D3A05EE79714EF3C041A4B7 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0EE5BB26BD870583EFBA5B /* LibraryView.swift */; };
+		7730855E6E9E83B802D7A504 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A5FE802A450ACD1A1D68E0 /* SettingsView.swift */; };
+		7BA92859F7378C40E9EDFF6B /* ReadingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */; };
+		807E0EEC5E3C536A52E50677 /* PencilSelectionScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */; };
+		9858B8B2073739176E7903C1 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 5F902CAB0A59F16BA1F97343 /* ReadiumStreamer */; };
+		9DE4E05AAED1001F33D7F9AC /* PencilMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562EF7D7B73340E52BEA68FF /* PencilMode.swift */; };
+		BDD78F390C9E0F5E9B2A9816 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = FC7385D9ADE7903930F20B2C /* ReadiumShared */; };
+		C1EB020DF35B889CDCB33002 /* AIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34CC3717FEFD369AED49819E /* AIClientTests.swift */; };
+		C7E643253A3D49C11FF1932D /* ReaderHostViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561F152819B978F598F80061 /* ReaderHostViewController.swift */; };
+		D4066D590E0AE8293AB6A3C5 /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26ECC55FD4DD89055F2580DD /* LibraryModel.swift */; };
+		D7163310FCB4B8817366A9EA /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA192341B450C2E0C190CB2 /* SettingsStore.swift */; };
+		F04CAE8CFDB0A8F53689F930 /* DawnReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */; };
+		FD61C266E22DC20C8AE18988 /* ReaderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		01F193DF320DCA0C20E9FB37 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 775218D2788885FFBB7686FB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAB7D6D7D48811BAE53320BE;
+			remoteInfo = DawnReader;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSession.swift; sourceTree = "<group>"; };
+		26ECC55FD4DD89055F2580DD /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
+		293F232FEE458BC2611CAE4C /* DawnReaderTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DawnReaderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		34CC3717FEFD369AED49819E /* AIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIClientTests.swift; sourceTree = "<group>"; };
+		413D22ACE52133231A06F30D /* AIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIClient.swift; sourceTree = "<group>"; };
+		41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DawnReaderApp.swift; sourceTree = "<group>"; };
+		561F152819B978F598F80061 /* ReaderHostViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHostViewController.swift; sourceTree = "<group>"; };
+		562EF7D7B73340E52BEA68FF /* PencilMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PencilMode.swift; sourceTree = "<group>"; };
+		5D0EE5BB26BD870583EFBA5B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreen.swift; sourceTree = "<group>"; };
+		984ADE6764B24040FFBA52B9 /* DawnReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DawnReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9C3F7D05BDE8255EBA28B62B /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		A40096CF8E32B4120764C61B /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PencilSelectionScript.swift; sourceTree = "<group>"; };
+		ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRecord.swift; sourceTree = "<group>"; };
+		B7025733A63D9EFE517EBFBC /* ReadiumService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumService.swift; sourceTree = "<group>"; };
+		BCA192341B450C2E0C190CB2 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		F190CCD34CD0BC67DC990F0E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F4A5FE802A450ACD1A1D68E0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		28B72BB5BEB9C66078EE371C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BDD78F390C9E0F5E9B2A9816 /* ReadiumShared in Frameworks */,
+				9858B8B2073739176E7903C1 /* ReadiumStreamer in Frameworks */,
+				17FAC269EA8947E58D801EEF /* ReadiumNavigator in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0F3E1779FE4E0EB5320826F8 /* DawnReader */ = {
+			isa = PBXGroup;
+			children = (
+				413D22ACE52133231A06F30D /* AIClient.swift */,
+				ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */,
+				41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */,
+				F190CCD34CD0BC67DC990F0E /* Info.plist */,
+				A40096CF8E32B4120764C61B /* KeychainStore.swift */,
+				26ECC55FD4DD89055F2580DD /* LibraryModel.swift */,
+				5D0EE5BB26BD870583EFBA5B /* LibraryView.swift */,
+				9C3F7D05BDE8255EBA28B62B /* Palette.swift */,
+				562EF7D7B73340E52BEA68FF /* PencilMode.swift */,
+				AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */,
+				561F152819B978F598F80061 /* ReaderHostViewController.swift */,
+				7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */,
+				1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */,
+				B7025733A63D9EFE517EBFBC /* ReadiumService.swift */,
+				BCA192341B450C2E0C190CB2 /* SettingsStore.swift */,
+				F4A5FE802A450ACD1A1D68E0 /* SettingsView.swift */,
+			);
+			path = DawnReader;
+			sourceTree = "<group>";
+		};
+		9DC6C7C2E8AAD2704D4B1BEF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				984ADE6764B24040FFBA52B9 /* DawnReader.app */,
+				293F232FEE458BC2611CAE4C /* DawnReaderTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D477EAE160FE213D535A7FD5 /* DawnReaderTests */ = {
+			isa = PBXGroup;
+			children = (
+				34CC3717FEFD369AED49819E /* AIClientTests.swift */,
+			);
+			path = DawnReaderTests;
+			sourceTree = "<group>";
+		};
+		FBC3DA035471F4A8AEF092F1 = {
+			isa = PBXGroup;
+			children = (
+				0F3E1779FE4E0EB5320826F8 /* DawnReader */,
+				D477EAE160FE213D535A7FD5 /* DawnReaderTests */,
+				9DC6C7C2E8AAD2704D4B1BEF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AAB7D6D7D48811BAE53320BE /* DawnReader */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 718D8ECEB00DDF0494E8EE18 /* Build configuration list for PBXNativeTarget "DawnReader" */;
+			buildPhases = (
+				E0C2F73EC2A76885B87911F4 /* Sources */,
+				28B72BB5BEB9C66078EE371C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DawnReader;
+			packageProductDependencies = (
+				FC7385D9ADE7903930F20B2C /* ReadiumShared */,
+				5F902CAB0A59F16BA1F97343 /* ReadiumStreamer */,
+				B506E5C4CBEF47C41DA2C16C /* ReadiumNavigator */,
+			);
+			productName = DawnReader;
+			productReference = 984ADE6764B24040FFBA52B9 /* DawnReader.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BF7CF91F259D7BCB5D1A0DEB /* DawnReaderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 82D3318DB354FA1C32E08FAE /* Build configuration list for PBXNativeTarget "DawnReaderTests" */;
+			buildPhases = (
+				7017943F9AECD3660D5364B7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				64F5A0E31247C25716F32F72 /* PBXTargetDependency */,
+			);
+			name = DawnReaderTests;
+			packageProductDependencies = (
+			);
+			productName = DawnReaderTests;
+			productReference = 293F232FEE458BC2611CAE4C /* DawnReaderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		775218D2788885FFBB7686FB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					AAB7D6D7D48811BAE53320BE = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 031C5B397B27F958E2EF1A31 /* Build configuration list for PBXProject "DawnReader" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FBC3DA035471F4A8AEF092F1;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				EEC86079BF8230045447B495 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9DC6C7C2E8AAD2704D4B1BEF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AAB7D6D7D48811BAE53320BE /* DawnReader */,
+				BF7CF91F259D7BCB5D1A0DEB /* DawnReaderTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7017943F9AECD3660D5364B7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1EB020DF35B889CDCB33002 /* AIClientTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0C2F73EC2A76885B87911F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				12A3BC4BF5A2A1F9AD0D1E52 /* AIClient.swift in Sources */,
+				627516B8D54AA3913BEE7BDF /* BookRecord.swift in Sources */,
+				F04CAE8CFDB0A8F53689F930 /* DawnReaderApp.swift in Sources */,
+				1D56555DEE337A88032FA0D4 /* KeychainStore.swift in Sources */,
+				D4066D590E0AE8293AB6A3C5 /* LibraryModel.swift in Sources */,
+				6D3A05EE79714EF3C041A4B7 /* LibraryView.swift in Sources */,
+				4EB8F81D3134727C45E98690 /* Palette.swift in Sources */,
+				9DE4E05AAED1001F33D7F9AC /* PencilMode.swift in Sources */,
+				807E0EEC5E3C536A52E50677 /* PencilSelectionScript.swift in Sources */,
+				C7E643253A3D49C11FF1932D /* ReaderHostViewController.swift in Sources */,
+				FD61C266E22DC20C8AE18988 /* ReaderScreen.swift in Sources */,
+				7BA92859F7378C40E9EDFF6B /* ReadingSession.swift in Sources */,
+				2115C590BAEFBA423F295E72 /* ReadiumService.swift in Sources */,
+				D7163310FCB4B8817366A9EA /* SettingsStore.swift in Sources */,
+				7730855E6E9E83B802D7A504 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		64F5A0E31247C25716F32F72 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAB7D6D7D48811BAE53320BE /* DawnReader */;
+			targetProxy = 01F193DF320DCA0C20E9FB37 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1C4C02746FFB2DD18A5E3794 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.keeplearning.dawnreader.tests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DawnReader.app/DawnReader";
+			};
+			name = Debug;
+		};
+		4BC3796883AC69C3E3564F21 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		79817E9D6A280B9475BE0D66 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = DawnReader/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.keeplearning.dawnreader;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		966D75A194DA600641C62DD7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.keeplearning.dawnreader.tests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DawnReader.app/DawnReader";
+			};
+			name = Release;
+		};
+		B530FBD3E3B797B9AB31EE27 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		FF673BB0F586F9AB778488B3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = DawnReader/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.keeplearning.dawnreader;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		031C5B397B27F958E2EF1A31 /* Build configuration list for PBXProject "DawnReader" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4BC3796883AC69C3E3564F21 /* Debug */,
+				B530FBD3E3B797B9AB31EE27 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		718D8ECEB00DDF0494E8EE18 /* Build configuration list for PBXNativeTarget "DawnReader" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF673BB0F586F9AB778488B3 /* Debug */,
+				79817E9D6A280B9475BE0D66 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		82D3318DB354FA1C32E08FAE /* Build configuration list for PBXNativeTarget "DawnReaderTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C4C02746FFB2DD18A5E3794 /* Debug */,
+				966D75A194DA600641C62DD7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		EEC86079BF8230045447B495 /* XCRemoteSwiftPackageReference "swift-toolkit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/readium/swift-toolkit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5F902CAB0A59F16BA1F97343 /* ReadiumStreamer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EEC86079BF8230045447B495 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumStreamer;
+		};
+		B506E5C4CBEF47C41DA2C16C /* ReadiumNavigator */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EEC86079BF8230045447B495 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumNavigator;
+		};
+		FC7385D9ADE7903930F20B2C /* ReadiumShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EEC86079BF8230045447B495 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumShared;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 775218D2788885FFBB7686FB /* Project object */;
+}

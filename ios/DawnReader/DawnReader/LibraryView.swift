@@ -1,0 +1,134 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct LibraryView: View {
+    @EnvironmentObject private var library: LibraryModel
+    @EnvironmentObject private var settings: SettingsStore
+    @State private var importing = false
+    @State private var showingSettings = false
+
+    private let epubType = UTType(filenameExtension: "epub")!
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Palette.fog.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    if library.books.isEmpty {
+                        emptyLibrary
+                    } else {
+                        bookList
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 34)
+                .padding(.vertical, 28)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [epubType]) { result in
+            guard case let .success(url) = result else { return }
+            Task { await library.importBook(from: url, settings: settings) }
+        }
+        .onOpenURL { url in
+            guard url.pathExtension.lowercased() == "epub" else { return }
+            Task { await library.importBook(from: url, settings: settings) }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+                .environmentObject(settings)
+        }
+        .fullScreenCover(item: $library.openedBook) { opened in
+            ReaderScreen(openedBook: opened, onClose: library.closeReader)
+                .environmentObject(settings)
+        }
+        .alert("无法完成", isPresented: Binding(
+            get: { library.errorMessage != nil },
+            set: { if !$0 { library.errorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(library.errorMessage ?? "")
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Dawn Reader")
+                .font(.system(size: 31, weight: .semibold, design: .serif))
+                .foregroundStyle(Palette.ink)
+            Spacer()
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.ink)
+            Button("导入 EPUB") {
+                importing = true
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.ink)
+        }
+    }
+
+    private var emptyLibrary: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Text("书架是空的")
+                .font(.system(size: 22, weight: .medium, design: .serif))
+            Text("从“文件”中导入一本 EPUB。")
+                .foregroundStyle(Palette.mutedInk)
+            Button("选择 EPUB") { importing = true }
+                .buttonStyle(.bordered)
+                .tint(Palette.ember)
+        }
+        .padding(28)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
+    }
+
+    private var bookList: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 18)], spacing: 18) {
+                ForEach(library.books) { book in
+                    Button {
+                        Task { await library.open(book, settings: settings) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 20) {
+                            HStack {
+                                Text("EPUB")
+                                    .font(.caption2.weight(.semibold))
+                                    .tracking(1.2)
+                                Spacer()
+                                Text("\(Int(book.progress * 100))%")
+                                    .font(.caption.monospacedDigit())
+                            }
+                            .foregroundStyle(Palette.mutedInk)
+                            Text(book.title)
+                                .font(.system(size: 21, weight: .medium, design: .serif))
+                                .foregroundStyle(Palette.ink)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(3)
+                            ProgressView(value: book.progress)
+                                .tint(Palette.ember)
+                        }
+                        .padding(22)
+                        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .overlay {
+            if library.isWorking {
+                ProgressView()
+                    .controlSize(.large)
+            }
+        }
+    }
+}

@@ -8,3 +8,7 @@ dist/
 .next/
 .vinext/
 .wrangler/
+ios/**/DerivedData/
+ios/**/.build/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
