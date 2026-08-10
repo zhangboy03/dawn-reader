@@ -23,11 +23,12 @@ export type RewriteInput = {
 
 function runtimeEnv(): RuntimeEnv {
   const workerEnv = env as unknown as RuntimeEnv;
+  const requestEnv = globalThis.__DAWN_READER_ENV__ as RuntimeEnv | undefined;
   return {
-    AI_PROVIDER: workerEnv.AI_PROVIDER ?? process.env.AI_PROVIDER,
-    AI_BASE_URL: workerEnv.AI_BASE_URL ?? process.env.AI_BASE_URL,
-    AI_API_KEY: workerEnv.AI_API_KEY ?? process.env.AI_API_KEY,
-    AI_MODEL: workerEnv.AI_MODEL ?? process.env.AI_MODEL,
+    AI_PROVIDER: requestEnv?.AI_PROVIDER ?? workerEnv.AI_PROVIDER ?? process.env.AI_PROVIDER,
+    AI_BASE_URL: requestEnv?.AI_BASE_URL ?? workerEnv.AI_BASE_URL ?? process.env.AI_BASE_URL,
+    AI_API_KEY: requestEnv?.AI_API_KEY ?? workerEnv.AI_API_KEY ?? process.env.AI_API_KEY,
+    AI_MODEL: requestEnv?.AI_MODEL ?? workerEnv.AI_MODEL ?? process.env.AI_MODEL,
   };
 }
 

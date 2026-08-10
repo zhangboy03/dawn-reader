@@ -7,6 +7,10 @@ import handler from "vinext/server/app-router-entry";
 
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
+  AI_PROVIDER?: string;
+  AI_BASE_URL?: string;
+  AI_API_KEY?: string;
+  AI_MODEL?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -23,6 +27,7 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    globalThis.__DAWN_READER_ENV__ = env as unknown as Record<string, unknown>;
     const url = new URL(request.url);
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
