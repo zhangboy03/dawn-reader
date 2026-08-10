@@ -28,7 +28,7 @@ export default function App() {
         setProfile(cloud.profile);
         setScreen("library");
       } else if (existing) {
-        void saveCloudState({ profile: existing });
+        void saveCloudState({ profile: existing }).catch(() => undefined);
       }
       if (cloud.settings) saveReaderSettings(cloud.settings);
     }).catch(() => undefined).finally(() => {
@@ -43,7 +43,7 @@ export default function App() {
 
   function completeCalibration(next: ReaderProfile) {
     saveProfile(next);
-    void saveCloudState({ profile: next });
+    void saveCloudState({ profile: next }).catch(() => undefined);
     setProfile(next);
     setScreen("library");
   }
@@ -51,14 +51,14 @@ export default function App() {
   function skipCalibration() {
     const next: ReaderProfile = { score: null, band: "未校准 · 平衡辅助", preset: "balanced" };
     saveProfile(next);
-    void saveCloudState({ profile: next });
+    void saveCloudState({ profile: next }).catch(() => undefined);
     setProfile(next);
     setScreen("library");
   }
 
   function changeProfile(next: ReaderProfile) {
     saveProfile(next);
-    void saveCloudState({ profile: next });
+    void saveCloudState({ profile: next }).catch(() => undefined);
     setProfile(next);
   }
 
