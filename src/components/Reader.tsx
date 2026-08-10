@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BookSource } from "./Library";
 import type { ReaderProfile } from "../lib/storage";
 import {
@@ -11,10 +11,8 @@ import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContex
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
-  nextPencilMode,
   pageTurnFromPointer,
   pointerInputKind,
-  shouldCaptureSelection,
   shouldTurnPage,
   touchInputKind,
   type ReaderInputKind,
@@ -23,12 +21,55 @@ import {
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type SelectionAnchor = { x: number; y: number; placement: "above" | "below" };
 type GestureState = {
-  source: "pointer" | "touch";
   kind: ReaderInputKind;
-  x: number;
-  y: number;
+  mode: PencilMode;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  startScrollLeft: number;
+  touchSeen: boolean;
+  completed: boolean;
   pointerId?: number;
 };
+type CaretPoint = { node: Node; offset: number };
+
+function caretPointFromCoordinates(document: Document, x: number, y: number): CaretPoint | null {
+  const caretDocument = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const position = caretDocument.caretPositionFromPoint?.(x, y);
+  if (position?.offsetNode) return { node: position.offsetNode, offset: position.offset };
+  const range = caretDocument.caretRangeFromPoint?.(x, y);
+  return range ? { node: range.startContainer, offset: range.startOffset } : null;
+}
+
+function selectBetween(document: Document, start: CaretPoint, end: CaretPoint) {
+  const selection = document.getSelection();
+  if (!selection) return false;
+  try {
+    selection.setBaseAndExtent(start.node, start.offset, end.node, end.offset);
+  } catch {
+    const startRange = document.createRange();
+    const endRange = document.createRange();
+    startRange.setStart(start.node, start.offset);
+    startRange.collapse(true);
+    endRange.setStart(end.node, end.offset);
+    endRange.collapse(true);
+    const range = document.createRange();
+    if (startRange.compareBoundaryPoints(Range.START_TO_START, endRange) <= 0) {
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+    } else {
+      range.setStart(end.node, end.offset);
+      range.setEnd(start.node, start.offset);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  return Boolean(selection.rangeCount && !selection.isCollapsed && selection.toString().trim());
+}
 
 const themeColors = {
   paper: { background: "#f4f6f3", color: "#182126" },
@@ -94,11 +135,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const cloudProgressTimerRef = useRef<number | null>(null);
   const pendingCloudProgressRef = useRef<ReturnType<typeof saveReadingPosition> | null>(null);
   const pencilModeRef = useRef(loadReaderSettings().pencilMode);
-  const lastInputKindRef = useRef<ReaderInputKind>("mouse");
   const gestureRef = useRef<GestureState | null>(null);
+  const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
   const selectedKeyRef = useRef("");
-  const lastPencilControlTapRef = useRef(0);
   const [displayTitle, setDisplayTitle] = useState(source.title);
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
@@ -121,14 +161,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     });
   }
 
-  function applyPencilModeToContents(contents: any, _mode: PencilMode) {
+  function applyPencilModeToContents(contents: any, mode: PencilMode) {
     const root = contents?.document?.documentElement as HTMLElement | undefined;
     const body = contents?.document?.body as HTMLElement | undefined;
     for (const element of [root, body]) {
-      element?.style.setProperty("touch-action", "none", "important");
+      element?.style.setProperty("touch-action", "pan-y pinch-zoom", "important");
       element?.style.setProperty("overscroll-behavior", "none", "important");
       element?.style.setProperty("user-select", "text", "important");
       element?.style.setProperty("-webkit-user-select", "text", "important");
+      element?.setAttribute("data-dawn-pencil-mode", mode);
     }
   }
 
@@ -140,10 +181,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   function setPencilMode(mode: PencilMode) {
     updateSettings({ pencilMode: mode });
     clearSelection();
-  }
-
-  function togglePencilMode() {
-    setPencilMode(nextPencilMode(pencilModeRef.current));
   }
 
   function persistProgress(progressKey: string, cfi: string, percentage: number) {
@@ -220,10 +257,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const selection = contents?.window?.getSelection?.() as Selection | null;
     const text = selection?.toString().trim() ?? "";
     if (!text || !selection?.rangeCount) return;
-    if (!shouldCaptureSelection(lastInputKindRef.current, pencilModeRef.current)) {
-      selection.removeAllRanges();
-      return;
-    }
     const range = selection.getRangeAt(0);
     let cfiRange = suppliedCfi ?? "";
     if (!cfiRange) {
@@ -259,9 +292,70 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }, contextFromDomSelection(selection));
   }
 
-  function scheduleEpubSelection(contents: any) {
+  function scheduleEpubSelection(contents: any, delay = 320) {
     if (selectionTimerRef.current) window.clearTimeout(selectionTimerRef.current);
-    selectionTimerRef.current = window.setTimeout(() => captureEpubSelection(contents), 80);
+    selectionTimerRef.current = window.setTimeout(() => {
+      const selection = contents?.window?.getSelection?.() as Selection | null;
+      if (!selection?.rangeCount || selection.isCollapsed || !selection.toString().trim()) {
+        if (selectedContentsRef.current === contents && selectedKeyRef.current) clearSelection();
+        return;
+      }
+      captureEpubSelection(contents);
+    }, delay);
+  }
+
+  function epubScrollLeft() {
+    return epubRef.current?.querySelector<HTMLElement>(".epub-container")?.scrollLeft ?? 0;
+  }
+
+  function startGesture(kind: ReaderInputKind, x: number, y: number, pointerId?: number, touchSeen = false) {
+    gestureRef.current = {
+      kind,
+      mode: pencilModeRef.current,
+      startX: x,
+      startY: y,
+      lastX: x,
+      lastY: y,
+      startScrollLeft: epubScrollLeft(),
+      touchSeen,
+      completed: false,
+      pointerId,
+    };
+    if (!(kind === "pen" && pencilModeRef.current === "select")) clearSelection();
+  }
+
+  function completeGesture(contents: any, x: number, y: number) {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.completed) return;
+    gesture.completed = true;
+    gesture.lastX = x;
+    gesture.lastY = y;
+    gestureRef.current = null;
+
+    if (gesture.kind === "pen" && gesture.mode === "select") {
+      const selection = contents.document.getSelection() as Selection | null;
+      if (!selection?.rangeCount || selection.isCollapsed || !selection.toString().trim()) {
+        const start = caretPointFromCoordinates(contents.document, gesture.startX, gesture.startY);
+        const end = caretPointFromCoordinates(contents.document, x, y);
+        if (start && end) selectBetween(contents.document, start, end);
+      }
+      scheduleEpubSelection(contents, 140);
+      return;
+    }
+
+    if (shouldTurnPage(gesture.kind, gesture.mode)) {
+      const pageWidth = Math.max(1, epubRef.current?.clientWidth ?? window.innerWidth);
+      const direction = pageTurnFromPointer(gesture.startX, gesture.startY, x, y, pageWidth);
+      if (!direction) return;
+      if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
+      pageFallbackTimerRef.current = window.setTimeout(() => {
+        const epubHandledGesture = Math.abs(epubScrollLeft() - gesture.startScrollLeft) > 8;
+        if (!epubHandledGesture) turnPage(direction);
+      }, 160);
+      return;
+    }
+
+    scheduleEpubSelection(contents, 140);
   }
 
   useEffect(() => {
@@ -326,7 +420,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       const rendition = book.renderTo(epubRef.current, {
         width: Math.max(1, Math.floor(initialFrame.width)),
         height: Math.max(1, Math.floor(initialFrame.height)),
+        manager: "continuous",
         flow: "paginated",
+        snap: true,
         spread: "auto",
         minSpreadWidth: 900,
         resizeOnOrientationChange: false,
@@ -339,83 +435,64 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
         const onPointerDown = (event: PointerEvent) => {
           const kind = pointerInputKind(event.pointerType);
-          lastInputKindRef.current = kind;
-          gestureRef.current = { source: "pointer", kind, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
-          clearSelection();
-          if (kind === "pen" && event.button === 2) {
-            event.preventDefault();
-            togglePencilMode();
-            gestureRef.current = null;
+          if (gestureRef.current && gestureRef.current.pointerId === undefined) {
+            gestureRef.current.pointerId = event.pointerId;
+            if (kind === "pen") gestureRef.current.kind = "pen";
             return;
           }
-          if (shouldTurnPage(kind, pencilModeRef.current)) {
-            event.preventDefault();
-            const target = event.target as { setPointerCapture?: (pointerId: number) => void } | null;
-            try { target?.setPointerCapture?.(event.pointerId); } catch { /* Safari may not expose capture inside the iframe */ }
-          }
+          startGesture(kind, event.clientX, event.clientY, event.pointerId);
         };
         const onPointerMove = (event: PointerEvent) => {
-          const start = gestureRef.current;
-          if (start?.source === "pointer" && start.pointerId === event.pointerId && shouldTurnPage(start.kind, pencilModeRef.current)) {
-            event.preventDefault();
-          }
+          const gesture = gestureRef.current;
+          if (!gesture || gesture.pointerId !== event.pointerId) return;
+          gesture.lastX = event.clientX;
+          gesture.lastY = event.clientY;
         };
         const onPointerUp = (event: PointerEvent) => {
-          const start = gestureRef.current;
-          if (!start || start.source !== "pointer" || start.pointerId !== event.pointerId) return;
-          gestureRef.current = null;
-          if (shouldTurnPage(start.kind, pencilModeRef.current)) {
-            event.preventDefault();
-            const pageWidth = Math.max(1, epubRef.current?.clientWidth ?? window.innerWidth);
-            const direction = pageTurnFromPointer(start.x, start.y, event.clientX, event.clientY, pageWidth);
-            if (direction) turnPage(direction);
-          } else if (shouldCaptureSelection(start.kind, pencilModeRef.current)) {
-            scheduleEpubSelection(contents);
-          }
+          const gesture = gestureRef.current;
+          if (!gesture || gesture.pointerId !== event.pointerId) return;
+          completeGesture(contents, event.clientX, event.clientY);
         };
         const onPointerCancel = (event: PointerEvent) => {
-          const start = gestureRef.current;
-          if (!start || start.pointerId !== event.pointerId) return;
-          gestureRef.current = start.kind === "mouse" ? null : { ...start, source: "touch", pointerId: undefined };
+          const gesture = gestureRef.current;
+          if (!gesture || gesture.pointerId !== event.pointerId) return;
+          if (gesture.touchSeen) {
+            gesture.pointerId = undefined;
+          } else {
+            gestureRef.current = null;
+            scheduleEpubSelection(contents, 180);
+          }
         };
         const onTouchStart = (event: TouchEvent) => {
           const touch = event.changedTouches[0];
           if (!touch) return;
-          const kind = touchInputKind((touch as Touch & { touchType?: string }).touchType);
-          if (gestureRef.current?.source === "pointer") {
-            if (kind === "pen") {
-              gestureRef.current.kind = "pen";
-              lastInputKindRef.current = "pen";
-            }
-            if (shouldTurnPage(gestureRef.current.kind, pencilModeRef.current)) event.preventDefault();
-            return;
+          const reportedKind = touchInputKind((touch as Touch & { touchType?: string }).touchType);
+          const kind = gestureRef.current?.kind === "pen" ? "pen" : reportedKind;
+          if (gestureRef.current) {
+            gestureRef.current.touchSeen = true;
+            gestureRef.current.kind = kind;
+          } else {
+            startGesture(kind, touch.clientX, touch.clientY, undefined, true);
           }
-          lastInputKindRef.current = kind;
-          gestureRef.current = { source: "touch", kind, x: touch.clientX, y: touch.clientY };
-          clearSelection();
-          if (shouldTurnPage(kind, pencilModeRef.current)) event.preventDefault();
+          if (kind === "pen" && pencilModeRef.current === "select") event.stopPropagation();
         };
         const onTouchMove = (event: TouchEvent) => {
-          const start = gestureRef.current;
-          if (start && shouldTurnPage(start.kind, pencilModeRef.current)) event.preventDefault();
+          const gesture = gestureRef.current;
+          const touch = event.changedTouches[0];
+          if (!gesture || !touch) return;
+          gesture.lastX = touch.clientX;
+          gesture.lastY = touch.clientY;
+          if (gesture.kind === "pen" && gesture.mode === "select") event.stopPropagation();
         };
         const onTouchEnd = (event: TouchEvent) => {
-          const start = gestureRef.current;
-          if (!start || start.source !== "touch") return;
+          const gesture = gestureRef.current;
           const touch = event.changedTouches[0];
-          gestureRef.current = null;
-          if (!touch) return;
-          if (shouldTurnPage(start.kind, pencilModeRef.current)) {
-            event.preventDefault();
-            const pageWidth = Math.max(1, epubRef.current?.clientWidth ?? window.innerWidth);
-            const direction = pageTurnFromPointer(start.x, start.y, touch.clientX, touch.clientY, pageWidth);
-            if (direction) turnPage(direction);
-          } else if (shouldCaptureSelection(start.kind, pencilModeRef.current)) {
-            scheduleEpubSelection(contents);
-          }
+          if (!gesture || !touch) return;
+          if (gesture.kind === "pen" && gesture.mode === "select") event.stopPropagation();
+          completeGesture(contents, touch.clientX, touch.clientY);
         };
-        const onContextMenu = (event: Event) => {
-          if (pencilModeRef.current === "page") event.preventDefault();
+        const onSelectionChange = () => {
+          scheduleEpubSelection(contents);
         };
 
         document.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
@@ -426,7 +503,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         document.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
         document.addEventListener("touchend", onTouchEnd, { capture: true, passive: false });
         document.addEventListener("touchcancel", () => { gestureRef.current = null; }, { capture: true, passive: false });
-        document.addEventListener("contextmenu", onContextMenu, { capture: true });
+        document.addEventListener("selectionchange", onSelectionChange, { passive: true });
       });
       rendition.on("selected", (cfiRange: string, contents: any) => {
         captureEpubSelection(contents, cfiRange);
@@ -474,6 +551,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     return () => {
       cancelled = true;
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
+      if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
       if (selectionTimerRef.current) window.clearTimeout(selectionTimerRef.current);
       if (frameResizeTimer) window.clearTimeout(frameResizeTimer);
       frameResizeObserver?.disconnect();
@@ -506,6 +584,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   function clearSelection() {
+    if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
+    pageFallbackTimerRef.current = null;
     if (selectionTimerRef.current) window.clearTimeout(selectionTimerRef.current);
     selectionTimerRef.current = null;
     rewriteAbortRef.current?.abort();
@@ -542,26 +622,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
   }
 
-  function handleShellPointerDown(event: ReactPointerEvent) {
-    lastInputKindRef.current = pointerInputKind(event.pointerType);
-    if (event.pointerType === "pen" && event.button === 2) {
-      event.preventDefault();
-      togglePencilMode();
-      return;
-    }
+  function handleShellPointerDown() {
     clearSelection();
-  }
-
-  function handlePencilControlPointerUp(event: ReactPointerEvent) {
-    if (event.pointerType !== "pen" || (event.target as Element).closest("button")) return;
-    const now = performance.now();
-    if (now - lastPencilControlTapRef.current < 360) {
-      event.preventDefault();
-      togglePencilMode();
-      lastPencilControlTapRef.current = 0;
-    } else {
-      lastPencilControlTapRef.current = now;
-    }
   }
 
   const readingWidth = settings.pageWidth + 380;
@@ -580,7 +642,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       <button className="back-button" onClick={onClose}>← <span>书架</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageProgress}%</small>}</div>
       <div className="reader-actions">
-        {source.type === "epub" && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式" onPointerUp={handlePencilControlPointerUp}>
+        {source.type === "epub" && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">
           <span>Pencil</span>
           <button className={settings.pencilMode === "page" ? "active" : ""} aria-pressed={settings.pencilMode === "page"} onClick={() => setPencilMode("page")}>翻页</button>
           <button className={settings.pencilMode === "select" ? "active" : ""} aria-pressed={settings.pencilMode === "select"} onClick={() => setPencilMode("select")}>画词</button>
