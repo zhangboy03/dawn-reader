@@ -1,6 +1,30 @@
-# Comprehensible Input Lab
+# Dawn Reader / Comprehensible Input Lab
 
 把“可理解输入”从一句学习建议，变成可以被使用、测量和证伪的语言学习产品实验。
+
+现在已经有一个可试用的英文原著晨读 MVP：**原书是主角，英语学习是随行工具。** 它不会自动推荐书，也不会把整本书换成简化版；先读原文，真正卡住时才选中词句请求帮助。
+
+## 直接试用
+
+```bash
+cd /Users/keeplearning/Projects/comprehensible-input-lab
+npm install
+npm run dev
+```
+
+打开 <http://127.0.0.1:5173/>。首次进入可以：
+
+1. 完成约 3.5 分钟的 LexTALE 词汇校准，或先跳过；
+2. 直接打开原创演示文本跑完阅读流程；
+3. 导入自己合法持有的 `.epub`、`.txt`、`.md` 或 `.markdown`；
+4. 选中障碍词句，选择英文短释义、换个说法或拆开长句；
+5. 标记“我认识”或“这里卡住了”，并在段落结束反馈实际难度。
+
+没有配置 AI 时，求助面板明确显示 `offline-demo`，只提供内置演示释义。若本机 Ollama 已启动且至少安装一个模型，会自动使用本地模型；也可复制 `.env.example` 为 `.env` 后配置 DeepSeek、Meta 或其他 OpenAI-compatible API。ChatGPT Pro 订阅本身不包含 API 额度。
+
+书架上的 `AI LAYER` 状态条会显示当前 provider 和模型；填好 `.env` 并重启开发服务后，可直接点击“测试连接”验证密钥、模型名、JSON 返回和实际延迟。
+
+更完整的产品取舍、词汇测试依据与下一轮实验见 [docs/reader-mvp.md](docs/reader-mvp.md)；当前模型与阅读交互调研见 [docs/model-and-reader-ui.md](docs/model-and-reader-ui.md)，流式延迟和本地推理结论见 [docs/latency-and-local-inference.md](docs/latency-and-local-inference.md)。
 
 ## 核心判断
 
@@ -28,9 +52,13 @@
 
 ```text
 .
+├── src/                         # Dawn Reader MVP
+│   ├── components/              # 校准、书架、阅读器
+│   └── lib/                     # LexTALE、演示文本、本地状态
 ├── docs/
 │   ├── viewpoint-and-logic.md   # 三支视频的观点与推理链
-│   └── mvp-experiment.md        # 产品假设、最小闭环与验证指标
+│   ├── mvp-experiment.md        # 产品假设、最小闭环与验证指标
+│   └── reader-mvp.md            # 当前可试用版本与设计决策
 └── transcripts/
     ├── README.md                # 转写方法、误差和版权说明
     ├── 01-reading.md
@@ -42,3 +70,5 @@
 ## 内容边界
 
 文字稿用于个人研究与产品分析，著作权归原作者及相关权利人所有。仓库默认保持私有；若要公开发布，应先移除完整文字稿，或取得明确授权。
+
+阅读器不内置商业图书，也不帮助绕过付费或版权限制。请从出版社、书店、图书馆或其他合法来源取得电子书，再导入本地文件。
