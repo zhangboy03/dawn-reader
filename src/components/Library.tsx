@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReaderProfile } from "../lib/storage";
-import { listStoredBooks, saveEpub, storedBookFile, type StoredBook } from "../lib/bookStore";
+import {
+  cacheStoredBook,
+  listStoredBooks,
+  saveEpub,
+  storedBookFile,
+  type StoredBook,
+} from "../lib/bookStore";
+import {
+  downloadCloudBook,
+  listCloudBooks,
+  saveCloudProgress,
+  uploadCloudBook,
+  type CloudBook,
+} from "../lib/cloudSync";
+import { parseReadingPosition } from "../lib/readingPosition";
 
 export type BookSource = { type: "text"; title: string; text: string } | { type: "epub"; id?: string; title: string; file: File };
 
@@ -10,6 +24,13 @@ type AiHealth = {
   configured: boolean;
   pendingProvider: string | null;
 };
+
+type ShelfBook = StoredBook & {
+  synced: boolean;
+  cloud?: CloudBook;
+};
+
+type SyncState = "loading" | "syncing" | "ready" | "local";
 
 function AiStatus() {
   const [health, setHealth] = useState<AiHealth | null>(null);
@@ -39,7 +60,7 @@ function AiStatus() {
         body: JSON.stringify({ text: "The point was difficult to grasp.", preset: "balanced" }),
       });
       if (!response.ok) {
-        const data = await response.json().catch(() => null);
+        const data = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(data?.error ?? "连接失败");
       }
       await response.text();
@@ -63,6 +84,27 @@ function AiStatus() {
   </aside>;
 }
 
+function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
+  const localById = new Map(local.map((book) => [book.id, book]));
+  const merged: ShelfBook[] = cloud.map((book) => ({
+    ...(localById.get(book.id) ?? {
+      id: book.id,
+      title: book.title,
+      fileName: book.fileName,
+      blob: null,
+      addedAt: book.addedAt,
+    }),
+    title: book.title,
+    fileName: book.fileName,
+    synced: true,
+    cloud: book,
+  }));
+  for (const book of local) {
+    if (!cloud.some((remote) => remote.id === book.id)) merged.push({ ...book, synced: false });
+  }
+  return merged.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+}
+
 export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   profile: ReaderProfile;
   onOpen: (source: BookSource) => void;
@@ -70,11 +112,39 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   onProfileChange: (profile: ReaderProfile) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [storedBooks, setStoredBooks] = useState<StoredBook[]>([]);
+  const [storedBooks, setStoredBooks] = useState<ShelfBook[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState>("loading");
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
-    listStoredBooks().then(setStoredBooks).catch(() => setStoredBooks([]));
+    let cancelled = false;
+    async function syncLibrary() {
+      const local = await listStoredBooks().catch(() => []);
+      if (cancelled) return;
+      setStoredBooks(local.map((book) => ({ ...book, synced: false })));
+      try {
+        const cloud = await listCloudBooks();
+        if (cancelled) return;
+        setStoredBooks(mergeShelf(local, cloud));
+        const unsynced = local.filter((book) => !cloud.some((remote) => remote.id === book.id));
+        if (unsynced.length) {
+          setSyncState("syncing");
+          for (const book of unsynced) {
+            await uploadCloudBook(book);
+            const localPosition = parseReadingPosition(localStorage.getItem(`dawn-reader-progress:${book.id}`));
+            if (localPosition) await saveCloudProgress(book.id, localPosition);
+          }
+          const refreshed = await listCloudBooks();
+          if (!cancelled) setStoredBooks(mergeShelf(local, refreshed));
+        }
+        if (!cancelled) setSyncState("ready");
+      } catch {
+        if (!cancelled) setSyncState("local");
+      }
+    }
+    void syncLibrary();
+    return () => { cancelled = true; };
   }, []);
 
   async function importFile(file?: File) {
@@ -82,7 +152,15 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     const extension = file.name.split(".").pop()?.toLowerCase();
     if (extension === "epub") {
       const stored = await saveEpub(file);
-      setStoredBooks((books) => [stored, ...books.filter((book) => book.id !== stored.id)]);
+      setStoredBooks((books) => [{ ...stored, synced: false }, ...books.filter((book) => book.id !== stored.id)]);
+      setSyncState("syncing");
+      try {
+        await uploadCloudBook(stored);
+        setStoredBooks((books) => books.map((book) => book.id === stored.id ? { ...book, synced: true } : book));
+        setSyncState("ready");
+      } catch {
+        setSyncState("local");
+      }
       return onOpen({ type: "epub", id: stored.id, title: stored.title, file });
     }
     if (["txt", "md", "markdown"].includes(extension ?? "")) {
@@ -91,9 +169,36 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     window.alert("第一版支持 EPUB、TXT、MD 和 Markdown 文件。");
   }
 
+  async function openBook(book: ShelfBook) {
+    if (openingId) return;
+    setOpeningId(book.id);
+    try {
+      let file: File;
+      if (book.blob) {
+        file = storedBookFile(book);
+      } else if (book.cloud) {
+        file = await downloadCloudBook(book.cloud);
+        await cacheStoredBook(book, file);
+      } else {
+        throw new Error("这本书尚未同步到当前设备。");
+      }
+      onOpen({ type: "epub", id: book.id, title: book.title, file });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "打开失败");
+      setOpeningId(null);
+    }
+  }
+
+  const syncLabel = {
+    loading: "连接中",
+    syncing: "同步中",
+    ready: "已同步",
+    local: "仅本机",
+  }[syncState];
+
   return <main className="library-shell">
     <header className="topbar">
-      <div className="brand">Dawn Reader</div>
+      <div className="brand-lockup"><div className="brand">Dawn Reader</div><span className={`sync-mark ${syncState}`}>{syncLabel}</span></div>
       <div className="profile-control">
         <button className="profile-chip" onClick={() => setProfileOpen((open) => !open)}><i /> {profile.band}</button>
         {profileOpen && <div className="profile-menu">
@@ -119,9 +224,9 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       {storedBooks.length > 0 && <>
         <div className="section-heading"><h2>继续阅读</h2></div>
         <div className="stored-shelf">
-          {storedBooks.map((book) => <button className="stored-book" key={book.id} onClick={() => onOpen({ type: "epub", id: book.id, title: book.title, file: storedBookFile(book) })}>
-            <div className="stored-spine" aria-hidden="true"><span>LOCAL EPUB</span><strong>{book.title.slice(0, 2).toUpperCase()}</strong><i /></div>
-            <div><small>EPUB</small><h3>{book.title}</h3><strong>打开 <span>→</span></strong></div>
+          {storedBooks.map((book) => <button className="stored-book" key={book.id} disabled={openingId === book.id} onClick={() => void openBook(book)}>
+            <div className="stored-spine" aria-hidden="true"><span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span><strong>{book.title.slice(0, 2).toUpperCase()}</strong><i /></div>
+            <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : "打开"} <span>→</span></strong></div>
           </button>)}
         </div>
       </>}

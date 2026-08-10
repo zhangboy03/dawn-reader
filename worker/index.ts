@@ -11,6 +11,8 @@ interface Env {
   AI_BASE_URL?: string;
   AI_API_KEY?: string;
   AI_MODEL?: string;
+  DB?: D1Database;
+  BOOKS?: R2Bucket;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -27,7 +29,7 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    globalThis.__DAWN_READER_ENV__ = env as unknown as Record<string, unknown>;
+    globalThis.__DAWN_READER_ENV__ = env as unknown as DawnReaderRuntimeEnv;
     const url = new URL(request.url);
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];

@@ -6,7 +6,7 @@ export type StoredBook = {
   id: string;
   title: string;
   fileName: string;
-  blob: Blob;
+  blob: Blob | null;
   addedAt: string;
 };
 
@@ -62,5 +62,15 @@ export async function listStoredBooks() {
 }
 
 export function storedBookFile(book: StoredBook) {
+  if (!book.blob) throw new Error("The book is not cached on this device.");
   return new File([book.blob], book.fileName, { type: "application/epub+zip" });
+}
+
+export async function cacheStoredBook(book: StoredBook, blob: Blob) {
+  const db = await openLibrary();
+  const record = { ...book, blob };
+  const transaction = db.transaction(STORE_NAME, "readwrite");
+  await requestResult(transaction.objectStore(STORE_NAME).put(record));
+  db.close();
+  return record;
 }

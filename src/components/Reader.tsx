@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { BookSource } from "./Library";
 import type { ReaderProfile } from "../lib/storage";
 import {
   loadReaderSettings,
   saveReaderSettings,
+  type PencilMode,
   type ReaderSettings,
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
+import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
+import { nextPencilMode, pageTurnFromPointer } from "../lib/pencilInput";
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type SelectionAnchor = { x: number; y: number; placement: "above" | "below" };
@@ -73,6 +76,12 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const selectedContentsRef = useRef<any>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
   const reflowTimerRef = useRef<number | null>(null);
+  const cloudProgressTimerRef = useRef<number | null>(null);
+  const pendingCloudProgressRef = useRef<ReturnType<typeof saveReadingPosition> | null>(null);
+  const pencilModeRef = useRef(loadReaderSettings().pencilMode);
+  const lastPointerTypeRef = useRef("");
+  const pointerStartRef = useRef<{ x: number; type: string } | null>(null);
+  const lastPencilControlTapRef = useRef(0);
   const [displayTitle, setDisplayTitle] = useState(source.title);
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
@@ -85,9 +94,33 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
 
   function updateSettings(patch: Partial<ReaderSettings>) {
-    const next = { ...settings, ...patch };
-    setSettings(next);
-    saveReaderSettings(next);
+    setSettings((current) => {
+      const next = { ...current, ...patch };
+      pencilModeRef.current = next.pencilMode;
+      saveReaderSettings(next);
+      void saveCloudState({ settings: next }).catch(() => undefined);
+      return next;
+    });
+  }
+
+  function setPencilMode(mode: PencilMode) {
+    updateSettings({ pencilMode: mode });
+    clearSelection();
+  }
+
+  function togglePencilMode() {
+    setPencilMode(nextPencilMode(pencilModeRef.current));
+  }
+
+  function persistProgress(progressKey: string, cfi: string, percentage: number) {
+    const position = saveReadingPosition(progressKey, { cfi, percentage });
+    if (source.type !== "epub" || !source.id) return;
+    pendingCloudProgressRef.current = position;
+    if (cloudProgressTimerRef.current) window.clearTimeout(cloudProgressTimerRef.current);
+    cloudProgressTimerRef.current = window.setTimeout(() => {
+      pendingCloudProgressRef.current = null;
+      void saveCloudProgress(source.id!, position).catch(() => undefined);
+    }, 800);
   }
 
   function applyEpubTheme(rendition: any, next = settings) {
@@ -129,7 +162,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         signal: controller.signal,
       });
       if (!response.ok) {
-        const data = await response.json().catch(() => null);
+        const data = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(data?.error ?? "Rewrite failed");
       }
       const data = await response.json() as { rewrite?: string };
@@ -164,18 +197,31 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings]);
+  }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme]);
 
   useEffect(() => {
     if (source.type !== "epub" || !epubRef.current) return;
     let cancelled = false;
     let book: any;
     const progressKey = `dawn-reader-progress:${source.id ?? source.file.name}`;
-    const savedPosition = parseReadingPosition(localStorage.getItem(progressKey));
     let canPersistProgress = false;
     let locationsGenerated = false;
     source.file.arrayBuffer().then(async (buffer) => {
       if (cancelled || !epubRef.current) return;
+      const localPosition = parseReadingPosition(localStorage.getItem(progressKey));
+      const cloudPosition = source.id
+        ? await loadCloudProgress(source.id).catch(() => null)
+        : null;
+      const cloudIsNewer = Boolean(cloudPosition && (
+        !localPosition
+        || !localPosition.updatedAt
+        || Boolean(cloudPosition.updatedAt && cloudPosition.updatedAt >= localPosition.updatedAt)
+      ));
+      const savedPosition = cloudIsNewer ? cloudPosition : localPosition;
+      if (savedPosition) saveReadingPosition(progressKey, savedPosition);
+      if (source.id && localPosition && !cloudIsNewer) {
+        void saveCloudProgress(source.id, localPosition).catch(() => undefined);
+      }
       const { default: ePub } = await import("epubjs");
       book = ePub(buffer);
       bookRef.current = book;
@@ -192,12 +238,38 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       renditionRef.current = rendition;
       applyEpubTheme(rendition);
       rendition.hooks.content.register((contents: any) => {
-        contents.document.addEventListener("pointerdown", clearSelection);
+        const document = contents.document as Document;
+        document.addEventListener("pointerdown", (event: PointerEvent) => {
+          lastPointerTypeRef.current = event.pointerType;
+          pointerStartRef.current = { x: event.clientX, type: event.pointerType };
+          clearSelection();
+          if (event.pointerType === "pen" && event.button === 2) {
+            event.preventDefault();
+            togglePencilMode();
+            pointerStartRef.current = null;
+          } else if (event.pointerType === "pen" && pencilModeRef.current === "page") {
+            event.preventDefault();
+          }
+        });
+        document.addEventListener("pointerup", (event: PointerEvent) => {
+          const start = pointerStartRef.current;
+          pointerStartRef.current = null;
+          const pagesWithTouch = event.pointerType === "touch";
+          const pagesWithPencil = event.pointerType === "pen" && pencilModeRef.current === "page";
+          if (!start || start.type !== event.pointerType || (!pagesWithTouch && !pagesWithPencil)) return;
+          event.preventDefault();
+          turnPage(pageTurnFromPointer(start.x, event.clientX, contents.window.innerWidth));
+        });
       });
       rendition.on("selected", (cfiRange: string, contents: any) => {
         const selection = contents.window.getSelection() as Selection | null;
         const text = selection?.toString().trim();
         if (!text || !selection?.rangeCount) return;
+        const pointerType = lastPointerTypeRef.current;
+        if (pointerType === "touch" || (pointerType === "pen" && pencilModeRef.current === "page")) {
+          selection.removeAllRanges();
+          return;
+        }
         if (selectedCfiRef.current) {
           try { rendition.annotations.remove(selectedCfiRef.current, "highlight"); } catch { /* no-op */ }
         }
@@ -227,7 +299,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         const ratio = location.start?.percentage ?? (locationsGenerated && cfi ? book.locations.percentageFromCfi(cfi) : 0);
         const percentage = Math.round(ratio * 100);
         setPageProgress(percentage);
-        if (canPersistProgress && cfi) saveReadingPosition(progressKey, { cfi, percentage });
+        if (canPersistProgress && cfi) persistProgress(progressKey, cfi, percentage);
       });
       await rendition.display(savedPosition?.cfi ?? undefined);
       await book.locations.generate(1200);
@@ -237,7 +309,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (savedPosition?.cfi) {
         const percentage = Math.round(book.locations.percentageFromCfi(savedPosition.cfi) * 100);
         setPageProgress(percentage);
-        saveReadingPosition(progressKey, { cfi: savedPosition.cfi, percentage });
+        saveReadingPosition(progressKey, { cfi: savedPosition.cfi, percentage, updatedAt: savedPosition.updatedAt });
         canPersistProgress = true;
       } else if (savedPosition && savedPosition.percentage > 0) {
         const cfi = book.locations.cfiFromPercentage(savedPosition.percentage / 100);
@@ -250,6 +322,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     return () => {
       cancelled = true;
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
+      if (cloudProgressTimerRef.current) window.clearTimeout(cloudProgressTimerRef.current);
+      if (source.id && pendingCloudProgressRef.current) {
+        void saveCloudProgress(source.id, pendingCloudProgressRef.current).catch(() => undefined);
+      }
       renditionRef.current?.destroy?.();
       book?.destroy?.();
     };
@@ -302,9 +378,31 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const cfi = bookRef.current?.locations?.cfiFromPercentage(value / 100);
     if (cfi) {
       if (source.type === "epub") {
-        saveReadingPosition(`dawn-reader-progress:${source.id ?? source.file.name}`, { cfi, percentage: value });
+        persistProgress(`dawn-reader-progress:${source.id ?? source.file.name}`, cfi, value);
       }
       void renditionRef.current?.display(cfi);
+    }
+  }
+
+  function handleShellPointerDown(event: ReactPointerEvent) {
+    lastPointerTypeRef.current = event.pointerType;
+    if (event.pointerType === "pen" && event.button === 2) {
+      event.preventDefault();
+      togglePencilMode();
+      return;
+    }
+    clearSelection();
+  }
+
+  function handlePencilControlPointerUp(event: ReactPointerEvent) {
+    if (event.pointerType !== "pen" || (event.target as Element).closest("button")) return;
+    const now = performance.now();
+    if (now - lastPencilControlTapRef.current < 360) {
+      event.preventDefault();
+      togglePencilMode();
+      lastPencilControlTapRef.current = 0;
+    } else {
+      lastPencilControlTapRef.current = now;
     }
   }
 
@@ -319,11 +417,18 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     top: `${Math.max(82, selectionAnchor.y + (selectionAnchor.placement === "above" ? -12 : 12))}px`,
   } : undefined;
 
-  return <div className={`reader-shell reader-theme-${settings.theme}`} onPointerDown={clearSelection}>
+  return <div className={`reader-shell reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
     <header className="reader-topbar">
       <button className="back-button" onClick={onClose}>← <span>书架</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageProgress}%</small>}</div>
-      <button className="type-button" onClick={() => setSettingsOpen((open) => !open)} aria-label="阅读设置">Aa</button>
+      <div className="reader-actions">
+        {source.type === "epub" && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式" onPointerUp={handlePencilControlPointerUp}>
+          <span>Pencil</span>
+          <button className={settings.pencilMode === "page" ? "active" : ""} aria-pressed={settings.pencilMode === "page"} onClick={() => setPencilMode("page")}>翻页</button>
+          <button className={settings.pencilMode === "select" ? "active" : ""} aria-pressed={settings.pencilMode === "select"} onClick={() => setPencilMode("select")}>画词</button>
+        </div>}
+        <button className="type-button" onClick={() => setSettingsOpen((open) => !open)} aria-label="阅读设置">Aa</button>
+      </div>
       {settingsOpen && <div className="reader-settings" role="dialog" aria-label="阅读设置">
         <div><small>字号</small>{([17, 19, 21] as const).map((size) => <button className={settings.fontSize === size ? "active" : ""} key={size} onClick={() => updateSettings({ fontSize: size })}>A{size === 17 ? "−" : size === 21 ? "+" : ""}</button>)}</div>
         <div><small>行距</small>{([1.55, 1.72, 1.9] as const).map((height, index) => <button className={settings.lineHeight === height ? "active" : ""} key={height} onClick={() => updateSettings({ lineHeight: height })}>{["紧", "适中", "松"][index]}</button>)}</div>
@@ -334,7 +439,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     </header>
 
     <main className="reading-stage" style={paperStyle}>
-      {source.type === "text" ? <article className={`paper paper-${settings.theme}`} onMouseUp={captureSelection} onTouchEnd={captureSelection}>
+      {source.type === "text" ? <article className={`paper paper-${settings.theme}`} onMouseUp={captureSelection} onPointerUp={(event) => {
+        if (event.pointerType === "pen" && settings.pencilMode === "select") captureSelection();
+      }}>
         <h1>{displayTitle}</h1>
         <div className="reading-columns">
           {textParagraphs.map((paragraph, index) => <p className="reader-paragraph" data-paragraph-index={index} key={index}>{paragraph}</p>)}

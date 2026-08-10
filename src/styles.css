@@ -69,7 +69,7 @@ body {
   text-align: center;
 }
 
-#root:has(.onboarding), #root:has(.test-screen) {
+body:has(.onboarding), body:has(.test-screen) {
   min-height: 100dvh;
   background:
     radial-gradient(circle at 50% -15%, rgba(221, 125, 69, .22), transparent 34%),
@@ -156,7 +156,13 @@ body {
 }
 .topbar, .reader-topbar { display: flex; align-items: center; justify-content: space-between; }
 .topbar { height: 72px; position: relative; z-index: 20; padding: 0 7vw; border-bottom: 1px solid var(--line); background: rgba(237, 241, 239, .94); backdrop-filter: blur(14px); }
+.brand-lockup { display: flex; align-items: center; gap: 10px; }
 .brand { color: #243138; font: 700 13px/1.2 "Avenir Next", Avenir, sans-serif; letter-spacing: .01em; }
+.sync-mark { display: inline-flex; align-items: center; gap: 5px; color: #75858a; font-size: 9px; }
+.sync-mark::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #8c9a9e; }
+.sync-mark.ready::before { background: #56816b; }
+.sync-mark.syncing::before, .sync-mark.loading::before { background: var(--accent); animation: sync-pulse .9s ease-in-out infinite alternate; }
+.sync-mark.local::before { background: #a38b71; }
 .profile-control { position: relative; }
 .profile-chip { min-height: 42px; max-width: 280px; padding: 8px 12px; overflow: hidden; border: 1px solid #b7c2c2; border-radius: var(--radius-control); color: #4f6067; background: rgba(255, 255, 255, .36); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .profile-chip i { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--accent); }
@@ -217,6 +223,12 @@ body {
 .reader-title { position: absolute; left: 50%; display: flex; align-items: baseline; gap: 10px; transform: translateX(-50%); text-align: center; }
 .reader-title small { color: #718691; font: 8px "SFMono-Regular", monospace; }
 .reader-title strong { display: block; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 14px "Iowan Old Style", Baskerville, Georgia, serif; }
+.reader-actions { display: flex; align-items: center; gap: 10px; }
+.pencil-switch { height: 38px; display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #354955; border-radius: var(--radius-control); background: #14222d; }
+.pencil-switch > span { padding: 0 7px; color: #718690; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .04em; }
+.pencil-switch button { min-width: 48px; height: 30px; padding: 0 9px; border: 0; border-radius: 5px; color: #8fa1a8; background: transparent; font-size: 10px; }
+.pencil-switch button:hover { color: #d8e1e2; }
+.pencil-switch button.active { color: #fff4eb; background: #9d4c2e; }
 .type-button { width: 40px; height: 40px; border: 1px solid #40535f; border-radius: var(--radius-control); color: #d2dcde; background: #172632; font: 600 13px "Iowan Old Style", serif; }
 .type-button:hover { border-color: #a96543; color: #f0a36e; }
 .reader-settings { position: absolute; z-index: 30; top: 56px; right: 18px; width: 304px; padding: 14px; border: 1px solid #526672; border-radius: var(--radius-panel); color: #c8d2d5; background: #15232f; box-shadow: 0 24px 54px rgba(7, 14, 20, .36); }
@@ -288,11 +300,13 @@ body {
 
 @keyframes note-in { from { opacity: 0; } }
 @keyframes waiting-line { from { width: 7px; opacity: .45; } to { width: 22px; opacity: 1; } }
+@keyframes sync-pulse { from { opacity: .38; } to { opacity: 1; } }
 
 @media (max-width: 980px) {
   .library-hero { grid-template-columns: 1fr; gap: 26px; }
   .reading-columns { column-count: 1; column-rule: 0; }
   .paper { max-width: min(var(--reader-page-width, 760px), 760px); }
+  .reader-title strong { max-width: 250px; }
 }
 
 @media (max-width: 720px) {
@@ -325,8 +339,9 @@ body {
   .page-controls { grid-template-columns: auto 1fr auto; gap: 7px; }
   .page-controls button { padding: 8px; font-size: 10px; }
   .progress-scrubber { grid-template-columns: 1fr 30px; }
-  .reader-title strong { max-width: 160px; }
-  .reader-title small { display: none; }
+  .reader-title { display: none; }
+  .pencil-switch > span { display: none; }
+  .pencil-switch button { min-width: 44px; padding: 0 7px; }
   .reader-settings { position: fixed; top: 57px; right: 10px; left: 10px; width: auto; }
   .selection-assist { top: auto !important; bottom: 14px; left: 50% !important; transform: translateX(-50%); }
 }

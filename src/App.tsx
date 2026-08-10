@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { LexTale } from "./components/LexTale";
 import { Library, type BookSource } from "./components/Library";
 import { Reader } from "./components/Reader";
+import { loadCloudState, saveCloudState } from "./lib/cloudSync";
+import { saveReaderSettings } from "./lib/readerSettings";
 import { loadProfile, saveProfile, type ReaderProfile } from "./lib/storage";
 
 type Screen = "calibrate" | "library" | "reader";
@@ -13,12 +15,26 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const existing = loadProfile();
     if (existing) {
       setProfile(existing);
       setScreen("library");
     }
-    setReady(true);
+    loadCloudState().then((cloud) => {
+      if (cancelled) return;
+      if (cloud.profile) {
+        saveProfile(cloud.profile);
+        setProfile(cloud.profile);
+        setScreen("library");
+      } else if (existing) {
+        void saveCloudState({ profile: existing });
+      }
+      if (cloud.settings) saveReaderSettings(cloud.settings);
+    }).catch(() => undefined).finally(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -27,6 +43,7 @@ export default function App() {
 
   function completeCalibration(next: ReaderProfile) {
     saveProfile(next);
+    void saveCloudState({ profile: next });
     setProfile(next);
     setScreen("library");
   }
@@ -34,12 +51,14 @@ export default function App() {
   function skipCalibration() {
     const next: ReaderProfile = { score: null, band: "未校准 · 平衡辅助", preset: "balanced" };
     saveProfile(next);
+    void saveCloudState({ profile: next });
     setProfile(next);
     setScreen("library");
   }
 
   function changeProfile(next: ReaderProfile) {
     saveProfile(next);
+    void saveCloudState({ profile: next });
     setProfile(next);
   }
 

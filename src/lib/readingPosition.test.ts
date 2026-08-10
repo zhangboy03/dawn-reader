@@ -13,6 +13,14 @@ describe("reading position", () => {
     });
   });
 
+  it("keeps the timestamp used to resolve cross-device changes", () => {
+    expect(parseReadingPosition('{"cfi":"epubcfi(/6/8)","percentage":68,"updatedAt":"2026-08-10T07:00:00.000Z"}')).toEqual({
+      cfi: "epubcfi(/6/8)",
+      percentage: 68,
+      updatedAt: "2026-08-10T07:00:00.000Z",
+    });
+  });
+
   it("rejects invalid stored values", () => {
     expect(parseReadingPosition("not-json")).toBeNull();
     expect(parseReadingPosition('{"percentage":120}')).toBeNull();
