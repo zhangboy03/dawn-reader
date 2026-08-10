@@ -175,6 +175,7 @@
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
 					AAB7D6D7D48811BAE53320BE = {
+						DevelopmentTeam = 8QTVA46J32;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -332,6 +333,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8QTVA46J32;
 				INFOPLIST_FILE = DawnReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -427,6 +429,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8QTVA46J32;
 				INFOPLIST_FILE = DawnReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
