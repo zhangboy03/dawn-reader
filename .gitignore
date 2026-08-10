@@ -9,6 +9,7 @@ dist/
 .vinext/
 .wrangler/
 ios/**/DerivedData/
+ios/**/DerivedData-*/
 ios/**/.build/
 ios/**/*.xcuserstate
 ios/**/xcuserdata/
