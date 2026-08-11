@@ -50,6 +50,15 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(script.contains("\\p{L}"))
         XCTAssertTrue(script.contains("selectionchange"))
 
+        let liveScript = PencilSelectionScript.make(
+            start: CGPoint(x: 20, y: 30),
+            end: CGPoint(x: 120, y: 34),
+            nativeSize: CGSize(width: 1024, height: 700),
+            captureNative: false
+        )
+        XCTAssertTrue(liveScript.contains("const captureNative = false"))
+        XCTAssertTrue(liveScript.contains("CSS.highlights.set('dawn-reader-live-selection'"))
+
         let hitTest = PencilSelectionScript.hitTest(
             point: CGPoint(x: 30, y: 40),
             nativeSize: CGSize(width: 1024, height: 700)
@@ -69,8 +78,7 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(selectMode.contains("'select'"))
         let pageMode = ReaderContentScript.setMode(.page)
         XCTAssertTrue(pageMode.contains("removeAllRanges"))
-        XCTAssertTrue(ReaderContentScript.install(mode: .select).contains("::highlight(dawn-reader-selection)"))
-        XCTAssertTrue(ReaderContentScript.freezeSelection.contains("CSS.highlights.set"))
+        XCTAssertTrue(ReaderContentScript.install(mode: .select).contains("::highlight(dawn-reader-live-selection)"))
         XCTAssertTrue(ReaderContentScript.clearSelection.contains("highlights?.delete"))
     }
 }

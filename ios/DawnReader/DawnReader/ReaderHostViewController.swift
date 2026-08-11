@@ -5,6 +5,8 @@ import WebKit
 
 @MainActor
 final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, UIGestureRecognizerDelegate, UIPencilInteractionDelegate {
+    private static let selectionDecorationGroup = "dawn-reader-selection"
+    private static let selectionTint = UIColor(red: 0.77, green: 0.46, blue: 0.27, alpha: 1)
     private let navigator: EPUBNavigatorViewController
     private let session: ReadingSession
     private lazy var pencilGesture = UILongPressGestureRecognizer(target: self, action: #selector(handlePencilGesture(_:)))
@@ -27,7 +29,12 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 contentInset: [
                     .compact: (top: 0, bottom: 0),
                     .regular: (top: 0, bottom: 0),
-                ]
+                ],
+                decorationTemplates: HTMLDecorationTemplate.defaultTemplates(
+                    defaultTint: Self.selectionTint,
+                    cornerRadius: 2,
+                    alpha: 0.34
+                )
             )
         )
         self.session = session
@@ -81,6 +88,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         }
         session.clearNativeSelection = { [weak navigator] in
             navigator?.clearSelection()
+            navigator?.apply(decorations: [], in: Self.selectionDecorationGroup)
             Task { [weak navigator] in
                 _ = await navigator?.evaluateJavaScript(ReaderContentScript.clearSelection)
             }
@@ -112,6 +120,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         switch gesture.state {
         case .began:
             selectionStart = location
+            lastSelectionUpdateTime = 0
             session.clearSelection()
             if session.pencilMode == .select {
                 pencilSelectionInProgress = true
@@ -167,7 +176,12 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             lastSelectionUpdateTime = now
         }
         selectionUpdateTask?.cancel()
-        let script = PencilSelectionScript.make(start: start, end: end, nativeSize: navigator.view.bounds.size)
+        let script = PencilSelectionScript.make(
+            start: start,
+            end: end,
+            nativeSize: navigator.view.bounds.size,
+            captureNative: final
+        )
         selectionUpdateTask = Task { [weak self] in
             guard let self else { return }
             _ = await navigator.evaluateJavaScript(script)
@@ -177,9 +191,25 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             pencilSelectionInProgress = false
             if let selection = navigator.currentSelection {
                 session.handle(selection: selection)
-                _ = await navigator.evaluateJavaScript(ReaderContentScript.freezeSelection)
+                showFinalHighlight(for: selection)
+                try? await Task.sleep(for: .milliseconds(90))
+                guard !Task.isCancelled else { return }
+                _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
             }
         }
+    }
+
+    private func showFinalHighlight(for selection: Selection) {
+        navigator.apply(
+            decorations: [
+                Decoration(
+                    id: "active-selection",
+                    locator: selection.locator,
+                    style: .highlight(tint: Self.selectionTint, isActive: false)
+                ),
+            ],
+            in: Self.selectionDecorationGroup
+        )
     }
 
     private static func preferences(for appearance: ReaderAppearance) -> EPUBPreferences {
@@ -236,9 +266,11 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             return false
         }
         session.handle(selection: selection)
+        showFinalHighlight(for: selection)
         Task { [weak self] in
             guard let self else { return }
-            _ = await self.navigator.evaluateJavaScript(ReaderContentScript.freezeSelection)
+            try? await Task.sleep(for: .milliseconds(90))
+            _ = await self.navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
         }
         return false
     }
