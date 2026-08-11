@@ -72,6 +72,7 @@ struct ReaderScreen: View {
                 Image(systemName: "slider.horizontal.3")
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("阅读设置")
         }
         .foregroundStyle(chromeForeground)
         .padding(.horizontal, 20)
@@ -84,6 +85,7 @@ struct ReaderScreen: View {
             Button { session.goBackward?() } label: {
                 Image(systemName: "arrow.left")
             }
+            .accessibilityLabel("上一页")
             Slider(
                 value: Binding(
                     get: { scrubProgress ?? session.progress },
@@ -107,6 +109,7 @@ struct ReaderScreen: View {
             Button { session.goForward?() } label: {
                 Image(systemName: "arrow.right")
             }
+            .accessibilityLabel("下一页")
         }
         .buttonStyle(.plain)
         .foregroundStyle(chromeForeground)
@@ -139,7 +142,7 @@ struct ReaderScreen: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Palette.ember)
                 Spacer()
-                if session.assistanceMode == .english {
+                if session.assistanceMode == .english, case .complete = session.rewriteState {
                     Button("中文详解") {
                         session.explainInChinese()
                     }
@@ -161,6 +164,7 @@ struct ReaderScreen: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .buttonStyle(.plain)
+                .accessibilityLabel("关闭解释")
             }
             switch session.rewriteState {
             case .idle:

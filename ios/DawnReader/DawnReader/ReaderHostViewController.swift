@@ -337,6 +337,9 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+        if session.rewriteState != .idle {
+            session.clearSelection()
+        }
         session.updateLocation(locator)
         Task { [weak self] in
             guard let self else { return }
@@ -345,18 +348,8 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     }
 
     func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
-        guard session.pencilMode == .select, !pencilSelectionInProgress else {
-            if session.pencilMode == .page {
-                navigator.clearSelection()
-            }
-            return false
-        }
-        session.handle(selection: selection)
-        showFinalHighlight(for: selection)
-        Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: .milliseconds(90))
-            _ = await self.navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
+        if !pencilSelectionInProgress {
+            navigator.clearSelection()
         }
         return false
     }

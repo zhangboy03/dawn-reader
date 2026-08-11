@@ -18,8 +18,8 @@ enum ReaderContentScript {
               background-color: rgba(196, 117, 70, 0.34);
               color: inherit;
             }
-            html,
-            html * {
+            html[data-dawn-pencil-mode="page"],
+            html[data-dawn-pencil-mode="page"] * {
               -webkit-user-select: none !important;
               user-select: none !important;
               -webkit-touch-callout: none !important;

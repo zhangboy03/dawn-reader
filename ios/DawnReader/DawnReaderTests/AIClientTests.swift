@@ -26,6 +26,7 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, or quote the surrounding"))
         XCTAssertTrue(AIClient.isSingleWord("self-reliance"))
         XCTAssertFalse(AIClient.isSingleWord("a difficult phrase"))
+        XCTAssertFalse(AIClient.isSingleWord("2026"))
     }
 
     func testPassagePromptStillRewritesOnlySelection() {
@@ -98,7 +99,7 @@ final class AIClientTests: XCTestCase {
         XCTAssertFalse(install.contains(".replace("))
         XCTAssertTrue(install.contains("dataset.dawnPencilMode"))
         XCTAssertTrue(install.contains("user-select: none"))
-        XCTAssertTrue(install.contains("html *"))
+        XCTAssertTrue(install.contains("html[data-dawn-pencil-mode=\"page\"]"))
 
         let selectMode = ReaderContentScript.setMode(.select)
         XCTAssertTrue(selectMode.contains("'select'"))
@@ -111,5 +112,9 @@ final class AIClientTests: XCTestCase {
     func testNightThemeAvoidsPureBlackAndPureWhite() {
         XCTAssertNotEqual(Palette.readerBackgroundHex(for: .night), "#000000")
         XCTAssertNotEqual(Palette.readerTextHex(for: .night), "#FFFFFF")
+    }
+
+    func testProviderThinkingIsRemoved() {
+        XCTAssertEqual(AIClient.stripThinking("<think>private analysis</think>final answer"), "final answer")
     }
 }
