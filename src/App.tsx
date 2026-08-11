@@ -21,7 +21,8 @@ export default function App() {
       setProfile(existing);
       setScreen("library");
     }
-    loadCloudState().then((cloud) => {
+    setReady(true);
+    void loadCloudState().then((cloud) => {
       if (cancelled) return;
       if (cloud.profile) {
         saveProfile(cloud.profile);
@@ -31,9 +32,7 @@ export default function App() {
         void saveCloudState({ profile: existing }).catch(() => undefined);
       }
       if (cloud.settings) saveReaderSettings(cloud.settings);
-    }).catch(() => undefined).finally(() => {
-      if (!cancelled) setReady(true);
-    });
+    }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
 

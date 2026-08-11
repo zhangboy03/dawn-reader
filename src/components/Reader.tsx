@@ -8,6 +8,7 @@ import {
   type ReaderSettings,
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
+import { isSingleWord } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
@@ -141,6 +142,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
   const selectedKeyRef = useRef("");
+  const selectionInputRef = useRef<ReaderInputKind>("mouse");
   const [displayTitle, setDisplayTitle] = useState(source.title);
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
@@ -170,8 +172,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     for (const element of [root, body]) {
       element?.style.setProperty("touch-action", "pan-y pinch-zoom", "important");
       element?.style.setProperty("overscroll-behavior", "none", "important");
-      element?.style.setProperty("user-select", "text", "important");
-      element?.style.setProperty("-webkit-user-select", "text", "important");
+      element?.style.setProperty("user-select", mode === "page" ? "none" : "text", "important");
+      element?.style.setProperty("-webkit-user-select", mode === "page" ? "none" : "text", "important");
       element?.setAttribute("data-dawn-pencil-mode", mode);
     }
   }
@@ -266,8 +268,20 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     void requestRewrite(selected, context, "chinese");
   }
 
+  function retryAssistance() {
+    const context = selectedContextRef.current;
+    if (!selected || !context) return;
+    void requestRewrite(selected, context, assistanceMode);
+  }
+
   function captureEpubSelection(contents: any, suppliedCfi?: string) {
     const selection = contents?.window?.getSelection?.() as Selection | null;
+    const input = selectionInputRef.current;
+    const acceptsSelection = input === "mouse" || (input === "pen" && pencilModeRef.current === "select");
+    if (!acceptsSelection) {
+      selection?.removeAllRanges();
+      return;
+    }
     const text = selection?.toString().trim() ?? "";
     if (!text || !selection?.rangeCount) return;
     const range = selection.getRangeAt(0);
@@ -381,6 +395,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }, []);
 
   useEffect(() => {
+    if (!selected) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") clearSelection();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selected]);
+
+  useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
     const currentCfi = rendition.currentLocation?.()?.start?.cfi;
@@ -409,19 +432,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     source.file.arrayBuffer().then(async (buffer) => {
       if (cancelled || !epubRef.current) return;
       const localPosition = parseReadingPosition(localStorage.getItem(progressKey));
-      const cloudPosition = source.id
-        ? await loadCloudProgress(source.id).catch(() => null)
-        : null;
-      const cloudIsNewer = Boolean(cloudPosition && (
-        !localPosition
-        || !localPosition.updatedAt
-        || Boolean(cloudPosition.updatedAt && cloudPosition.updatedAt >= localPosition.updatedAt)
-      ));
-      const savedPosition = cloudIsNewer ? cloudPosition : localPosition;
-      if (savedPosition) saveReadingPosition(progressKey, savedPosition);
-      if (source.id && localPosition && !cloudIsNewer) {
-        void saveCloudProgress(source.id, localPosition).catch(() => undefined);
-      }
+      const savedPosition = localPosition;
       if (cancelled || !epubRef.current) return;
       const { default: ePub } = await import("epubjs");
       book = ePub(buffer);
@@ -448,6 +459,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
         const onPointerDown = (event: PointerEvent) => {
           const kind = pointerInputKind(event.pointerType);
+          selectionInputRef.current = kind;
           if (gestureRef.current && gestureRef.current.pointerId === undefined) {
             gestureRef.current.pointerId = event.pointerId;
             if (kind === "pen") gestureRef.current.kind = "pen";
@@ -481,6 +493,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           if (!touch) return;
           const reportedKind = touchInputKind((touch as Touch & { touchType?: string }).touchType);
           const kind = gestureRef.current?.kind === "pen" ? "pen" : reportedKind;
+          selectionInputRef.current = kind;
           if (gestureRef.current) {
             gestureRef.current.touchSeen = true;
             gestureRef.current.kind = kind;
@@ -559,6 +572,25 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         if (cfi) await rendition.display(cfi);
       } else {
         canPersistProgress = true;
+      }
+      if (source.id) {
+        const cloudPosition = await loadCloudProgress(source.id).catch(() => null);
+        if (cancelled) return;
+        const latestLocal = parseReadingPosition(localStorage.getItem(progressKey));
+        const cloudIsNewer = Boolean(cloudPosition && (
+          !latestLocal
+          || !latestLocal.updatedAt
+          || Boolean(cloudPosition.updatedAt && cloudPosition.updatedAt >= latestLocal.updatedAt)
+        ));
+        if (cloudPosition && cloudIsNewer) {
+          saveReadingPosition(progressKey, cloudPosition);
+          setPageProgress(cloudPosition.percentage);
+          const targetCfi = cloudPosition.cfi
+            || book.locations.cfiFromPercentage(cloudPosition.percentage / 100);
+          if (targetCfi) await rendition.display(targetCfi);
+        } else if (latestLocal) {
+          void saveCloudProgress(source.id, latestLocal).catch(() => undefined);
+        }
       }
     });
     return () => {
@@ -651,6 +683,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     left: `${selectionAnchor.x}px`,
     top: `${Math.max(82, selectionAnchor.y + (selectionAnchor.placement === "above" ? -12 : 12))}px`,
   } : undefined;
+  const wordSelection = isSingleWord(selected);
+  const assistanceTitle = assistanceMode === "chinese"
+    ? "中文详解"
+    : wordSelection ? "读音与词义" : "简明英文";
+  const loadingTitle = assistanceMode === "chinese"
+    ? "正在生成中文解释…"
+    : wordSelection ? "正在查询读音与词义…" : "正在生成简明英文…";
 
   return <div className={`reader-shell reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
     <header className="reader-topbar">
@@ -696,15 +735,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       className={`selection-assist ${selectionAnchor.placement} ${rewriteState}`}
       style={anchorStyle}
       role="dialog"
-      aria-label={assistanceMode === "chinese" ? "中文详解" : "英文阅读辅助"}
+      aria-label={assistanceTitle}
       onPointerDown={(event) => event.stopPropagation()}
     >
       <header>
-        <span>{assistanceMode === "chinese" ? "中文详解" : "简明英文"}</span>
-        {assistanceMode === "english" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
+        <span>{assistanceTitle}</span>
+        <div>
+          {assistanceMode === "english" && rewriteState === "complete" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
+          <button className="assist-close" type="button" aria-label="关闭解释" onClick={clearSelection}>×</button>
+        </div>
       </header>
       <div role="status" aria-live="polite">
-        {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>{assistanceMode === "chinese" ? "正在生成中文解释…" : "正在生成简明英文…"}</span></div>}
+        {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
+        {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
       </div>
     </aside>}
   </div>;

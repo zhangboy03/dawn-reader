@@ -1,3 +1,5 @@
+import { isSingleWord } from "../lib/selectionKind";
+
 export type AssistanceMode = "english" | "chinese";
 
 export type SelectionPromptInput = {
@@ -7,13 +9,6 @@ export type SelectionPromptInput = {
   preset?: string;
   mode?: AssistanceMode;
 };
-
-export function isSingleWord(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed || /\s/u.test(trimmed)) return false;
-  const parts = trimmed.split(/[^\p{L}\p{N}'’\u2010-\u2015-]+/u).filter(Boolean);
-  return parts.length === 1;
-}
 
 export function selectionPrompt(input: SelectionPromptInput) {
   const wordSelection = isSingleWord(input.text);
@@ -51,4 +46,8 @@ Write one to three sentences and no more than 70 words. Return only the simplifi
     user: `<book_title>\n${input.bookTitle || "Unknown"}\n</book_title>\n<context_before>\n${input.context?.before || "Not available"}\n</context_before>\n<selection>\n${input.text}\n</selection>\n<context_after>\n${input.context?.after || "Not available"}\n</context_after>`,
     maxTokens,
   };
+}
+
+export function stripThinking(text: string) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }

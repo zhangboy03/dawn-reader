@@ -330,7 +330,9 @@ body:has(.onboarding), body:has(.test-screen) {
   position: fixed;
   z-index: 24;
   width: min(390px, calc(100vw - 32px));
+  max-height: min(420px, calc(100svh - 96px));
   padding: 14px 16px 16px;
+  overflow: auto;
   pointer-events: auto;
   border: 1px solid var(--reader-note-line);
   border-top: 3px solid var(--accent);
@@ -343,8 +345,11 @@ body:has(.onboarding), body:has(.test-screen) {
 .selection-assist.above { transform: translate(-50%, -100%); }
 .selection-assist.below { transform: translateX(-50%); }
 .selection-assist header { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--accent-strong); font-size: 9px; font-weight: 700; letter-spacing: .04em; }
+.selection-assist header > div { display: flex; align-items: center; gap: 6px; }
 .selection-assist header button { min-height: 34px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--reader-control-active) 40%, transparent); border-radius: 6px; color: var(--reader-control-active); background: transparent; font-size: 10px; }
 .selection-assist header button:hover { background: color-mix(in srgb, var(--reader-control-active) 9%, transparent); }
+.selection-assist header .assist-close { width: 40px; height: 40px; padding: 0; border-color: transparent; color: var(--reader-note-ink); font-size: 20px; font-weight: 400; }
+.assist-retry { min-height: 38px; margin-top: 10px; padding: 0 12px; border: 1px solid var(--reader-note-line); border-radius: 6px; color: var(--reader-note-ink); background: transparent; font-size: 11px; }
 .selection-assist p { min-height: 24px; margin: 9px 0 0; font: 400 15px/1.5 "Iowan Old Style", Baskerville, Georgia, serif; }
 .selection-assist.error { border-top-color: #a74a3f; }
 .selection-assist.error p { color: #8d443a; }

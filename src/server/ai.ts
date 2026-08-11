@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { selectionPrompt, type AssistanceMode } from "./aiPrompt";
+import { selectionPrompt, stripThinking, type AssistanceMode } from "./aiPrompt";
 
 type AiConfig = {
   provider: string;
@@ -45,26 +45,6 @@ export function aiConfig(): AiConfig | null {
   };
 }
 
-function fallbackRewrite(text: string, mode: AssistanceMode) {
-  if (mode === "chinese") return "AI 未连接，暂时无法生成中文详解。";
-  const key = text.trim().toLowerCase().replace(/[.,;:!?“”'\"]/g, "");
-  const glossary: Record<string, string> = {
-    metaphysical: "concerned with the deepest nature of reality, beyond what can be physically measured",
-    reconciliation: "the process of making two opposed ideas or people fit together again",
-    mechanical: "related to machines, or done automatically without much thought",
-    precision: "the quality of being exact and carefully controlled",
-    uncertainty: "a state in which something is not known or settled",
-    trivial: "too small or unimportant to deserve much attention",
-    legible: "clear enough to read or understand",
-    hinge: "literally a joint on a door; figuratively, the crucial point on which something depends",
-    rhetorical: "designed to create a particular effect on the reader, not only to report facts",
-    orthodox: "following the established or traditionally accepted beliefs of a group",
-    essence: "the most important underlying nature of something",
-    occurrence: "an event or something that happens",
-  };
-  return glossary[key] ?? "Keep the main subject and verb in view, then read each added phrase as extra information. The AI connection is unavailable, so this is only general reading guidance.";
-}
-
 export async function rewriteSelection(input: RewriteInput) {
   const text = input.text?.trim();
   if (!text) return { status: 400, body: { error: "Select some text first." } };
@@ -72,7 +52,7 @@ export async function rewriteSelection(input: RewriteInput) {
 
   const config = aiConfig();
   if (!config) {
-    return { status: 200, body: { rewrite: fallbackRewrite(text, mode) }, provider: "offline-demo" };
+    return { status: 503, body: { error: "解释服务暂不可用。" }, provider: "offline-demo" };
   }
 
   const prompt = selectionPrompt({
@@ -114,7 +94,7 @@ export async function rewriteSelection(input: RewriteInput) {
   }
 
   const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-  const rewrite = data.choices?.[0]?.message?.content?.trim();
+  const rewrite = stripThinking(data.choices?.[0]?.message?.content ?? "");
   if (!rewrite) throw new Error(`${config.provider} returned no rewrite.`);
   return {
     status: 200,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isSingleWord, selectionPrompt } from "./aiPrompt";
+import { isSingleWord } from "../lib/selectionKind";
+import { selectionPrompt, stripThinking } from "./aiPrompt";
 
 describe("selection AI prompt", () => {
   it("keeps selected content separate from nearby context", () => {
@@ -40,5 +41,9 @@ describe("selection AI prompt", () => {
     expect(prompt.system).toContain("First give an accurate, natural Chinese translation");
     expect(prompt.system).toContain("翻译：");
     expect(prompt.system).toContain("解释：");
+  });
+
+  it("removes hidden reasoning blocks from provider output", () => {
+    expect(stripThinking("<think>private analysis</think>final answer")).toBe("final answer");
   });
 });

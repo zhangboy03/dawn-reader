@@ -27,6 +27,11 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   return { userId, email, fullName, displayName: fullName ?? email };
 }
 
+export async function isAuthorizedReaderRequest() {
+  if (process.env.NODE_ENV === "development") return true;
+  return Boolean(await getChatGPTUser());
+}
+
 function safeDecodeURIComponent(value: string): string | null {
   try {
     return decodeURIComponent(value);

@@ -1,6 +1,10 @@
 import { aiConfig } from "../../../src/server/ai";
+import { isAuthorizedReaderRequest } from "../../chatgpt-auth";
 
 export async function GET() {
+  if (!await isAuthorizedReaderRequest()) {
+    return Response.json({ error: "Sign in required." }, { status: 401 });
+  }
   const config = aiConfig();
   return Response.json({
     provider: config?.provider ?? "offline-demo",
