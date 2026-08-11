@@ -29,19 +29,45 @@ enum PencilSelectionScript {
           const a = point(\(number(start.x)), \(number(start.y)));
           const b = point(\(number(end.x)), \(number(end.y)));
           if (!a || !b) return "";
+          const wordBounds = (caret) => {
+            if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return caret;
+            const text = caret.node.data || "";
+            const isWord = (char) => /[\\p{L}\\p{N}'’\\u2010-\\u2015-]/u.test(char || "");
+            let offset = Math.min(Math.max(caret.offset, 0), text.length);
+            if (!isWord(text[offset]) && isWord(text[offset - 1])) offset -= 1;
+            let start = offset;
+            let end = offset;
+            while (start > 0 && isWord(text[start - 1])) start -= 1;
+            while (end < text.length && isWord(text[end])) end += 1;
+            return { node: caret.node, start, end };
+          };
+          const aw = wordBounds(a);
+          const bw = wordBounds(b);
+          if (!aw || !bw || aw.start === undefined || bw.start === undefined) return "";
+          let forward = true;
+          try {
+            const ar = document.createRange();
+            const br = document.createRange();
+            ar.setStart(a.node, a.offset); ar.collapse(true);
+            br.setStart(b.node, b.offset); br.collapse(true);
+            forward = ar.compareBoundaryPoints(Range.START_TO_START, br) <= 0;
+          } catch (_) {}
           const selection = window.getSelection();
           selection.removeAllRanges();
           try {
-            selection.setBaseAndExtent(a.node, a.offset, b.node, b.offset);
+            selection.setBaseAndExtent(
+              aw.node, forward ? aw.start : aw.end,
+              bw.node, forward ? bw.end : bw.start
+            );
           } catch (_) {
             let range = document.createRange();
             try {
-              range.setStart(a.node, a.offset);
-              range.setEnd(b.node, b.offset);
-              if (range.collapsed) {
-                range = document.createRange();
-                range.setStart(b.node, b.offset);
-                range.setEnd(a.node, a.offset);
+              if (forward) {
+                range.setStart(aw.node, aw.start);
+                range.setEnd(bw.node, bw.end);
+              } else {
+                range.setStart(bw.node, bw.start);
+                range.setEnd(aw.node, aw.end);
               }
               selection.addRange(range);
             } catch (_) { return ""; }

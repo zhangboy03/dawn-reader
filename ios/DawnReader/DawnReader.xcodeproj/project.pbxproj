@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		12A3BC4BF5A2A1F9AD0D1E52 /* AIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413D22ACE52133231A06F30D /* AIClient.swift */; };
 		17FAC269EA8947E58D801EEF /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = B506E5C4CBEF47C41DA2C16C /* ReadiumNavigator */; };
+		1CF1D4560479C84E3C25C182 /* ReaderContentScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 565F03EB5065436F1F6102C6 /* ReaderContentScript.swift */; };
 		1D56555DEE337A88032FA0D4 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40096CF8E32B4120764C61B /* KeychainStore.swift */; };
 		2115C590BAEFBA423F295E72 /* ReadiumService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7025733A63D9EFE517EBFBC /* ReadiumService.swift */; };
 		4EB8F81D3134727C45E98690 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3F7D05BDE8255EBA28B62B /* Palette.swift */; };
@@ -19,6 +20,7 @@
 		807E0EEC5E3C536A52E50677 /* PencilSelectionScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */; };
 		9858B8B2073739176E7903C1 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 5F902CAB0A59F16BA1F97343 /* ReadiumStreamer */; };
 		9DE4E05AAED1001F33D7F9AC /* PencilMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562EF7D7B73340E52BEA68FF /* PencilMode.swift */; };
+		B2491D745F285681F154662F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E10E081EB7CB2F4F929321B5 /* Assets.xcassets */; };
 		BDD78F390C9E0F5E9B2A9816 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = FC7385D9ADE7903930F20B2C /* ReadiumShared */; };
 		C1EB020DF35B889CDCB33002 /* AIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34CC3717FEFD369AED49819E /* AIClientTests.swift */; };
 		C7E643253A3D49C11FF1932D /* ReaderHostViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561F152819B978F598F80061 /* ReaderHostViewController.swift */; };
@@ -47,6 +49,7 @@
 		41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DawnReaderApp.swift; sourceTree = "<group>"; };
 		561F152819B978F598F80061 /* ReaderHostViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHostViewController.swift; sourceTree = "<group>"; };
 		562EF7D7B73340E52BEA68FF /* PencilMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PencilMode.swift; sourceTree = "<group>"; };
+		565F03EB5065436F1F6102C6 /* ReaderContentScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentScript.swift; sourceTree = "<group>"; };
 		5D0EE5BB26BD870583EFBA5B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreen.swift; sourceTree = "<group>"; };
 		984ADE6764B24040FFBA52B9 /* DawnReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DawnReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -56,6 +59,7 @@
 		ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRecord.swift; sourceTree = "<group>"; };
 		B7025733A63D9EFE517EBFBC /* ReadiumService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumService.swift; sourceTree = "<group>"; };
 		BCA192341B450C2E0C190CB2 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		E10E081EB7CB2F4F929321B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F190CCD34CD0BC67DC990F0E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F4A5FE802A450ACD1A1D68E0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -78,6 +82,7 @@
 			isa = PBXGroup;
 			children = (
 				413D22ACE52133231A06F30D /* AIClient.swift */,
+				E10E081EB7CB2F4F929321B5 /* Assets.xcassets */,
 				ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */,
 				41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */,
 				F190CCD34CD0BC67DC990F0E /* Info.plist */,
@@ -87,6 +92,7 @@
 				9C3F7D05BDE8255EBA28B62B /* Palette.swift */,
 				562EF7D7B73340E52BEA68FF /* PencilMode.swift */,
 				AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */,
+				565F03EB5065436F1F6102C6 /* ReaderContentScript.swift */,
 				561F152819B978F598F80061 /* ReaderHostViewController.swift */,
 				7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */,
 				1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */,
@@ -131,6 +137,7 @@
 			buildConfigurationList = 718D8ECEB00DDF0494E8EE18 /* Build configuration list for PBXNativeTarget "DawnReader" */;
 			buildPhases = (
 				E0C2F73EC2A76885B87911F4 /* Sources */,
+				90827F4DDA5D77DD55D73DC6 /* Resources */,
 				28B72BB5BEB9C66078EE371C /* Frameworks */,
 			);
 			buildRules = (
@@ -203,6 +210,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		90827F4DDA5D77DD55D73DC6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2491D745F285681F154662F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		7017943F9AECD3660D5364B7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -225,6 +243,7 @@
 				4EB8F81D3134727C45E98690 /* Palette.swift in Sources */,
 				9DE4E05AAED1001F33D7F9AC /* PencilMode.swift in Sources */,
 				807E0EEC5E3C536A52E50677 /* PencilSelectionScript.swift in Sources */,
+				1CF1D4560479C84E3C25C182 /* ReaderContentScript.swift in Sources */,
 				C7E643253A3D49C11FF1932D /* ReaderHostViewController.swift in Sources */,
 				FD61C266E22DC20C8AE18988 /* ReaderScreen.swift in Sources */,
 				7BA92859F7378C40E9EDFF6B /* ReadingSession.swift in Sources */,

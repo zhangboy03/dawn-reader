@@ -7,6 +7,39 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("阅读") {
+                    Picker("纸张", selection: $settings.readerTheme) {
+                        ForEach(ReaderThemeOption.allCases) { theme in
+                            Text(theme.title).tag(theme)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    appearanceSlider(
+                        title: "字号",
+                        value: $settings.readerFontSize,
+                        range: 0.8 ... 1.4,
+                        step: 0.05,
+                        minimumLabel: "A",
+                        maximumLabel: "A"
+                    )
+                    appearanceSlider(
+                        title: "行距",
+                        value: $settings.readerLineHeight,
+                        range: 1.25 ... 1.9,
+                        step: 0.05,
+                        minimumLabel: "紧",
+                        maximumLabel: "松"
+                    )
+                    appearanceSlider(
+                        title: "页边距",
+                        value: $settings.readerPageMargins,
+                        range: 0.7 ... 1.6,
+                        step: 0.05,
+                        minimumLabel: "窄",
+                        maximumLabel: "宽"
+                    )
+                }
                 Section("DeepSeek") {
                     SecureField("API Key", text: $settings.apiKey)
                         .textInputAutocapitalization(.never)
@@ -14,11 +47,6 @@ struct SettingsView: View {
                     TextField("模型", text: $settings.model)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                }
-                Section {
-                    Text("密钥只保存在这台设备的 Keychain 中。选中文字及其附近上下文会发送给 DeepSeek。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("设置")
@@ -31,6 +59,29 @@ struct SettingsView: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
+    }
+
+    private func appearanceSlider(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        minimumLabel: String,
+        maximumLabel: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline)
+            HStack(spacing: 12) {
+                Text(minimumLabel)
+                    .font(title == "字号" ? .caption : .caption2)
+                    .foregroundStyle(.secondary)
+                Slider(value: value, in: range, step: step)
+                Text(maximumLabel)
+                    .font(title == "字号" ? .title3 : .caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }

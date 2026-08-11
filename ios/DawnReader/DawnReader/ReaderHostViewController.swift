@@ -1,29 +1,23 @@
 import ReadiumNavigator
 import ReadiumShared
 import UIKit
+import WebKit
 
 @MainActor
 final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, UIGestureRecognizerDelegate, UIPencilInteractionDelegate {
     private let navigator: EPUBNavigatorViewController
     private let session: ReadingSession
-    private lazy var pencilPan = UIPanGestureRecognizer(target: self, action: #selector(handlePencilPan(_:)))
-    private let strokeLayer = CAShapeLayer()
+    private lazy var pencilGesture = UILongPressGestureRecognizer(target: self, action: #selector(handlePencilGesture(_:)))
     private var selectionStart: CGPoint?
+    private var selectionUpdateTask: Task<Void, Never>?
+    private var lastSelectionUpdateTime: CFTimeInterval = 0
+    private var pencilSelectionInProgress = false
+    private var appliedMode: PencilMode?
+    private var appliedAppearance: ReaderAppearance?
 
     init(publication: Publication, initialLocatorJSON: String?, session: ReadingSession) throws {
         let locator = initialLocatorJSON.flatMap { try? Locator(jsonString: $0) }
-        let preferences = EPUBPreferences(
-            columnCount: .two,
-            fontSize: 1.0,
-            lineHeight: 1.55,
-            pageMargins: 1.15,
-            paragraphSpacing: 0.75,
-            publisherStyles: false,
-            scroll: false,
-            spread: .always,
-            textAlign: .start,
-            theme: .light
-        )
+        let preferences = Self.preferences(for: session.settings.readerAppearance)
         navigator = try EPUBNavigatorViewController(
             publication: publication,
             initialLocation: locator,
@@ -60,16 +54,14 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         ])
         navigator.didMove(toParent: self)
 
-        pencilPan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
-        pencilPan.delegate = self
-        pencilPan.maximumNumberOfTouches = 1
-        navigator.view.addGestureRecognizer(pencilPan)
-
-        strokeLayer.fillColor = UIColor.clear.cgColor
-        strokeLayer.strokeColor = UIColor(red: 0.73, green: 0.34, blue: 0.18, alpha: 0.62).cgColor
-        strokeLayer.lineWidth = 3
-        strokeLayer.lineCap = .round
-        navigator.view.layer.addSublayer(strokeLayer)
+        pencilGesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        pencilGesture.delegate = self
+        pencilGesture.minimumPressDuration = 0
+        pencilGesture.allowableMovement = .greatestFiniteMagnitude
+        pencilGesture.numberOfTouchesRequired = 1
+        pencilGesture.cancelsTouchesInView = true
+        pencilGesture.delaysTouchesBegan = true
+        navigator.view.addGestureRecognizer(pencilGesture)
 
         let pencilInteraction = UIPencilInteraction()
         pencilInteraction.delegate = self
@@ -84,32 +76,47 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         session.clearNativeSelection = { [weak navigator] in
             navigator?.clearSelection()
         }
+        apply(mode: session.pencilMode, appearance: session.settings.readerAppearance)
     }
 
-    func apply(mode: PencilMode) {
-        if mode == .page {
-            clearStroke()
+    func apply(mode: PencilMode, appearance: ReaderAppearance) {
+        if appliedMode != mode {
+            appliedMode = mode
+            selectionUpdateTask?.cancel()
+            selectionStart = nil
+            pencilSelectionInProgress = false
+            if mode == .page {
+                navigator.clearSelection()
+            }
+            Task { [weak navigator] in
+                _ = await navigator?.evaluateJavaScript(ReaderContentScript.setMode(mode))
+            }
+        }
+        if appliedAppearance != appearance {
+            appliedAppearance = appearance
+            navigator.submitPreferences(Self.preferences(for: appearance))
         }
     }
 
-    @objc private func handlePencilPan(_ gesture: UIPanGestureRecognizer) {
+    @objc private func handlePencilGesture(_ gesture: UILongPressGestureRecognizer) {
         let location = gesture.location(in: navigator.view)
         switch gesture.state {
         case .began:
-            let translation = gesture.translation(in: navigator.view)
-            selectionStart = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
-            if session.pencilMode == .select, let start = selectionStart {
-                drawStroke(from: start, to: location)
+            selectionStart = location
+            session.clearSelection()
+            if session.pencilMode == .select {
+                pencilSelectionInProgress = true
+                updatePencilSelection(from: location, to: location, final: false)
             }
         case .changed:
             if session.pencilMode == .select, let start = selectionStart {
-                drawStroke(from: start, to: location)
+                updatePencilSelection(from: start, to: location, final: false)
             }
         case .ended:
             guard let start = selectionStart else { return }
             selectionStart = nil
             if session.pencilMode == .page {
-                let translation = gesture.translation(in: navigator.view)
+                let translation = CGPoint(x: location.x - start.x, y: location.y - start.y)
                 guard abs(translation.x) > 56, abs(translation.x) > abs(translation.y) else { return }
                 session.clearSelection()
                 if translation.x < 0 {
@@ -118,40 +125,70 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                     session.goBackward?()
                 }
             } else {
-                clearStroke(after: 0.18)
-                guard hypot(location.x - start.x, location.y - start.y) > 12 else { return }
-                let script = PencilSelectionScript.make(start: start, end: location, nativeSize: navigator.view.bounds.size)
-                Task {
-                    _ = await navigator.evaluateJavaScript(script)
-                    try? await Task.sleep(for: .milliseconds(140))
-                    if let selection = navigator.currentSelection {
-                        session.handle(selection: selection)
-                    }
-                }
+                updatePencilSelection(from: start, to: location, final: true)
             }
         case .cancelled, .failed:
             selectionStart = nil
-            clearStroke()
+            pencilSelectionInProgress = false
+            selectionUpdateTask?.cancel()
         default:
             break
         }
     }
 
-    private func drawStroke(from start: CGPoint, to end: CGPoint) {
-        let path = UIBezierPath()
-        path.move(to: start)
-        path.addLine(to: end)
-        strokeLayer.path = path.cgPath
+    private func updatePencilSelection(from start: CGPoint, to end: CGPoint, final: Bool) {
+        if !final {
+            let now = CACurrentMediaTime()
+            guard now - lastSelectionUpdateTime >= 0.035 else { return }
+            lastSelectionUpdateTime = now
+        }
+        selectionUpdateTask?.cancel()
+        let script = PencilSelectionScript.make(start: start, end: end, nativeSize: navigator.view.bounds.size)
+        selectionUpdateTask = Task { [weak self] in
+            guard let self else { return }
+            _ = await navigator.evaluateJavaScript(script)
+            guard !Task.isCancelled, final else { return }
+            try? await Task.sleep(for: .milliseconds(70))
+            guard !Task.isCancelled else { return }
+            pencilSelectionInProgress = false
+            if let selection = navigator.currentSelection {
+                session.handle(selection: selection)
+            }
+        }
     }
 
-    private func clearStroke(after delay: TimeInterval = 0) {
-        guard delay > 0 else {
-            strokeLayer.path = nil
-            return
+    private static func preferences(for appearance: ReaderAppearance) -> EPUBPreferences {
+        let theme: Theme
+        switch appearance.theme {
+        case .paper: theme = .light
+        case .sepia: theme = .sepia
+        case .night: theme = .dark
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.strokeLayer.path = nil
-        }
+        return EPUBPreferences(
+            columnCount: .two,
+            fontFamily: .iowanOldStyle,
+            fontSize: appearance.fontSize,
+            hyphens: true,
+            lineHeight: appearance.lineHeight,
+            pageMargins: appearance.pageMargins,
+            paragraphSpacing: 0.75,
+            publisherStyles: false,
+            scroll: false,
+            spread: .always,
+            textAlign: .start,
+            textNormalization: true,
+            theme: theme
+        )
+    }
+
+    func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
+        userContentController.addUserScript(
+            WKUserScript(
+                source: ReaderContentScript.install(mode: session.pencilMode),
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: false
+            )
+        )
     }
 
     func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
@@ -160,9 +197,19 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         session.updateLocation(locator)
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await self.navigator.evaluateJavaScript(ReaderContentScript.setMode(session.pencilMode))
+        }
     }
 
     func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
+        guard session.pencilMode == .select, !pencilSelectionInProgress else {
+            if session.pencilMode == .page {
+                navigator.clearSelection()
+            }
+            return false
+        }
         session.handle(selection: selection)
         return false
     }

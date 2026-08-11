@@ -16,10 +16,14 @@ struct ReaderScreen: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
-                Palette.fog.ignoresSafeArea()
+                chromeBackground.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ReaderControllerView(controller: openedBook.controller, mode: session.pencilMode)
+                    ReaderControllerView(
+                        controller: openedBook.controller,
+                        mode: session.pencilMode,
+                        appearance: settings.readerAppearance
+                    )
                     bottomBar
                 }
                 if session.rewriteState != .idle {
@@ -55,7 +59,7 @@ struct ReaderScreen: View {
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background(session.pencilMode == mode ? Palette.ember : .clear)
-                    .foregroundStyle(session.pencilMode == mode ? Color.white : Palette.mutedInk)
+                    .foregroundStyle(session.pencilMode == mode ? Color.white : chromeForeground.opacity(0.65))
                 }
             }
             .padding(3)
@@ -67,10 +71,10 @@ struct ReaderScreen: View {
             }
             .buttonStyle(.plain)
         }
-        .foregroundStyle(Palette.ink)
+        .foregroundStyle(chromeForeground)
         .padding(.horizontal, 20)
         .frame(height: 58)
-        .background(Palette.ink.opacity(0.04))
+        .background(chromeForeground.opacity(0.04))
     }
 
     private var bottomBar: some View {
@@ -83,15 +87,27 @@ struct ReaderScreen: View {
                 .frame(maxWidth: 300)
             Text("\(Int(session.progress * 100))%")
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(Palette.mutedInk)
+                .foregroundStyle(chromeForeground.opacity(0.65))
                 .frame(width: 38, alignment: .trailing)
             Button { session.goForward?() } label: {
                 Image(systemName: "arrow.right")
             }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Palette.ink)
+        .foregroundStyle(chromeForeground)
         .frame(height: 52)
+    }
+
+    private var chromeBackground: Color {
+        switch settings.readerTheme {
+        case .paper: Palette.fog
+        case .sepia: Color(red: 0.90, green: 0.86, blue: 0.76)
+        case .night: Color(red: 0.06, green: 0.07, blue: 0.07)
+        }
+    }
+
+    private var chromeForeground: Color {
+        settings.readerTheme == .night ? Color(red: 0.88, green: 0.89, blue: 0.87) : Palette.ink
     }
 
     @ViewBuilder
@@ -150,12 +166,13 @@ struct ReaderScreen: View {
 private struct ReaderControllerView: UIViewControllerRepresentable {
     let controller: ReaderHostViewController
     let mode: PencilMode
+    let appearance: ReaderAppearance
 
     func makeUIViewController(context: Context) -> ReaderHostViewController {
         controller
     }
 
     func updateUIViewController(_ uiViewController: ReaderHostViewController, context: Context) {
-        uiViewController.apply(mode: mode)
+        uiViewController.apply(mode: mode, appearance: appearance)
     }
 }
