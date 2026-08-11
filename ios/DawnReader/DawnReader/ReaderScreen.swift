@@ -6,6 +6,7 @@ struct ReaderScreen: View {
     let openedBook: OpenedBook
     let onClose: () -> Void
     @State private var showingSettings = false
+    @State private var scrubProgress: Double?
 
     init(openedBook: OpenedBook, onClose: @escaping () -> Void) {
         self.openedBook = openedBook
@@ -34,6 +35,7 @@ struct ReaderScreen: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView().environmentObject(settings)
         }
+        .preferredColorScheme(settings.readerTheme == .night ? .dark : .light)
     }
 
     private var topBar: some View {
@@ -59,11 +61,11 @@ struct ReaderScreen: View {
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background(session.pencilMode == mode ? Palette.ember : .clear)
-                    .foregroundStyle(session.pencilMode == mode ? Color.white : chromeForeground.opacity(0.65))
+                    .foregroundStyle(session.pencilMode == mode ? Color.white.opacity(0.92) : chromeForeground.opacity(0.65))
                 }
             }
             .padding(3)
-            .background(Palette.line.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+            .background(chromeForeground.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
             Button {
                 showingSettings = true
             } label: {
@@ -82,10 +84,23 @@ struct ReaderScreen: View {
             Button { session.goBackward?() } label: {
                 Image(systemName: "arrow.left")
             }
-            ProgressView(value: session.progress)
+            Slider(
+                value: Binding(
+                    get: { scrubProgress ?? session.progress },
+                    set: { scrubProgress = $0 }
+                ),
+                in: 0 ... 1,
+                onEditingChanged: { editing in
+                    guard !editing, let target = scrubProgress else { return }
+                    session.seek?(target)
+                    scrubProgress = nil
+                }
+            )
                 .tint(Palette.ember)
-                .frame(maxWidth: 300)
-            Text("\(Int(session.progress * 100))%")
+                .frame(maxWidth: 360)
+                .accessibilityLabel("阅读进度")
+                .accessibilityValue("\(Int(effectiveProgress * 100))%")
+            Text("\(Int(effectiveProgress * 100))%")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(chromeForeground.opacity(0.65))
                 .frame(width: 38, alignment: .trailing)
@@ -99,15 +114,15 @@ struct ReaderScreen: View {
     }
 
     private var chromeBackground: Color {
-        switch settings.readerTheme {
-        case .paper: Palette.fog
-        case .sepia: Color(red: 0.90, green: 0.86, blue: 0.76)
-        case .night: Color(red: 0.06, green: 0.07, blue: 0.07)
-        }
+        Palette.readerBackground(for: settings.readerTheme)
     }
 
     private var chromeForeground: Color {
-        settings.readerTheme == .night ? Color(red: 0.88, green: 0.89, blue: 0.87) : Palette.ink
+        Palette.readerText(for: settings.readerTheme)
+    }
+
+    private var effectiveProgress: Double {
+        scrubProgress ?? session.progress
     }
 
     @ViewBuilder
@@ -154,37 +169,37 @@ struct ReaderScreen: View {
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
                     Text(loadingTitle)
-                        .foregroundStyle(Palette.mutedInk)
+                        .foregroundStyle(chromeForeground.opacity(0.68))
                 }
             case let .complete(text):
                 Text(text)
                     .font(.system(size: 17, weight: .regular, design: .serif))
-                    .foregroundStyle(Palette.ink)
+                    .foregroundStyle(chromeForeground)
                     .fixedSize(horizontal: false, vertical: true)
             case let .failed(message):
                 Text(message)
                     .font(.callout)
-                    .foregroundStyle(Palette.mutedInk)
+                    .foregroundStyle(chromeForeground.opacity(0.68))
             }
         }
         .padding(16)
         .frame(width: cardWidth, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(Palette.readerCardBackground(for: settings.readerTheme), in: RoundedRectangle(cornerRadius: 10))
         .overlay(alignment: .top) {
             Rectangle().fill(Palette.ember).frame(height: 2)
         }
-        .shadow(color: Palette.ink.opacity(0.12), radius: 18, y: 8)
+        .shadow(color: Color.black.opacity(settings.readerTheme == .night ? 0.28 : 0.12), radius: 18, y: 8)
         .offset(x: x, y: y)
     }
 
     private var cardTitle: String {
         if session.assistanceMode == .chinese { return "中文详解" }
-        return AIClient.isSingleWord(session.selectedText) ? "语境词义" : "简明英文"
+        return AIClient.isSingleWord(session.selectedText) ? "读音与词义" : "简明英文"
     }
 
     private var loadingTitle: String {
         if session.assistanceMode == .chinese { return "正在生成中文解释…" }
-        return AIClient.isSingleWord(session.selectedText) ? "正在解释…" : "正在改写…"
+        return AIClient.isSingleWord(session.selectedText) ? "正在查询读音与词义…" : "正在改写…"
     }
 }
 

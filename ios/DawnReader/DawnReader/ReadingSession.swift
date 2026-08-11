@@ -28,6 +28,7 @@ final class ReadingSession: ObservableObject {
     let settings: SettingsStore
     var goForward: (() -> Void)?
     var goBackward: (() -> Void)?
+    var seek: ((Double) -> Void)?
     var clearNativeSelection: (() -> Void)?
 
     private let persist: (String, Double) -> Void

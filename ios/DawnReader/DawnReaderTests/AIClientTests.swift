@@ -22,6 +22,7 @@ final class AIClientTests: XCTestCase {
         )
         XCTAssertEqual(body.maxTokens, 48)
         XCTAssertTrue(body.messages[0].content.contains("Explain only the word"))
+        XCTAssertTrue(body.messages[0].content.contains("selected word /IPA/"))
         XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, or quote the surrounding"))
         XCTAssertTrue(AIClient.isSingleWord("self-reliance"))
         XCTAssertFalse(AIClient.isSingleWord("a difficult phrase"))
@@ -45,6 +46,7 @@ final class AIClientTests: XCTestCase {
         )
         XCTAssertEqual(body.maxTokens, 320)
         XCTAssertTrue(body.messages[0].content.contains("one selected English word in Chinese"))
+        XCTAssertTrue(body.messages[0].content.contains("standard IPA pronunciation"))
         XCTAssertTrue(body.messages[0].content.contains("Never translate or summarize the surrounding"))
     }
 
@@ -102,5 +104,10 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(pageMode.contains("removeAllRanges"))
         XCTAssertTrue(ReaderContentScript.install(mode: .select).contains("::highlight(dawn-reader-live-selection)"))
         XCTAssertTrue(ReaderContentScript.clearSelection.contains("highlights?.delete"))
+    }
+
+    func testNightThemeAvoidsPureBlackAndPureWhite() {
+        XCTAssertNotEqual(Palette.readerBackgroundHex(for: .night), "#000000")
+        XCTAssertNotEqual(Palette.readerTextHex(for: .night), "#FFFFFF")
     }
 }

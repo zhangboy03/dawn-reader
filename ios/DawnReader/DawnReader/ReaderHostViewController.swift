@@ -1,5 +1,5 @@
-import ReadiumNavigator
-import ReadiumShared
+@preconcurrency import ReadiumNavigator
+@preconcurrency import ReadiumShared
 import UIKit
 import WebKit
 
@@ -7,11 +7,14 @@ import WebKit
 final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, UIGestureRecognizerDelegate, UIPencilInteractionDelegate {
     private static let selectionDecorationGroup = "dawn-reader-selection"
     private static let selectionTint = UIColor(red: 0.77, green: 0.46, blue: 0.27, alpha: 1)
+    private let publication: Publication
     private let navigator: EPUBNavigatorViewController
     private let session: ReadingSession
     private lazy var pencilGesture = UILongPressGestureRecognizer(target: self, action: #selector(handlePencilGesture(_:)))
     private lazy var fingerDismissTap = UITapGestureRecognizer(target: self, action: #selector(handleFingerDismissTap(_:)))
+    private var gestureStart: CGPoint?
     private var selectionStart: CGPoint?
+    private weak var selectionWebView: WKWebView?
     private var selectionUpdateTask: Task<Void, Never>?
     private var lastSelectionUpdateTime: CFTimeInterval = 0
     private var pencilSelectionInProgress = false
@@ -37,6 +40,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 )
             )
         )
+        self.publication = publication
         self.session = session
         super.init(nibName: nil, bundle: nil)
         navigator.delegate = self
@@ -86,6 +90,14 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         session.goBackward = { [weak navigator] in
             Task { await navigator?.goBackward(options: .init(animated: true)) }
         }
+        session.seek = { [weak self] progression in
+            guard let self else { return }
+            self.session.clearSelection()
+            Task {
+                guard let locator = await self.publication.locate(progression: progression) else { return }
+                _ = await self.navigator.go(to: locator, options: .init(animated: false))
+            }
+        }
         session.clearNativeSelection = { [weak navigator] in
             navigator?.clearSelection()
             navigator?.apply(decorations: [], in: Self.selectionDecorationGroup)
@@ -100,7 +112,9 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         if appliedMode != mode {
             appliedMode = mode
             selectionUpdateTask?.cancel()
+            gestureStart = nil
             selectionStart = nil
+            selectionWebView = nil
             pencilSelectionInProgress = false
             if mode == .page {
                 navigator.clearSelection()
@@ -111,30 +125,52 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         }
         if appliedAppearance != appearance {
             appliedAppearance = appearance
+            view.backgroundColor = ReadiumNavigator.Color(
+                hex: Palette.readerBackgroundHex(for: appearance.theme)
+            )?.uiColor
             navigator.submitPreferences(Self.preferences(for: appearance))
         }
     }
 
     @objc private func handlePencilGesture(_ gesture: UILongPressGestureRecognizer) {
-        let location = gesture.location(in: navigator.view)
+        let navigatorLocation = gesture.location(in: navigator.view)
         switch gesture.state {
         case .began:
-            selectionStart = location
+            gestureStart = navigatorLocation
+            selectionStart = nil
+            selectionWebView = nil
             lastSelectionUpdateTime = 0
             session.clearSelection()
-            if session.pencilMode == .select {
+            if session.pencilMode == .select,
+               let coordinates = contentCoordinates(at: navigatorLocation)
+            {
                 pencilSelectionInProgress = true
-                updatePencilSelection(from: location, to: location, final: false)
+                selectionStart = coordinates.point
+                selectionWebView = coordinates.webView
+                updatePencilSelection(
+                    from: coordinates.point,
+                    to: coordinates.point,
+                    nativeSize: coordinates.webView.bounds.size,
+                    final: false
+                )
             }
         case .changed:
-            if session.pencilMode == .select, let start = selectionStart {
-                updatePencilSelection(from: start, to: location, final: false)
+            if session.pencilMode == .select,
+               let start = selectionStart,
+               let webView = selectionWebView
+            {
+                let end = gesture.location(in: webView)
+                updatePencilSelection(from: start, to: end, nativeSize: webView.bounds.size, final: false)
             }
         case .ended:
-            guard let start = selectionStart else { return }
-            selectionStart = nil
+            defer {
+                gestureStart = nil
+                selectionStart = nil
+                selectionWebView = nil
+            }
             if session.pencilMode == .page {
-                let translation = CGPoint(x: location.x - start.x, y: location.y - start.y)
+                guard let start = gestureStart else { return }
+                let translation = CGPoint(x: navigatorLocation.x - start.x, y: navigatorLocation.y - start.y)
                 guard abs(translation.x) > 56, abs(translation.x) > abs(translation.y) else { return }
                 session.clearSelection()
                 if translation.x < 0 {
@@ -142,11 +178,14 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 } else {
                     session.goBackward?()
                 }
-            } else {
-                updatePencilSelection(from: start, to: location, final: true)
+            } else if let start = selectionStart, let webView = selectionWebView {
+                let end = gesture.location(in: webView)
+                updatePencilSelection(from: start, to: end, nativeSize: webView.bounds.size, final: true)
             }
         case .cancelled, .failed:
+            gestureStart = nil
             selectionStart = nil
+            selectionWebView = nil
             pencilSelectionInProgress = false
             selectionUpdateTask?.cancel()
         default:
@@ -157,7 +196,14 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     @objc private func handleFingerDismissTap(_ gesture: UITapGestureRecognizer) {
         guard gesture.state == .ended, session.rewriteState != .idle else { return }
         let location = gesture.location(in: navigator.view)
-        let script = PencilSelectionScript.hitTest(point: location, nativeSize: navigator.view.bounds.size)
+        guard let coordinates = contentCoordinates(at: location) else {
+            session.clearSelection()
+            return
+        }
+        let script = PencilSelectionScript.hitTest(
+            point: coordinates.point,
+            nativeSize: coordinates.webView.bounds.size
+        )
         Task { [weak self] in
             guard let self else { return }
             let result = await navigator.evaluateJavaScript(script)
@@ -169,7 +215,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         }
     }
 
-    private func updatePencilSelection(from start: CGPoint, to end: CGPoint, final: Bool) {
+    private func updatePencilSelection(from start: CGPoint, to end: CGPoint, nativeSize: CGSize, final: Bool) {
         if !final {
             let now = CACurrentMediaTime()
             guard now - lastSelectionUpdateTime >= 0.035 else { return }
@@ -179,7 +225,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         let script = PencilSelectionScript.make(
             start: start,
             end: end,
-            nativeSize: navigator.view.bounds.size,
+            nativeSize: nativeSize,
             captureNative: final
         )
         selectionUpdateTask = Task { [weak self] in
@@ -220,6 +266,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         case .night: theme = .dark
         }
         return EPUBPreferences(
+            backgroundColor: ReadiumNavigator.Color(hex: Palette.readerBackgroundHex(for: appearance.theme)),
             columnCount: .two,
             fontFamily: .iowanOldStyle,
             fontSize: appearance.fontSize,
@@ -231,9 +278,35 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             scroll: false,
             spread: .always,
             textAlign: .start,
+            textColor: ReadiumNavigator.Color(hex: Palette.readerTextHex(for: appearance.theme)),
             textNormalization: true,
             theme: theme
         )
+    }
+
+    private func contentCoordinates(at point: CGPoint) -> (point: CGPoint, webView: WKWebView)? {
+        for webView in visibleWebViews(in: navigator.view) {
+            let converted = navigator.view.convert(point, to: webView)
+            if webView.bounds.insetBy(dx: -1, dy: -1).contains(converted) {
+                return (converted, webView)
+            }
+        }
+        return nil
+    }
+
+    private func visibleWebViews(in view: UIView) -> [WKWebView] {
+        var result: [WKWebView] = []
+        if let webView = view as? WKWebView,
+           !webView.isHidden,
+           webView.alpha > 0.01,
+           webView.window != nil
+        {
+            result.append(webView)
+        }
+        for subview in view.subviews.reversed() {
+            result.append(contentsOf: visibleWebViews(in: subview))
+        }
+        return result
     }
 
     func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
