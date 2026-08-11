@@ -16,6 +16,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     private var selectionStart: CGPoint?
     private weak var selectionWebView: WKWebView?
     private var selectionUpdateTask: Task<Void, Never>?
+    private var selectionUpdateID = 0
     private var lastSelectionUpdateTime: CFTimeInterval = 0
     private var pencilSelectionInProgress = false
     private var appliedMode: PencilMode?
@@ -98,11 +99,15 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 _ = await self.navigator.go(to: locator, options: .init(animated: false))
             }
         }
-        session.clearNativeSelection = { [weak navigator] in
-            navigator?.clearSelection()
-            navigator?.apply(decorations: [], in: Self.selectionDecorationGroup)
-            Task { [weak navigator] in
-                _ = await navigator?.evaluateJavaScript(ReaderContentScript.clearSelection)
+        session.clearNativeSelection = { [weak self] in
+            guard let self else { return }
+            selectionUpdateID += 1
+            selectionUpdateTask?.cancel()
+            navigator.clearSelection()
+            navigator.apply(decorations: [], in: Self.selectionDecorationGroup)
+            Task { [weak self] in
+                guard let self else { return }
+                _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
             }
         }
         apply(mode: session.pencilMode, appearance: session.settings.readerAppearance)
@@ -112,6 +117,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         if appliedMode != mode {
             appliedMode = mode
             selectionUpdateTask?.cancel()
+            selectionUpdateID += 1
             gestureStart = nil
             selectionStart = nil
             selectionWebView = nil
@@ -188,6 +194,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             selectionWebView = nil
             pencilSelectionInProgress = false
             selectionUpdateTask?.cancel()
+            selectionUpdateID += 1
         default:
             break
         }
@@ -207,8 +214,11 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         Task { [weak self] in
             guard let self else { return }
             let result = await navigator.evaluateJavaScript(script)
-            guard case let .success(value) = result else { return }
-            let containsText = (value as? Bool) ?? (value as? NSNumber)?.boolValue ?? true
+            guard case let .success(value) = result else {
+                session.clearSelection()
+                return
+            }
+            let containsText = (value as? Bool) ?? (value as? NSNumber)?.boolValue ?? false
             if !containsText {
                 session.clearSelection()
             }
@@ -222,6 +232,8 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             lastSelectionUpdateTime = now
         }
         selectionUpdateTask?.cancel()
+        selectionUpdateID += 1
+        let updateID = selectionUpdateID
         let script = PencilSelectionScript.make(
             start: start,
             end: end,
@@ -230,16 +242,17 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         )
         selectionUpdateTask = Task { [weak self] in
             guard let self else { return }
+            guard updateID == selectionUpdateID else { return }
             _ = await navigator.evaluateJavaScript(script)
-            guard !Task.isCancelled, final else { return }
+            guard !Task.isCancelled, updateID == selectionUpdateID, final else { return }
             try? await Task.sleep(for: .milliseconds(70))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, updateID == selectionUpdateID else { return }
             pencilSelectionInProgress = false
             if let selection = navigator.currentSelection {
                 session.handle(selection: selection)
                 showFinalHighlight(for: selection)
                 try? await Task.sleep(for: .milliseconds(90))
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, updateID == selectionUpdateID else { return }
                 _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
             }
         }

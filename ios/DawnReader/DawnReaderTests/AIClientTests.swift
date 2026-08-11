@@ -91,12 +91,14 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(hitTest.contains("return false"))
     }
 
-    func testReaderContentScriptNormalizesKnownBrokenGlyphsAndControlsSelectionMode() {
+    func testReaderContentScriptPreservesBookTextAndControlsSelectionMode() {
         let install = ReaderContentScript.install(mode: .page)
-        XCTAssertTrue(install.contains("\\u0085"))
-        XCTAssertTrue(install.contains("Ph\\u0107drus"))
-        XCTAssertTrue(install.contains("data-dawn-pencil-mode"))
+        XCTAssertFalse(install.contains("createTreeWalker"))
+        XCTAssertFalse(install.contains("MutationObserver"))
+        XCTAssertFalse(install.contains(".replace("))
+        XCTAssertTrue(install.contains("dataset.dawnPencilMode"))
         XCTAssertTrue(install.contains("user-select: none"))
+        XCTAssertTrue(install.contains("html *"))
 
         let selectMode = ReaderContentScript.setMode(.select)
         XCTAssertTrue(selectMode.contains("'select'"))
