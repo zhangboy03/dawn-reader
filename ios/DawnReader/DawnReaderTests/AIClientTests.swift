@@ -37,6 +37,28 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[0].content.contains("Rewrite only the text inside <selection>"))
     }
 
+    func testChineseWordPromptExplainsOnlyTheSelectedWord() {
+        let body = AIClient.makeChineseBody(
+            context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 320)
+        XCTAssertTrue(body.messages[0].content.contains("one selected English word in Chinese"))
+        XCTAssertTrue(body.messages[0].content.contains("Never translate or summarize the surrounding"))
+    }
+
+    func testChinesePassagePromptTranslatesThenExplains() {
+        let body = AIClient.makeChineseBody(
+            context: .init(before: "before", highlight: "a difficult passage", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertTrue(body.messages[0].content.contains("First give an accurate, natural Chinese translation"))
+        XCTAssertTrue(body.messages[0].content.contains("翻译："))
+        XCTAssertTrue(body.messages[0].content.contains("解释："))
+    }
+
     func testSelectionScriptUsesBothCaretAPIs() {
         let script = PencilSelectionScript.make(
             start: CGPoint(x: 20, y: 30),

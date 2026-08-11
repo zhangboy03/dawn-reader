@@ -5,6 +5,11 @@ import ReadiumShared
 
 @MainActor
 final class ReadingSession: ObservableObject {
+    enum AssistanceMode: Equatable {
+        case english
+        case chinese
+    }
+
     enum RewriteState: Equatable {
         case idle
         case loading
@@ -16,6 +21,7 @@ final class ReadingSession: ObservableObject {
     @Published var selectedText = ""
     @Published var selectionFrame: CGRect?
     @Published var rewriteState: RewriteState = .idle
+    @Published var assistanceMode: AssistanceMode = .english
     @Published var progress = 0.0
 
     let title: String
@@ -27,6 +33,7 @@ final class ReadingSession: ObservableObject {
     private let persist: (String, Double) -> Void
     private var rewriteTask: Task<Void, Never>?
     private var selectionKey = ""
+    private var selectedContext: RewriteContext?
 
     init(book: BookRecord, settings: SettingsStore, persist: @escaping (String, Double) -> Void) {
         title = book.title
@@ -49,10 +56,12 @@ final class ReadingSession: ObservableObject {
         selectionKey = key
         selectedText = highlight
         selectionFrame = selection.frame
+        assistanceMode = .english
         rewriteState = .loading
         rewriteTask?.cancel()
 
         let context = RewriteContext(before: text.before ?? "", highlight: highlight, after: text.after ?? "")
+        selectedContext = context
         let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         rewriteTask = Task {
@@ -67,12 +76,39 @@ final class ReadingSession: ObservableObject {
         }
     }
 
+    func explainInChinese() {
+        guard let context = selectedContext else { return }
+        assistanceMode = .chinese
+        rewriteState = .loading
+        rewriteTask?.cancel()
+
+        let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        rewriteTask = Task {
+            do {
+                let explanation = try await AIClient.explainInChinese(
+                    context: context,
+                    title: title,
+                    apiKey: apiKey,
+                    model: model
+                )
+                guard !Task.isCancelled else { return }
+                rewriteState = .complete(explanation)
+            } catch {
+                guard !Task.isCancelled else { return }
+                rewriteState = .failed(error.localizedDescription)
+            }
+        }
+    }
+
     func clearSelection() {
         rewriteTask?.cancel()
         rewriteTask = nil
         selectionKey = ""
+        selectedContext = nil
         selectedText = ""
         selectionFrame = nil
+        assistanceMode = .english
         rewriteState = .idle
         clearNativeSelection?()
     }

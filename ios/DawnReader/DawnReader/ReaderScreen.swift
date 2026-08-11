@@ -120,10 +120,23 @@ struct ReaderScreen: View {
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(AIClient.isSingleWord(session.selectedText) ? "语境词义" : "简明英文")
+                Text(cardTitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Palette.ember)
                 Spacer()
+                if session.assistanceMode == .english {
+                    Button("中文详解") {
+                        session.explainInChinese()
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Palette.ember)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Palette.ember.opacity(0.09), in: RoundedRectangle(cornerRadius: 6))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                }
                 Button {
                     session.clearSelection()
                 } label: {
@@ -140,7 +153,7 @@ struct ReaderScreen: View {
             case .loading:
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
-                    Text(AIClient.isSingleWord(session.selectedText) ? "正在解释…" : "正在改写…")
+                    Text(loadingTitle)
                         .foregroundStyle(Palette.mutedInk)
                 }
             case let .complete(text):
@@ -162,6 +175,16 @@ struct ReaderScreen: View {
         }
         .shadow(color: Palette.ink.opacity(0.12), radius: 18, y: 8)
         .offset(x: x, y: y)
+    }
+
+    private var cardTitle: String {
+        if session.assistanceMode == .chinese { return "中文详解" }
+        return AIClient.isSingleWord(session.selectedText) ? "语境词义" : "简明英文"
+    }
+
+    private var loadingTitle: String {
+        if session.assistanceMode == .chinese { return "正在生成中文解释…" }
+        return AIClient.isSingleWord(session.selectedText) ? "正在解释…" : "正在改写…"
     }
 }
 
