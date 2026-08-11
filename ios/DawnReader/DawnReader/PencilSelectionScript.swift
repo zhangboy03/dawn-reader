@@ -26,9 +26,38 @@ enum PencilSelectionScript {
             }
             return null;
           };
-          const a = point(\(number(start.x)), \(number(start.y)));
+          const glyphContainsPoint = (caret, x, y) => {
+            if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return null;
+            const text = caret.node.data || "";
+            const isWord = (char) => /[\\p{L}\\p{N}'’\\u2010-\\u2015-]/u.test(char || "");
+            const candidates = [caret.offset, caret.offset - 1];
+            for (const index of candidates) {
+              if (index < 0 || index >= text.length || !isWord(text[index])) continue;
+              const range = document.createRange();
+              range.setStart(caret.node, index);
+              range.setEnd(caret.node, index + 1);
+              for (const rect of range.getClientRects()) {
+                const pad = 1.5;
+                if (rect.width > 0 && rect.height > 0 &&
+                    x >= rect.left - pad && x <= rect.right + pad &&
+                    y >= rect.top - pad && y <= rect.bottom + pad) {
+                  return { node: caret.node, offset: index };
+                }
+              }
+            }
+            return null;
+          };
+          const startX = \(number(start.x)) * scaleX;
+          const startY = \(number(start.y)) * scaleY;
+          const a = glyphContainsPoint(point(\(number(start.x)), \(number(start.y))), startX, startY);
           const b = point(\(number(end.x)), \(number(end.y)));
-          if (!a || !b) return "";
+          if (!a) {
+            window.getSelection()?.removeAllRanges();
+            globalThis.CSS?.highlights?.delete('dawn-reader-selection');
+            return "";
+          }
+          if (!b) return window.getSelection()?.toString().trim() || "";
+          globalThis.CSS?.highlights?.delete('dawn-reader-selection');
           const wordBounds = (caret) => {
             if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return caret;
             const text = caret.node.data || "";
@@ -74,6 +103,42 @@ enum PencilSelectionScript {
           }
           document.dispatchEvent(new Event("selectionchange"));
           return selection.toString().trim();
+        })()
+        """
+    }
+
+    static func hitTest(point: CGPoint, nativeSize: CGSize) -> String {
+        let locale = Locale(identifier: "en_US_POSIX")
+        func number(_ value: CGFloat) -> String {
+            String(format: "%.3f", locale: locale, Double(value))
+        }
+        return """
+        (() => {
+          const x = \(number(point.x)) * window.innerWidth / \(number(max(nativeSize.width, 1)));
+          const y = \(number(point.y)) * window.innerHeight / \(number(max(nativeSize.height, 1)));
+          let caret = null;
+          if (document.caretPositionFromPoint) {
+            const p = document.caretPositionFromPoint(x, y);
+            if (p) caret = { node: p.offsetNode, offset: p.offset };
+          }
+          if (!caret && document.caretRangeFromPoint) {
+            const r = document.caretRangeFromPoint(x, y);
+            if (r) caret = { node: r.startContainer, offset: r.startOffset };
+          }
+          if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return false;
+          const text = caret.node.data || "";
+          for (const index of [caret.offset, caret.offset - 1]) {
+            if (index < 0 || index >= text.length || /\\s/u.test(text[index])) continue;
+            const range = document.createRange();
+            range.setStart(caret.node, index);
+            range.setEnd(caret.node, index + 1);
+            for (const rect of range.getClientRects()) {
+              if (rect.width > 0 && rect.height > 0 &&
+                  x >= rect.left - 1.5 && x <= rect.right + 1.5 &&
+                  y >= rect.top - 1.5 && y <= rect.bottom + 1.5) return true;
+            }
+          }
+          return false;
         })()
         """
     }

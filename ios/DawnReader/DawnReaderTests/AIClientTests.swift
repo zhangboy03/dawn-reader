@@ -14,6 +14,29 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[1].content.contains("<context_before>\nbefore\n</context_before>"))
     }
 
+    func testSingleWordPromptOnlyExplainsContextualMeaning() {
+        let body = AIClient.makeBody(
+            context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 48)
+        XCTAssertTrue(body.messages[0].content.contains("Explain only the word"))
+        XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, or quote the surrounding"))
+        XCTAssertTrue(AIClient.isSingleWord("self-reliance"))
+        XCTAssertFalse(AIClient.isSingleWord("a difficult phrase"))
+    }
+
+    func testPassagePromptStillRewritesOnlySelection() {
+        let body = AIClient.makeBody(
+            context: .init(before: "before", highlight: "a difficult phrase", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 96)
+        XCTAssertTrue(body.messages[0].content.contains("Rewrite only the text inside <selection>"))
+    }
+
     func testSelectionScriptUsesBothCaretAPIs() {
         let script = PencilSelectionScript.make(
             start: CGPoint(x: 20, y: 30),
@@ -23,8 +46,16 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(script.contains("caretPositionFromPoint"))
         XCTAssertTrue(script.contains("caretRangeFromPoint"))
         XCTAssertTrue(script.contains("wordBounds"))
+        XCTAssertTrue(script.contains("glyphContainsPoint"))
         XCTAssertTrue(script.contains("\\p{L}"))
         XCTAssertTrue(script.contains("selectionchange"))
+
+        let hitTest = PencilSelectionScript.hitTest(
+            point: CGPoint(x: 30, y: 40),
+            nativeSize: CGSize(width: 1024, height: 700)
+        )
+        XCTAssertTrue(hitTest.contains("getClientRects"))
+        XCTAssertTrue(hitTest.contains("return false"))
     }
 
     func testReaderContentScriptNormalizesKnownBrokenGlyphsAndControlsSelectionMode() {
@@ -38,5 +69,8 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(selectMode.contains("'select'"))
         let pageMode = ReaderContentScript.setMode(.page)
         XCTAssertTrue(pageMode.contains("removeAllRanges"))
+        XCTAssertTrue(ReaderContentScript.install(mode: .select).contains("::highlight(dawn-reader-selection)"))
+        XCTAssertTrue(ReaderContentScript.freezeSelection.contains("CSS.highlights.set"))
+        XCTAssertTrue(ReaderContentScript.clearSelection.contains("highlights?.delete"))
     }
 }

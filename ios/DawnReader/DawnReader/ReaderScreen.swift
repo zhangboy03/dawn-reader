@@ -120,7 +120,7 @@ struct ReaderScreen: View {
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("简明英文")
+                Text(AIClient.isSingleWord(session.selectedText) ? "语境词义" : "简明英文")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Palette.ember)
                 Spacer()
@@ -130,6 +130,8 @@ struct ReaderScreen: View {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
                 }
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 .buttonStyle(.plain)
             }
             switch session.rewriteState {
@@ -138,7 +140,7 @@ struct ReaderScreen: View {
             case .loading:
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
-                    Text("正在改写…")
+                    Text(AIClient.isSingleWord(session.selectedText) ? "正在解释…" : "正在改写…")
                         .foregroundStyle(Palette.mutedInk)
                 }
             case let .complete(text):

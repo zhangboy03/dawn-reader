@@ -32,6 +32,14 @@ enum ReaderContentScript {
           const style = document.createElement('style');
           style.id = 'dawn-reader-input-style';
           style.textContent = `
+            ::selection {
+              background: rgba(196, 117, 70, 0.34) !important;
+              color: inherit !important;
+            }
+            ::highlight(dawn-reader-selection) {
+              background-color: rgba(196, 117, 70, 0.34);
+              color: inherit;
+            }
             html[data-dawn-pencil-mode="page"],
             html[data-dawn-pencil-mode="page"] * {
               -webkit-user-select: none !important;
@@ -55,8 +63,30 @@ enum ReaderContentScript {
         """
         (() => {
           document.documentElement.dataset.dawnPencilMode = '\(mode.rawValue)';
-          if ('\(mode.rawValue)' === 'page') window.getSelection()?.removeAllRanges();
+          if ('\(mode.rawValue)' === 'page') {
+            window.getSelection()?.removeAllRanges();
+            globalThis.CSS?.highlights?.delete('dawn-reader-selection');
+          }
         })()
         """
     }
+
+    static let freezeSelection = """
+    (() => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+      if (!globalThis.CSS?.highlights || !globalThis.Highlight) return false;
+      const range = selection.getRangeAt(0).cloneRange();
+      CSS.highlights.set('dawn-reader-selection', new Highlight(range));
+      selection.removeAllRanges();
+      return true;
+    })()
+    """
+
+    static let clearSelection = """
+    (() => {
+      window.getSelection()?.removeAllRanges();
+      globalThis.CSS?.highlights?.delete('dawn-reader-selection');
+    })()
+    """
 }
