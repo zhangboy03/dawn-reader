@@ -19,6 +19,7 @@ import {
 } from "../lib/pencilInput";
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
+type AssistanceMode = "english" | "chinese";
 type SelectionAnchor = { x: number; y: number; placement: "above" | "below" };
 type GestureState = {
   kind: ReaderInputKind;
@@ -72,9 +73,9 @@ function selectBetween(document: Document, start: CaretPoint, end: CaretPoint) {
 }
 
 const themeColors = {
-  paper: { background: "#f4f6f3", color: "#182126" },
-  sepia: { background: "#ece3d1", color: "#332c25" },
-  night: { background: "#15212c", color: "#dbe3e4" },
+  paper: { background: "#f4f2ea", color: "#292824" },
+  sepia: { background: "#e9dfc8", color: "#342e25" },
+  night: { background: "#1b1d1a", color: "#b8b2a8" },
 };
 
 function normalize(text: string) {
@@ -130,6 +131,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const renditionRef = useRef<any>(null);
   const selectedCfiRef = useRef<string | null>(null);
   const selectedContentsRef = useRef<any>(null);
+  const selectedContextRef = useRef<RewriteContext | null>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
   const reflowTimerRef = useRef<number | null>(null);
   const cloudProgressTimerRef = useRef<number | null>(null);
@@ -144,6 +146,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
   const [rewrite, setRewrite] = useState("");
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
+  const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
   const [pageProgress, setPageProgress] = useState(0);
   const [locationsReady, setLocationsReady] = useState(false);
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
@@ -214,7 +217,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     rendition?.themes?.override("line-height", String(next.lineHeight), true);
   }
 
-  async function requestRewrite(text: string, context: RewriteContext) {
+  async function requestRewrite(text: string, context: RewriteContext, mode: AssistanceMode = "english") {
     rewriteAbortRef.current?.abort();
     const controller = new AbortController();
     rewriteAbortRef.current = controller;
@@ -229,6 +232,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           context,
           bookTitle: displayTitle,
           preset: profile.preset,
+          mode,
         }),
         signal: controller.signal,
       });
@@ -248,9 +252,18 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   function beginSelection(text: string, anchor: SelectionAnchor, context: RewriteContext) {
+    selectedContextRef.current = context;
     setSelected(text);
     setSelectionAnchor(anchor);
-    void requestRewrite(text, context);
+    setAssistanceMode("english");
+    void requestRewrite(text, context, "english");
+  }
+
+  function requestChineseDetail() {
+    const context = selectedContextRef.current;
+    if (!selected || !context) return;
+    setAssistanceMode("chinese");
+    void requestRewrite(selected, context, "chinese");
   }
 
   function captureEpubSelection(contents: any, suppliedCfi?: string) {
@@ -597,11 +610,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
     selectedCfiRef.current = null;
     selectedContentsRef.current = null;
+    selectedContextRef.current = null;
     selectedKeyRef.current = "";
     setSelected("");
     setSelectionAnchor(null);
     setRewrite("");
     setRewriteState("idle");
+    setAssistanceMode("english");
   }
 
   function turnPage(direction: "prev" | "next") {
@@ -680,11 +695,17 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     {selected && selectionAnchor && <aside
       className={`selection-assist ${selectionAnchor.placement} ${rewriteState}`}
       style={anchorStyle}
-      role="status"
-      aria-live="polite"
+      role="dialog"
+      aria-label={assistanceMode === "chinese" ? "中文详解" : "英文阅读辅助"}
+      onPointerDown={(event) => event.stopPropagation()}
     >
-      <header>简明英文</header>
-      {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>正在改写…</span></div>}
+      <header>
+        <span>{assistanceMode === "chinese" ? "中文详解" : "简明英文"}</span>
+        {assistanceMode === "english" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
+      </header>
+      <div role="status" aria-live="polite">
+        {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>{assistanceMode === "chinese" ? "正在生成中文解释…" : "正在生成简明英文…"}</span></div>}
+      </div>
     </aside>}
   </div>;
 }
