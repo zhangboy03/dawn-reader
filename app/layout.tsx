@@ -4,19 +4,19 @@ import "../src/landing-minimal.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://dawn-reader-keeplearning.zhangboy.chatgpt.site"),
-  title: "Dawn Reader · 英文原著阅读器",
-  description: "不是把英文书改简单，而是让你有能力继续读下去。原文优先，卡住才帮。",
+  title: "Dawn Reader · 读原文。读下去。",
+  description: "读原文。读下去。",
   openGraph: {
-    title: "Dawn Reader · 原文优先，卡住才帮",
-    description: "为中文母语者做的开源英文原著阅读器。",
+    title: "Dawn Reader · 读原文。读下去。",
+    description: "读原文。读下去。",
     type: "website",
     locale: "zh_CN",
     images: [{ url: "/og.png", width: 1024, height: 1024, alt: "Dawn Reader 图标" }],
   },
   twitter: {
     card: "summary",
-    title: "Dawn Reader · 原文优先，卡住才帮",
-    description: "为中文母语者做的开源英文原著阅读器。",
+    title: "Dawn Reader · 读原文。读下去。",
+    description: "读原文。读下去。",
     images: ["/og.png"],
   },
   icons: {
