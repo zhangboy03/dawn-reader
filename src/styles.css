@@ -186,7 +186,9 @@ body:has(.onboarding), body:has(.test-screen) {
 .create-pairing { width: 100%; min-height: 48px; margin-top: 20px; border: 1px solid #9c4828; border-radius: var(--radius-control); color: #fffaf4; background: var(--accent-strong); font-weight: 650; }
 .pairing-code { margin-top: 20px; padding: 18px; border: 1px solid #c2cccb; border-radius: 10px; background: #edf1ef; }
 .pairing-code code { display: block; overflow-wrap: anywhere; color: #243138; font: 650 16px/1.6 "SFMono-Regular", Consolas, monospace; letter-spacing: .035em; }
-.pairing-code button { min-height: 38px; margin-top: 12px; padding: 0 14px; border: 1px solid #9faeaf; border-radius: 7px; color: #405158; background: transparent; }
+.pairing-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.pairing-actions a, .pairing-code button { min-height: 38px; display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid #9faeaf; border-radius: 7px; color: #405158; background: transparent; font-size: 11px; text-decoration: none; }
+.pairing-actions a { border-color: #9c4828; color: #fffaf4; background: var(--accent-strong); }
 .pairing-code p, .sync-error { margin: 12px 0 0; color: #718086; font-size: 11px; line-height: 1.6; }
 .sync-error { color: #9d4337; }
 .device-list { margin-top: 24px; }

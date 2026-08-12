@@ -28,6 +28,10 @@ targets:
             CFBundleTypeRole: Viewer
             LSItemContentTypes:
               - org.idpf.epub-container
+        CFBundleURLTypes:
+          - CFBundleURLName: com.keeplearning.dawnreader.sync
+            CFBundleURLSchemes:
+              - dawnreader
         LSSupportsOpeningDocumentsInPlace: true
         UIFileSharingEnabled: true
         UILaunchScreen: {}

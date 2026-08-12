@@ -74,8 +74,11 @@ export function DeviceSync() {
         </header>
         {pairingCode ? <div className="pairing-code">
           <code>{pairingCode}</code>
-          <button onClick={() => void copyCode()}>复制</button>
-          <p>在 iPad App 的“设置 → 设备同步”中粘贴。配对码只显示这一次。</p>
+          <div className="pairing-actions">
+            <a href={`dawnreader://pair?code=${encodeURIComponent(pairingCode)}`}>在 iPad App 中打开</a>
+            <button onClick={() => void copyCode()}>复制</button>
+          </div>
+          <p>也可以在 iPad App 的“设置 → 设备同步”中粘贴。配对码只显示这一次。</p>
         </div> : <button className="create-pairing" disabled={busy} onClick={() => void createPairingCode()}>
           {busy ? "正在生成…" : "生成配对码"}
         </button>}
