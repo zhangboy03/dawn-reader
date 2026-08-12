@@ -9,8 +9,8 @@ export async function deleteBookResources({
   deleteRecord: () => Promise<unknown>;
   deleteProgress: () => Promise<unknown>;
 }) {
-  await deleteObject();
   await rememberDeletion();
+  await deleteObject();
   await deleteRecord();
   await deleteProgress();
 }

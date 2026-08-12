@@ -243,6 +243,11 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     ready: "已同步",
     local: "仅本机",
   }[syncState];
+  const emptyState = syncState === "loading" || syncState === "syncing"
+    ? { title: "正在整理书架。", detail: "" }
+    : syncState === "local"
+      ? { title: "云端暂时不可用。", detail: "你仍然可以在本机导入和阅读。" }
+      : { title: "从一本真正想读的书开始。", detail: "导入 EPUB，它会留在你的书架里。" };
 
   return <main className="library-shell">
     <header className="topbar">
@@ -287,6 +292,10 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
           </article>)}
         </div>
       </>}
+      {storedBooks.length === 0 && <div className={`library-state ${syncState}`} aria-live="polite">
+        <h2>{emptyState.title}</h2>
+        {emptyState.detail && <p>{emptyState.detail}</p>}
+      </div>}
     </section>
   </main>;
 }
