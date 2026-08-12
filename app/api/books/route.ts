@@ -1,8 +1,8 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getReaderIdentity } from "../../chatgpt-auth";
 import { getBooksBucket, getDb } from "../../../db";
 import { readerBooks } from "../../../db/schema";
-import { bookObjectKey } from "../../../src/server/library";
+import { bookObjectKey, legacyBooksWithoutHash, mergeBookRecords } from "../../../src/server/library";
 
 export const dynamic = "force-dynamic";
 const MAX_EPUB_BYTES = 40 * 1024 * 1024;
@@ -64,5 +64,26 @@ export async function POST(request: Request) {
       updatedAt: now,
     },
   });
+
+  if (contentHash) {
+    const candidates = await legacyBooksWithoutHash(user.userId, file.size);
+    for (const candidate of candidates) {
+      if (candidate.id === id || candidate.contentHash) continue;
+      const object = await getBooksBucket().get(bookObjectKey(user.userId, candidate.id));
+      if (!object) continue;
+      const digest = await crypto.subtle.digest("SHA-256", await object.arrayBuffer());
+      const candidateHash = [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      if (candidateHash === contentHash) {
+        await mergeBookRecords(user.userId, id, candidate.id);
+      } else {
+        await getDb().update(readerBooks).set({ contentHash: candidateHash }).where(and(
+          eq(readerBooks.userId, user.userId),
+          eq(readerBooks.id, candidate.id),
+        ));
+      }
+    }
+  }
   return Response.json({ id, syncedAt: now });
 }
