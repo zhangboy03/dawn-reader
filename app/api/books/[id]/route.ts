@@ -14,8 +14,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
   if (!id || id.length > 512) return Response.json({ error: "Invalid book id." }, { status: 400 });
 
-  // Remove the payload first. If a later database write fails, the remaining
-  // metadata is a retryable ghost rather than an EPUB that can reappear.
+  // Establish the deletion barrier before touching the payload. If R2 is
+  // temporarily unavailable, stale devices still cannot resurrect the book
+  // and a later DELETE can safely finish the cleanup.
   const db = getDb();
   const deletedAt = new Date().toISOString();
   await deleteBookResources({

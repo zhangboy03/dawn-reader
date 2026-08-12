@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canRestoreDeletedBook, deleteBookResources } from "./deleteBookResources";
 
 describe("book resource deletion", () => {
-  it("makes the EPUB inaccessible before removing metadata and progress", async () => {
+  it("establishes the deletion barrier before removing payload and state", async () => {
     const order: string[] = [];
     await deleteBookResources({
       deleteObject: async () => { order.push("object"); },
@@ -10,10 +10,10 @@ describe("book resource deletion", () => {
       deleteRecord: async () => { order.push("record"); },
       deleteProgress: async () => { order.push("progress"); },
     });
-    expect(order).toEqual(["object", "tombstone", "record", "progress"]);
+    expect(order).toEqual(["tombstone", "object", "record", "progress"]);
   });
 
-  it("does not hide metadata when object deletion fails", async () => {
+  it("keeps the deletion barrier when object cleanup must be retried", async () => {
     const order: string[] = [];
     await expect(deleteBookResources({
       deleteObject: async () => { throw new Error("R2 unavailable"); },
@@ -21,7 +21,7 @@ describe("book resource deletion", () => {
       deleteRecord: async () => { order.push("record"); },
       deleteProgress: async () => { order.push("progress"); },
     })).rejects.toThrow("R2 unavailable");
-    expect(order).toEqual([]);
+    expect(order).toEqual(["tombstone"]);
   });
 });
 
