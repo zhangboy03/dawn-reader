@@ -16,7 +16,7 @@ export function LandingPage() {
 
     <section className="landing-hero" id="top">
       <div className="landing-intro">
-        <h1>不是把英文书<br />改简单，<br /><em>而是让你读下去。</em></h1>
+        <h1>不是把英文书<br />改简单，<br /><em>而是让你<br />读下去。</em></h1>
         <p className="hero-lede">原文是主角。帮助只在你卡住时出现。</p>
         <div className="hero-actions">
           <a className="landing-primary" href="/reader">开始阅读</a>
