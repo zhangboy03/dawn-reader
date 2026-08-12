@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getReaderIdentity } from "../../chatgpt-auth";
-import { getBooksBucket, getDb } from "../../../db";
+import { ensureDeletionSchema, getBooksBucket, getDb } from "../../../db";
 import { readerBookDeletions, readerBooks } from "../../../db/schema";
 import { bookObjectKey, legacyBooksWithoutHash, mergeBookRecords } from "../../../src/server/library";
 import { canRestoreDeletedBook } from "../../../src/server/deleteBookResources";
@@ -11,6 +11,7 @@ const MAX_EPUB_BYTES = 40 * 1024 * 1024;
 export async function GET(request: Request) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
+  await ensureDeletionSchema();
   const books = await getDb().select({
     id: readerBooks.id,
     title: readerBooks.title,
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
+  await ensureDeletionSchema();
   const form = await request.formData();
   const file = form.get("file");
   const id = String(form.get("id") ?? "").trim();
