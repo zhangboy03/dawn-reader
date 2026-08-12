@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "../db";
 import { readerDevices } from "../db/schema";
@@ -29,6 +30,12 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
       : null;
 
   return { userId, email, fullName, displayName: fullName ?? email };
+}
+
+export async function requireChatGPTUser(returnTo = "/") {
+  const user = await getChatGPTUser();
+  if (!user) redirect(`/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`);
+  return user;
 }
 
 export async function isAuthorizedReaderRequest() {

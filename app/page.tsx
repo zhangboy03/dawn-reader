@@ -1,7 +1,9 @@
-"use client";
-
 import App from "../src/App";
+import { requireChatGPTUser } from "./chatgpt-auth";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  await requireChatGPTUser("/");
   return <App />;
 }

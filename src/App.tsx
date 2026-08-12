@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { LexTale } from "./components/LexTale";
 import { Library, type BookSource } from "./components/Library";
