@@ -49,6 +49,9 @@
     "wrangler": "4.121.0"
   },
   "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    },
     "@xmldom/xmldom": "^0.9.10",
     "image-size": "2.0.2"
   }
