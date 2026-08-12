@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "../src/styles.css";
+import "../src/landing-minimal.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://dawn-reader-keeplearning.zhangboy.chatgpt.site"),
@@ -10,10 +11,10 @@ export const metadata: Metadata = {
     description: "为中文母语者做的开源英文原著阅读器。",
     type: "website",
     locale: "zh_CN",
-    images: [{ url: "/og.png", width: 1731, height: 909, alt: "Dawn Reader · 原文优先，卡住才帮" }],
+    images: [{ url: "/og.png", width: 1024, height: 1024, alt: "Dawn Reader 图标" }],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "Dawn Reader · 原文优先，卡住才帮",
     description: "为中文母语者做的开源英文原著阅读器。",
     images: ["/og.png"],
