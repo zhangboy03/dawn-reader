@@ -6,6 +6,7 @@ struct LibraryView: View {
     @EnvironmentObject private var settings: SettingsStore
     @State private var importing = false
     @State private var showingSettings = false
+    @State private var bookToDelete: BookRecord?
     @Environment(\.scenePhase) private var scenePhase
 
     private let epubType = UTType(filenameExtension: "epub")!
@@ -61,6 +62,23 @@ struct LibraryView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await library.synchronize(settings: settings) }
+        }
+        .confirmationDialog(
+            "从书架删除《\(bookToDelete?.title ?? "")》？",
+            isPresented: Binding(
+                get: { bookToDelete != nil },
+                set: { if !$0 { bookToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除电子书和阅读进度", role: .destructive) {
+                guard let book = bookToDelete else { return }
+                bookToDelete = nil
+                Task { await library.delete(book, settings: settings) }
+            }
+            Button("取消", role: .cancel) { bookToDelete = nil }
+        } message: {
+            Text("已同步的副本也会删除。这个操作不能撤销。")
         }
     }
 
@@ -126,9 +144,10 @@ struct LibraryView: View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 18)], spacing: 18) {
                 ForEach(library.books) { book in
-                    Button {
-                        Task { await library.open(book, settings: settings) }
-                    } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Button {
+                            Task { await library.open(book, settings: settings) }
+                        } label: {
                         VStack(alignment: .leading, spacing: 20) {
                             HStack {
                                 Text("EPUB")
@@ -150,8 +169,23 @@ struct LibraryView: View {
                         .padding(22)
                         .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
                         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
+                        }
+                        .buttonStyle(.plain)
+                        Menu {
+                            Button("删除", systemImage: "trash", role: .destructive) {
+                                bookToDelete = book
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .frame(width: 38, height: 38)
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Palette.mutedInk)
+                        .padding(10)
+                        .accessibilityLabel("管理《\(book.title)》")
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }

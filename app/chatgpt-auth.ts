@@ -34,6 +34,9 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
 
 export async function requireChatGPTUser(returnTo = "/") {
   const user = await getChatGPTUser();
+  if (!user && process.env.NODE_ENV === "development") {
+    return { userId: "local-development", email: "local@dawn-reader.test", fullName: "Local Reader", displayName: "Local Reader" };
+  }
   if (!user) redirect(`/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`);
   return user;
 }

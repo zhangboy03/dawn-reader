@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getReaderIdentity } from "../../../../chatgpt-auth";
 import { getDb } from "../../../../../db";
 import { readingProgress } from "../../../../../db/schema";
+import { bookForUser } from "../../../../../src/server/library";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const { id } = await params;
+  if (!await bookForUser(user.userId, id)) {
+    return Response.json({ error: "Book not found." }, { status: 404 });
+  }
   const [position] = await getDb().select({
     cfi: readingProgress.cfi,
     nativeLocator: readingProgress.nativeLocator,
@@ -25,6 +29,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const { id } = await params;
+  if (!await bookForUser(user.userId, id)) {
+    return Response.json({ error: "Book not found." }, { status: 404 });
+  }
   const input = await request.json() as {
     cfi?: string | null;
     nativeLocator?: string | null;
@@ -60,5 +67,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     target: [readingProgress.userId, readingProgress.bookId],
     set: { cfi, nativeLocator, percentage, updatedAt: requestedAt },
   });
+  // DELETE may race with a last progress write from an already-open reader.
+  // Re-check ownership and remove the late write instead of reviving state.
+  if (!await bookForUser(user.userId, id)) {
+    await getDb().delete(readingProgress).where(and(
+      eq(readingProgress.userId, user.userId),
+      eq(readingProgress.bookId, id),
+    ));
+    return Response.json({ error: "Book was deleted while progress was syncing." }, { status: 409 });
+  }
   return Response.json({ position: { cfi, nativeLocator, percentage, updatedAt: requestedAt }, applied: true });
 }

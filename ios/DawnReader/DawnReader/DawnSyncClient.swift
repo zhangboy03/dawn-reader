@@ -23,6 +23,11 @@ struct CloudBook: Codable, Sendable {
     let updatedAt: String
 }
 
+struct CloudDeletedBook: Codable, Sendable {
+    let id: String
+    let deletedAt: String
+}
+
 struct CloudReadingPosition: Codable, Sendable {
     let cfi: String?
     let nativeLocator: String?
@@ -42,8 +47,10 @@ private struct CloudState: Codable, Sendable {
     let settings: CloudReaderSettings?
 }
 
-private struct CloudBookList: Codable, Sendable {
+struct CloudBookList: Codable, Sendable {
     let books: [CloudBook]
+    let deletedBookIds: [String]?
+    let deletedBooks: [CloudDeletedBook]?
 }
 
 private struct CloudProgressResponse: Codable, Sendable {
@@ -87,13 +94,17 @@ enum DawnSyncClient {
         _ = try await send(path: "/api/state", token: token, method: "PUT", body: body, contentType: "application/json")
     }
 
-    static func listBooks(token: String) async throws -> [CloudBook] {
+    static func loadLibrary(token: String) async throws -> CloudBookList {
         let data = try await send(path: "/api/books", token: token)
-        return try JSONDecoder().decode(CloudBookList.self, from: data).books
+        return try JSONDecoder().decode(CloudBookList.self, from: data)
     }
 
     static func downloadBook(token: String, id: String) async throws -> Data {
         try await send(path: "/api/books/\(pathComponent(id))/file", token: token)
+    }
+
+    static func deleteBook(token: String, id: String) async throws {
+        _ = try await send(path: "/api/books/\(pathComponent(id))", token: token, method: "DELETE")
     }
 
     static func uploadBook(

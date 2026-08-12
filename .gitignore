@@ -7,6 +7,7 @@ dist/
 !.env.example
 .next/
 .vinext/
+.vite/
 .wrangler/
 .build/
 ios/**/DerivedData/

@@ -25,6 +25,14 @@ export const readingProgress = sqliteTable("reading_progress", {
   primaryKey({ columns: [table.userId, table.bookId] }),
 ]);
 
+export const readerBookDeletions = sqliteTable("reader_book_deletions", {
+  userId: text("user_id").notNull(),
+  bookId: text("book_id").notNull(),
+  deletedAt: text("deleted_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.bookId] }),
+]);
+
 export const readerState = sqliteTable("reader_state", {
   userId: text("user_id").primaryKey(),
   profileJson: text("profile_json"),

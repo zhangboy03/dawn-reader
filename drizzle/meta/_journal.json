@@ -15,6 +15,13 @@
       "when": 1786505208487,
       "tag": "0001_military_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786520422209,
+      "tag": "0002_nosy_whizzer",
+      "breakpoints": true
     }
   ]
 }

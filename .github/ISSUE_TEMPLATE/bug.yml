@@ -1,0 +1,46 @@
+name: Bug report
+description: 报告一个可以复现的阅读、书架或同步问题
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 请不要上传受版权保护的 EPUB、访问令牌或私人阅读数据。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 发生了什么
+      description: 请描述你当时在读什么类型的文件、执行了什么操作，以及实际结果。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最小复现步骤
+      placeholder: "1. 导入…\n2. 打开…\n3. 点击…"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options: [网页端, iPad 原生端, 两端同步, 本地开发]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本、浏览器或系统
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除书籍内容、密钥、令牌和私人阅读数据
+          required: true

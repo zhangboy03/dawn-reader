@@ -1,8 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getReaderIdentity } from "../../chatgpt-auth";
 import { getBooksBucket, getDb } from "../../../db";
-import { readerBooks } from "../../../db/schema";
+import { readerBookDeletions, readerBooks } from "../../../db/schema";
 import { bookObjectKey, legacyBooksWithoutHash, mergeBookRecords } from "../../../src/server/library";
+import { canRestoreDeletedBook } from "../../../src/server/deleteBookResources";
 
 export const dynamic = "force-dynamic";
 const MAX_EPUB_BYTES = 40 * 1024 * 1024;
@@ -21,7 +22,10 @@ export async function GET(request: Request) {
   }).from(readerBooks)
     .where(eq(readerBooks.userId, user.userId))
     .orderBy(desc(readerBooks.updatedAt));
-  return Response.json({ books });
+  const deletions = await getDb().select({ id: readerBookDeletions.bookId, deletedAt: readerBookDeletions.deletedAt })
+    .from(readerBookDeletions)
+    .where(eq(readerBookDeletions.userId, user.userId));
+  return Response.json({ books, deletedBookIds: deletions.map((item) => item.id), deletedBooks: deletions });
 }
 
 export async function POST(request: Request) {
@@ -42,6 +46,21 @@ export async function POST(request: Request) {
   }
 
   const now = new Date().toISOString();
+  const [deletion] = await getDb().select({ deletedAt: readerBookDeletions.deletedAt })
+    .from(readerBookDeletions)
+    .where(and(
+      eq(readerBookDeletions.userId, user.userId),
+      eq(readerBookDeletions.bookId, id),
+    ))
+    .limit(1);
+  if (deletion) {
+    if (!canRestoreDeletedBook(addedAt, deletion.deletedAt)) {
+      return Response.json({
+        error: "This book was deleted on another device. Import it again to restore it.",
+        code: "BOOK_DELETED",
+      }, { status: 409 });
+    }
+  }
   await getBooksBucket().put(bookObjectKey(user.userId, id), file.stream(), {
     httpMetadata: { contentType: "application/epub+zip" },
   });
@@ -64,6 +83,12 @@ export async function POST(request: Request) {
       updatedAt: now,
     },
   });
+  if (deletion) {
+    await getDb().delete(readerBookDeletions).where(and(
+      eq(readerBookDeletions.userId, user.userId),
+      eq(readerBookDeletions.bookId, id),
+    ));
+  }
 
   if (contentHash) {
     const candidates = await legacyBooksWithoutHash(user.userId, file.size);

@@ -2,14 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReaderProfile } from "../lib/storage";
 import {
   cacheStoredBook,
+  deleteStoredBook,
   listStoredBooks,
   saveEpub,
   storedBookFile,
   type StoredBook,
 } from "../lib/bookStore";
+import { deleteBookRemoteFirst, deletedBookIds, forgetDeletedBook, rememberDeletedBook } from "../lib/bookDeletion";
 import {
+  deleteCloudBook,
   downloadCloudBook,
-  listCloudBooks,
+  loadCloudLibrary,
   saveCloudProgress,
   uploadCloudBook,
   type CloudBook,
@@ -117,18 +120,38 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   const [profileOpen, setProfileOpen] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>("loading");
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function syncLibrary() {
-      const local = await listStoredBooks().catch(() => []);
+      const tombstones = deletedBookIds();
+      const allLocal = await listStoredBooks().catch(() => []);
+      const local = allLocal.filter((book) => !tombstones.has(book.id));
       if (cancelled) return;
       setStoredBooks(local.map((book) => ({ ...book, synced: false })));
       try {
-        const cloud = await listCloudBooks();
+        const cloudLibrary = await loadCloudLibrary();
+        const allCloud = cloudLibrary.books;
+        const deletionDates = new Map((cloudLibrary.deletedBooks ?? []).map((item) => [item.id, item.deletedAt]));
+        const staleServerDeletedIds = new Set(allLocal.filter((book) => {
+          const deletedAt = deletionDates.get(book.id);
+          return deletedAt ? book.addedAt <= deletedAt : false;
+        }).map((book) => book.id));
+        const deletedEverywhere = new Set([...tombstones, ...staleServerDeletedIds]);
+        for (const book of allLocal.filter((candidate) => staleServerDeletedIds.has(candidate.id))) {
+          rememberDeletedBook(book.id);
+          await deleteStoredBook(book.id).catch(() => undefined);
+        }
+        const visibleLocal = local.filter((book) => !deletedEverywhere.has(book.id));
+        const cloud = allCloud.filter((book) => !deletedEverywhere.has(book.id));
+        for (const book of allCloud.filter((candidate) => tombstones.has(candidate.id))) {
+          await deleteCloudBook(book.id);
+          await deleteStoredBook(book.id).catch(() => undefined);
+        }
         if (cancelled) return;
-        setStoredBooks(mergeShelf(local, cloud));
-        const unsynced = local.filter((book) => !cloud.some((remote) => remote.id === book.id));
+        setStoredBooks(mergeShelf(visibleLocal, cloud));
+        const unsynced = visibleLocal.filter((book) => !cloud.some((remote) => remote.id === book.id));
         if (unsynced.length) {
           setSyncState("syncing");
           for (const book of unsynced) {
@@ -136,8 +159,8 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
             const localPosition = parseReadingPosition(localStorage.getItem(`dawn-reader-progress:${book.id}`));
             if (localPosition) await saveCloudProgress(book.id, localPosition);
           }
-          const refreshed = await listCloudBooks();
-          if (!cancelled) setStoredBooks(mergeShelf(local, refreshed));
+          const refreshed = await loadCloudLibrary();
+          if (!cancelled) setStoredBooks(mergeShelf(visibleLocal, refreshed.books));
         }
         if (!cancelled) setSyncState("ready");
       } catch {
@@ -153,6 +176,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     const extension = file.name.split(".").pop()?.toLowerCase();
     if (extension === "epub") {
       const stored = await saveEpub(file);
+      forgetDeletedBook(stored.id);
       setStoredBooks((books) => [{ ...stored, synced: false }, ...books.filter((book) => book.id !== stored.id)]);
       setSyncState("syncing");
       try {
@@ -187,6 +211,29 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "打开失败");
       setOpeningId(null);
+    }
+  }
+
+  async function removeBook(book: ShelfBook) {
+    if (deletingId || !window.confirm(`从书架删除《${book.title}》？\n\n电子书文件和阅读进度会从已同步设备中移除。`)) return;
+    setDeletingId(book.id);
+    try {
+      await deleteBookRemoteFirst({
+        bookId: book.id,
+        synced: book.synced,
+        deleteRemote: () => deleteCloudBook(book.id),
+        deleteLocal: () => deleteStoredBook(book.id),
+      });
+      setStoredBooks((books) => books.filter((candidate) => candidate.id !== book.id));
+    } catch (error) {
+      if (deletedBookIds().has(book.id)) {
+        setStoredBooks((books) => books.filter((candidate) => candidate.id !== book.id));
+        window.alert("云端已删除；本机缓存将在下次打开时继续清理。");
+      } else {
+        window.alert(error instanceof Error ? error.message : "删除失败，请稍后重试。");
+      }
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -228,10 +275,16 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       {storedBooks.length > 0 && <>
         <div className="section-heading"><h2>继续阅读</h2></div>
         <div className="stored-shelf">
-          {storedBooks.map((book) => <button className="stored-book" key={book.id} disabled={openingId === book.id} onClick={() => void openBook(book)}>
-            <div className="stored-spine" aria-hidden="true"><span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span><strong>{book.title.slice(0, 2).toUpperCase()}</strong><i /></div>
-            <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : "打开"} <span>→</span></strong></div>
-          </button>)}
+          {storedBooks.map((book) => <article className="stored-book" key={book.id}>
+            <button className="book-open" disabled={openingId === book.id || deletingId === book.id} onClick={() => void openBook(book)}>
+              <div className="stored-spine" aria-hidden="true"><span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span><strong>{book.title.slice(0, 2).toUpperCase()}</strong><i /></div>
+              <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
+            </button>
+            <details className="book-menu">
+              <summary aria-label={`管理《${book.title}》`}>•••</summary>
+              <div><button className="danger" onClick={() => void removeBook(book)}>从书架删除</button></div>
+            </details>
+          </article>)}
         </div>
       </>}
     </section>

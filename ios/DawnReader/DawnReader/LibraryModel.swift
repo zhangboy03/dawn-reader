@@ -19,6 +19,7 @@ final class LibraryModel: ObservableObject {
 
     private let readium = ReadiumService()
     private let defaultsKey = "dawn-reader.books.v1"
+    private let deletedCloudIDsKey = "dawn-reader.deleted-cloud-ids.v1"
     private var syncToken = ""
     private var progressSyncTasks: [UUID: Task<Void, Never>] = [:]
 
@@ -78,6 +79,40 @@ final class LibraryModel: ObservableObject {
         openedBook = nil
     }
 
+    func delete(_ record: BookRecord, settings: SettingsStore) async {
+        guard !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            progressSyncTasks[record.id]?.cancel()
+            progressSyncTasks[record.id] = nil
+            if let cloudID = record.cloudID {
+                var pending = deletedCloudIDs()
+                pending.insert(cloudID)
+                saveDeletedCloudIDs(pending)
+                if let token = DawnSyncClient.normalizePairingCode(settings.syncCode) {
+                    try await DawnSyncClient.deleteBook(token: token, id: cloudID)
+                }
+            }
+            if openedBook?.record.id == record.id { openedBook = nil }
+            let fileURL = try booksDirectory().appendingPathComponent(record.fileName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+            books.removeAll { $0.id == record.id }
+            saveBooks()
+            if let cloudID = record.cloudID,
+               DawnSyncClient.normalizePairingCode(settings.syncCode) != nil
+            {
+                var pending = deletedCloudIDs()
+                pending.remove(cloudID)
+                saveDeletedCloudIDs(pending)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func open(_ record: BookRecord, publication: Publication, settings: SettingsStore) throws {
         let session = ReadingSession(book: record, settings: settings) { [weak self] locatorJSON, progress in
             self?.persistProgress(bookID: record.id, locatorJSON: locatorJSON, progress: progress)
@@ -127,7 +162,28 @@ final class LibraryModel: ObservableObject {
             if let cloudSettings = try await DawnSyncClient.loadSettings(token: token) {
                 settings.apply(cloudSettings: cloudSettings)
             }
-            var remoteBooks = try await DawnSyncClient.listBooks(token: token)
+            let cloudLibrary = try await DawnSyncClient.loadLibrary(token: token)
+            var remoteBooks = cloudLibrary.books
+            let deletionDates = Dictionary(uniqueKeysWithValues: (cloudLibrary.deletedBooks ?? []).map { ($0.id, $0.deletedAt) })
+            let staleLocalIDs = Set(books.compactMap { record -> UUID? in
+                guard let cloudID = record.cloudID, let deletedAt = deletionDates[cloudID] else { return nil }
+                return (record.addedAt ?? "") <= deletedAt ? record.id : nil
+            })
+            for record in books where staleLocalIDs.contains(record.id) {
+                progressSyncTasks[record.id]?.cancel()
+                let fileURL = try booksDirectory().appendingPathComponent(record.fileName)
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    try FileManager.default.removeItem(at: fileURL)
+                }
+            }
+            books.removeAll { staleLocalIDs.contains($0.id) }
+            var pendingDeletions = deletedCloudIDs()
+            for cloudID in Array(pendingDeletions) {
+                try await DawnSyncClient.deleteBook(token: token, id: cloudID)
+                remoteBooks.removeAll { $0.id == cloudID }
+                pendingDeletions.remove(cloudID)
+            }
+            saveDeletedCloudIDs(pendingDeletions)
             var matchedRemoteIDs = Set<String>()
 
             for index in books.indices {
@@ -288,6 +344,14 @@ final class LibraryModel: ObservableObject {
     private func saveBooks() {
         guard let data = try? JSONEncoder().encode(books) else { return }
         UserDefaults.standard.set(data, forKey: defaultsKey)
+    }
+
+    private func deletedCloudIDs() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: deletedCloudIDsKey) ?? [])
+    }
+
+    private func saveDeletedCloudIDs(_ ids: Set<String>) {
+        UserDefaults.standard.set(Array(ids).sorted(), forKey: deletedCloudIDsKey)
     }
 }
 

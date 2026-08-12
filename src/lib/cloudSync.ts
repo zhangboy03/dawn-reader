@@ -37,9 +37,8 @@ export async function saveCloudState(state: { profile?: ReaderProfile; settings?
   }));
 }
 
-export async function listCloudBooks() {
-  const result = await jsonResponse<{ books: CloudBook[] }>(await fetch("/api/books", { cache: "no-store" }));
-  return result.books;
+export async function loadCloudLibrary() {
+  return jsonResponse<{ books: CloudBook[]; deletedBookIds: string[]; deletedBooks?: Array<{ id: string; deletedAt: string }> }>(await fetch("/api/books", { cache: "no-store" }));
 }
 
 export async function uploadCloudBook(book: StoredBook) {
@@ -54,6 +53,12 @@ export async function uploadCloudBook(book: StoredBook) {
   return jsonResponse<{ id: string; syncedAt: string }>(await fetch("/api/books", {
     method: "POST",
     body: form,
+  }));
+}
+
+export async function deleteCloudBook(bookId: string) {
+  await jsonResponse<{ deleted: true }>(await fetch(`/api/books/${encodeURIComponent(bookId)}`, {
+    method: "DELETE",
   }));
 }
 

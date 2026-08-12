@@ -35,6 +35,14 @@ function requestResult<T>(request: IDBRequest<T>) {
   });
 }
 
+function transactionFinished(transaction: IDBTransaction) {
+  return new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted."));
+  });
+}
+
 export function cleanBookTitle(fileName: string) {
   return fileName
     .replace(/\.epub$/i, "")
@@ -53,7 +61,9 @@ export async function saveEpub(file: File) {
     addedAt: new Date().toISOString(),
   };
   const transaction = db.transaction(STORE_NAME, "readwrite");
-  await requestResult(transaction.objectStore(STORE_NAME).put(record));
+  const finished = transactionFinished(transaction);
+  transaction.objectStore(STORE_NAME).put(record);
+  await finished;
   db.close();
   return record;
 }
@@ -66,6 +76,15 @@ export async function listStoredBooks() {
   return records.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
 }
 
+export async function deleteStoredBook(id: string) {
+  const db = await openLibrary();
+  const transaction = db.transaction(STORE_NAME, "readwrite");
+  const finished = transactionFinished(transaction);
+  transaction.objectStore(STORE_NAME).delete(id);
+  await finished;
+  db.close();
+}
+
 export function storedBookFile(book: StoredBook) {
   if (!book.blob) throw new Error("The book is not cached on this device.");
   return new File([book.blob], book.fileName, { type: "application/epub+zip" });
@@ -75,7 +94,9 @@ export async function cacheStoredBook(book: StoredBook, blob: Blob) {
   const db = await openLibrary();
   const record = { ...book, blob };
   const transaction = db.transaction(STORE_NAME, "readwrite");
-  await requestResult(transaction.objectStore(STORE_NAME).put(record));
+  const finished = transactionFinished(transaction);
+  transaction.objectStore(STORE_NAME).put(record);
+  await finished;
   db.close();
   return record;
 }

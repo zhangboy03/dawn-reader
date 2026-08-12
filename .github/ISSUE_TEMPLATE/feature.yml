@@ -1,0 +1,31 @@
+name: Reading scenario
+description: 从真实阅读卡点提出改进
+title: "[Idea]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: moment
+    attributes:
+      label: 你在哪个阅读时刻遇到了阻力
+      description: 请描述场景，不要只写功能名称。
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 你现在怎样绕过去
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 什么结果才算真的改善
+    validations:
+      required: true
+  - type: checkboxes
+    id: principle
+    attributes:
+      label: 产品原则
+      options:
+        - label: 这个想法仍让原书成为主角，而不是增加新的学习任务
+          required: true
