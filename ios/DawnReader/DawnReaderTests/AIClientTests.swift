@@ -1,0 +1,130 @@
+import XCTest
+@testable import DawnReader
+
+final class AIClientTests: XCTestCase {
+    func testPromptKeepsSelectionSeparateFromContext() throws {
+        let body = AIClient.makeBody(
+            context: .init(before: "before", highlight: "selected sentence", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.model, "deepseek-v4-flash")
+        XCTAssertEqual(body.stream, false)
+        XCTAssertTrue(body.messages[1].content.contains("<selection>\nselected sentence\n</selection>"))
+        XCTAssertTrue(body.messages[1].content.contains("<context_before>\nbefore\n</context_before>"))
+    }
+
+    func testSingleWordPromptOnlyExplainsContextualMeaning() {
+        let body = AIClient.makeBody(
+            context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 48)
+        XCTAssertTrue(body.messages[0].content.contains("Explain only the word"))
+        XCTAssertTrue(body.messages[0].content.contains("selected word /IPA/"))
+        XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, or quote the surrounding"))
+        XCTAssertTrue(AIClient.isSingleWord("self-reliance"))
+        XCTAssertFalse(AIClient.isSingleWord("a difficult phrase"))
+        XCTAssertFalse(AIClient.isSingleWord("2026"))
+    }
+
+    func testPassagePromptStillRewritesOnlySelection() {
+        let body = AIClient.makeBody(
+            context: .init(before: "before", highlight: "a difficult phrase", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 96)
+        XCTAssertTrue(body.messages[0].content.contains("Rewrite only the text inside <selection>"))
+    }
+
+    func testChineseWordPromptExplainsOnlyTheSelectedWord() {
+        let body = AIClient.makeChineseBody(
+            context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 320)
+        XCTAssertTrue(body.messages[0].content.contains("one selected English word in Chinese"))
+        XCTAssertTrue(body.messages[0].content.contains("standard IPA pronunciation"))
+        XCTAssertTrue(body.messages[0].content.contains("Never translate or summarize the surrounding"))
+    }
+
+    func testChinesePassagePromptTranslatesThenExplains() {
+        let body = AIClient.makeChineseBody(
+            context: .init(before: "before", highlight: "a difficult passage", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertTrue(body.messages[0].content.contains("First give an accurate, natural Chinese translation"))
+        XCTAssertTrue(body.messages[0].content.contains("翻译："))
+        XCTAssertTrue(body.messages[0].content.contains("解释："))
+    }
+
+    func testSelectionScriptUsesBothCaretAPIs() {
+        let script = PencilSelectionScript.make(
+            start: CGPoint(x: 20, y: 30),
+            end: CGPoint(x: 120, y: 34),
+            nativeSize: CGSize(width: 1024, height: 700)
+        )
+        XCTAssertTrue(script.contains("caretPositionFromPoint"))
+        XCTAssertTrue(script.contains("caretRangeFromPoint"))
+        XCTAssertTrue(script.contains("wordBounds"))
+        XCTAssertTrue(script.contains("glyphContainsPoint"))
+        XCTAssertTrue(script.contains("\\p{L}"))
+        XCTAssertTrue(script.contains("selectionchange"))
+
+        let liveScript = PencilSelectionScript.make(
+            start: CGPoint(x: 20, y: 30),
+            end: CGPoint(x: 120, y: 34),
+            nativeSize: CGSize(width: 1024, height: 700),
+            captureNative: false
+        )
+        XCTAssertTrue(liveScript.contains("const captureNative = false"))
+        XCTAssertTrue(liveScript.contains("CSS.highlights.set('dawn-reader-live-selection'"))
+
+        let hitTest = PencilSelectionScript.hitTest(
+            point: CGPoint(x: 30, y: 40),
+            nativeSize: CGSize(width: 1024, height: 700)
+        )
+        XCTAssertTrue(hitTest.contains("getClientRects"))
+        XCTAssertTrue(hitTest.contains("return false"))
+    }
+
+    func testReaderContentScriptPreservesBookTextAndControlsSelectionMode() {
+        let install = ReaderContentScript.install(mode: .page)
+        XCTAssertFalse(install.contains("createTreeWalker"))
+        XCTAssertFalse(install.contains("MutationObserver"))
+        XCTAssertFalse(install.contains(".replace("))
+        XCTAssertTrue(install.contains("dataset.dawnPencilMode"))
+        XCTAssertTrue(install.contains("user-select: none"))
+        XCTAssertTrue(install.contains("html[data-dawn-pencil-mode=\"page\"]"))
+
+        let selectMode = ReaderContentScript.setMode(.select)
+        XCTAssertTrue(selectMode.contains("'select'"))
+        let pageMode = ReaderContentScript.setMode(.page)
+        XCTAssertTrue(pageMode.contains("removeAllRanges"))
+        XCTAssertTrue(ReaderContentScript.install(mode: .select).contains("::highlight(dawn-reader-live-selection)"))
+        XCTAssertTrue(ReaderContentScript.clearSelection.contains("highlights?.delete"))
+    }
+
+    func testNightThemeAvoidsPureBlackAndPureWhite() {
+        XCTAssertNotEqual(Palette.readerBackgroundHex(for: .night), "#000000")
+        XCTAssertNotEqual(Palette.readerTextHex(for: .night), "#FFFFFF")
+    }
+
+    func testProviderThinkingIsRemoved() {
+        XCTAssertEqual(AIClient.stripThinking("<think>private analysis</think>final answer"), "final answer")
+    }
+
+    func testPairingCodeNormalizationAndContentHash() {
+        let displayed = "dawn_ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-23"
+        XCTAssertEqual(DawnSyncClient.normalizePairingCode(displayed), "dawn_ABCDEFGHJKLMNPQRSTUVWXYZ23")
+        XCTAssertNil(DawnSyncClient.normalizePairingCode("dawn_short"))
+        XCTAssertEqual(
+            DawnSyncClient.contentHash(for: Data("Dawn Reader".utf8)),
+            "c138284e2a2577aeb3e5be792975a1f94e78b2e3274aaee11cc488eb0947e123"
+        )
+    }
+}

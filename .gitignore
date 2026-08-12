@@ -1,0 +1,17 @@
+.DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.next/
+.vinext/
+.vite/
+.wrangler/
+.build/
+ios/**/DerivedData/
+ios/**/DerivedData-*/
+ios/**/.build/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
