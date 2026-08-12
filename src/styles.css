@@ -174,6 +174,27 @@ body:has(.onboarding), body:has(.test-screen) {
 .sync-mark.syncing::before, .sync-mark.loading::before { background: var(--accent); animation: sync-pulse .9s ease-in-out infinite alternate; }
 .sync-mark.local::before { background: #a38b71; }
 .profile-control { position: relative; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.sync-button { min-height: 42px; padding: 8px 12px; border: 1px solid transparent; color: #5c6c72; background: transparent; font-size: 11px; }
+.sync-button:hover { color: var(--accent-strong); }
+.sync-dialog-backdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(16, 26, 36, .42); backdrop-filter: blur(7px); }
+.sync-dialog { width: min(520px, 100%); max-height: min(720px, calc(100svh - 40px)); padding: 24px; overflow: auto; border: 1px solid #b7c2c2; border-radius: var(--radius-panel); color: #2f3d43; background: #f5f7f4; box-shadow: 0 30px 80px rgba(25, 40, 47, .28); }
+.sync-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.sync-dialog h2 { margin: 3px 0 0; font: 600 25px/1.15 "Iowan Old Style", Baskerville, Georgia, serif; }
+.sync-dialog header small, .device-list > small { color: var(--accent-strong); font-size: 9px; font-weight: 700; letter-spacing: .06em; }
+.dialog-close { width: 44px; height: 44px; border: 0; color: #596970; background: transparent; font-size: 24px; }
+.create-pairing { width: 100%; min-height: 48px; margin-top: 20px; border: 1px solid #9c4828; border-radius: var(--radius-control); color: #fffaf4; background: var(--accent-strong); font-weight: 650; }
+.pairing-code { margin-top: 20px; padding: 18px; border: 1px solid #c2cccb; border-radius: 10px; background: #edf1ef; }
+.pairing-code code { display: block; overflow-wrap: anywhere; color: #243138; font: 650 16px/1.6 "SFMono-Regular", Consolas, monospace; letter-spacing: .035em; }
+.pairing-code button { min-height: 38px; margin-top: 12px; padding: 0 14px; border: 1px solid #9faeaf; border-radius: 7px; color: #405158; background: transparent; }
+.pairing-code p, .sync-error { margin: 12px 0 0; color: #718086; font-size: 11px; line-height: 1.6; }
+.sync-error { color: #9d4337; }
+.device-list { margin-top: 24px; }
+.device-list > div { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+.device-list span strong, .device-list span small { display: block; }
+.device-list span strong { font-size: 12px; }
+.device-list span small { margin-top: 3px; color: #7b898e; font-size: 9px; }
+.device-list button { min-height: 38px; border: 0; color: #8b5140; background: transparent; font-size: 10px; }
 .profile-chip { min-height: 42px; max-width: 280px; padding: 8px 12px; overflow: hidden; border: 1px solid #b7c2c2; border-radius: var(--radius-control); color: #4f6067; background: rgba(255, 255, 255, .36); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .profile-chip i { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--accent); }
 .profile-menu { position: absolute; z-index: 8; top: calc(100% + 10px); right: 0; width: 292px; padding: 10px; border: 1px solid #afbcbd; border-radius: var(--radius-panel); color: #2f3d43; background: #f5f7f4; box-shadow: 0 24px 54px rgba(41, 59, 65, .18); }
@@ -381,6 +402,7 @@ body:has(.onboarding), body:has(.test-screen) {
   .topbar { height: 66px; padding: 0 18px; }
   .profile-chip { max-width: 150px; }
   .profile-menu { position: fixed; top: 62px; right: 12px; left: 12px; width: auto; }
+  .sync-button { padding-inline: 6px; }
   .library-hero { padding: 44px 22px 28px; gap: 28px; }
   .ai-status { grid-template-columns: 1fr auto; gap: 10px; }
   .ai-status span { white-space: normal; }

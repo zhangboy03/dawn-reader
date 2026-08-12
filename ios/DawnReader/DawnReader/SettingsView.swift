@@ -48,12 +48,41 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
+                Section("设备同步") {
+                    if settings.syncConnectionState == .connected {
+                        LabeledContent("状态", value: "已连接")
+                        Button("立即同步") {
+                            NotificationCenter.default.post(name: .dawnReaderSyncRequested, object: nil)
+                        }
+                        Button("断开设备同步", role: .destructive) {
+                            settings.disconnectSync()
+                        }
+                    } else {
+                        TextField("网站生成的配对码", text: $settings.syncCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .font(.system(.body, design: .monospaced))
+                        Button(settings.syncConnectionState == .connecting ? "正在连接…" : "连接并同步") {
+                            Task { await settings.connectSync() }
+                        }
+                        .disabled(settings.syncConnectionState == .connecting)
+                    }
+                    if case let .failed(message) = settings.syncConnectionState {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                    Text("配对后同步书籍、阅读位置、主题、行距和 Apple Pencil 模式。DeepSeek 密钥不会上传。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("设置")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         settings.save()
+                        Task { await settings.pushCloudSettings() }
                         dismiss()
                     }
                 }

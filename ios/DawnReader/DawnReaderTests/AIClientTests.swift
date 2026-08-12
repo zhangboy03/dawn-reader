@@ -117,4 +117,14 @@ final class AIClientTests: XCTestCase {
     func testProviderThinkingIsRemoved() {
         XCTAssertEqual(AIClient.stripThinking("<think>private analysis</think>final answer"), "final answer")
     }
+
+    func testPairingCodeNormalizationAndContentHash() {
+        let displayed = "dawn_ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-23"
+        XCTAssertEqual(DawnSyncClient.normalizePairingCode(displayed), "dawn_ABCDEFGHJKLMNPQRSTUVWXYZ23")
+        XCTAssertNil(DawnSyncClient.normalizePairingCode("dawn_short"))
+        XCTAssertEqual(
+            DawnSyncClient.contentHash(for: Data("Dawn Reader".utf8)),
+            "c138284e2a2577aeb3e5be792975a1f94e78b2e3274aaee11cc488eb0947e123"
+        )
+    }
 }

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getReaderIdentity } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { readerState } from "../../../db/schema";
 
@@ -10,8 +10,8 @@ function parseJson(value: string | null) {
   try { return JSON.parse(value); } catch { return null; }
 }
 
-export async function GET() {
-  const user = await getChatGPTUser();
+export async function GET(request: Request) {
+  const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const [state] = await getDb().select().from(readerState)
     .where(eq(readerState.userId, user.userId)).limit(1);
@@ -23,7 +23,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const input = await request.json() as { profile?: unknown; settings?: unknown };
   const now = new Date().toISOString();
@@ -32,9 +32,14 @@ export async function PUT(request: Request) {
   const profileJson = input.profile === undefined
     ? existing?.profileJson ?? null
     : JSON.stringify(input.profile);
+  const existingSettings = parseJson(existing?.settingsJson ?? null);
   const settingsJson = input.settings === undefined
     ? existing?.settingsJson ?? null
-    : JSON.stringify(input.settings);
+    : JSON.stringify(
+      existingSettings && typeof existingSettings === "object" && input.settings && typeof input.settings === "object"
+        ? { ...existingSettings, ...input.settings }
+        : input.settings,
+    );
 
   await getDb().insert(readerState).values({
     userId: user.userId,

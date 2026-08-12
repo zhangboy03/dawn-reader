@@ -1,4 +1,8 @@
 import { headers } from "next/headers";
+import { and, eq, isNull } from "drizzle-orm";
+import { getDb } from "../db";
+import { readerDevices } from "../db/schema";
+import { bearerDeviceToken, hashDeviceToken } from "../src/server/deviceAuth";
 
 export type ChatGPTUser = {
   userId: string;
@@ -30,6 +34,31 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
 export async function isAuthorizedReaderRequest() {
   if (process.env.NODE_ENV === "development") return true;
   return Boolean(await getChatGPTUser());
+}
+
+export type ReaderIdentity = {
+  userId: string;
+  kind: "chatgpt" | "device";
+};
+
+export async function getReaderIdentity(request: Request): Promise<ReaderIdentity | null> {
+  const chatGPTUser = await getChatGPTUser();
+  if (chatGPTUser) return { userId: chatGPTUser.userId, kind: "chatgpt" };
+
+  const token = bearerDeviceToken(request);
+  if (!token) return null;
+  const tokenHash = await hashDeviceToken(token);
+  const [device] = await getDb().select({ id: readerDevices.id, userId: readerDevices.userId })
+    .from(readerDevices)
+    .where(and(eq(readerDevices.tokenHash, tokenHash), isNull(readerDevices.revokedAt)))
+    .limit(1);
+  if (!device) return null;
+
+  void getDb().update(readerDevices)
+    .set({ lastUsedAt: new Date().toISOString() })
+    .where(eq(readerDevices.id, device.id))
+    .catch(() => undefined);
+  return { userId: device.userId, kind: "device" };
 }
 
 function safeDecodeURIComponent(value: string): string | null {

@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getReaderIdentity } from "../../chatgpt-auth";
 import { getBooksBucket, getDb } from "../../../db";
 import { readerBooks } from "../../../db/schema";
 import { bookObjectKey } from "../../../src/server/library";
@@ -7,14 +7,15 @@ import { bookObjectKey } from "../../../src/server/library";
 export const dynamic = "force-dynamic";
 const MAX_EPUB_BYTES = 40 * 1024 * 1024;
 
-export async function GET() {
-  const user = await getChatGPTUser();
+export async function GET(request: Request) {
+  const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const books = await getDb().select({
     id: readerBooks.id,
     title: readerBooks.title,
     fileName: readerBooks.fileName,
     fileSize: readerBooks.fileSize,
+    contentHash: readerBooks.contentHash,
     addedAt: readerBooks.addedAt,
     updatedAt: readerBooks.updatedAt,
   }).from(readerBooks)
@@ -24,13 +25,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const form = await request.formData();
   const file = form.get("file");
   const id = String(form.get("id") ?? "").trim();
   const title = String(form.get("title") ?? "").trim().slice(0, 300);
   const addedAt = String(form.get("addedAt") ?? "").trim();
+  const rawContentHash = String(form.get("contentHash") ?? "").trim().toLowerCase();
+  const contentHash = /^[a-f0-9]{64}$/.test(rawContentHash) ? rawContentHash : null;
   if (!(file instanceof File) || !id || id.length > 512 || !title) {
     return Response.json({ error: "Invalid EPUB upload." }, { status: 400 });
   }
@@ -48,6 +51,7 @@ export async function POST(request: Request) {
     title,
     fileName: file.name.slice(0, 500),
     fileSize: file.size,
+    contentHash,
     addedAt: addedAt || now,
     updatedAt: now,
   }).onConflictDoUpdate({
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
       title,
       fileName: file.name.slice(0, 500),
       fileSize: file.size,
+      contentHash,
       updatedAt: now,
     },
   });

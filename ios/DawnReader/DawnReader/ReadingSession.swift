@@ -17,7 +17,7 @@ final class ReadingSession: ObservableObject {
         case failed(String)
     }
 
-    @Published var pencilMode: PencilMode = .select
+    @Published var pencilMode: PencilMode
     @Published var selectedText = ""
     @Published var selectionFrame: CGRect?
     @Published var rewriteState: RewriteState = .idle
@@ -40,11 +40,13 @@ final class ReadingSession: ObservableObject {
         title = book.title
         progress = book.progress
         self.settings = settings
+        pencilMode = settings.pencilMode
         self.persist = persist
     }
 
     func togglePencilMode() {
         pencilMode.toggle()
+        settings.pencilMode = pencilMode
         clearSelection()
     }
 

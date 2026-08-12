@@ -15,6 +15,7 @@ import {
   type CloudBook,
 } from "../lib/cloudSync";
 import { parseReadingPosition } from "../lib/readingPosition";
+import { DeviceSync } from "./DeviceSync";
 
 export type BookSource = { type: "text"; title: string; text: string } | { type: "epub"; id?: string; title: string; file: File };
 
@@ -199,7 +200,9 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   return <main className="library-shell">
     <header className="topbar">
       <div className="brand-lockup"><div className="brand">Dawn Reader</div><span className={`sync-mark ${syncState}`}>{syncLabel}</span></div>
-      <div className="profile-control">
+      <div className="topbar-actions">
+        <DeviceSync />
+        <div className="profile-control">
         <button className="profile-chip" onClick={() => setProfileOpen((open) => !open)}><i /> {profile.band}</button>
         {profileOpen && <div className="profile-menu">
           <small>阅读辅助档位</small>
@@ -208,6 +211,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
           <button onClick={() => { onProfileChange({ score: null, band: "C1+ · 轻量模式", preset: "light" }); setProfileOpen(false); }}><strong>C1+</strong><span>只处理低频词与长句</span></button>
           <button className="retest-link" onClick={onRetest}>重新做 LexTALE →</button>
         </div>}
+        </div>
       </div>
     </header>
     <section className="library-hero">

@@ -8,6 +8,13 @@
       "when": 1786345764664,
       "tag": "0000_ambiguous_joseph",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786505208487,
+      "tag": "0001_military_silver_samurai",
+      "breakpoints": true
     }
   ]
 }

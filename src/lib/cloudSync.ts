@@ -8,6 +8,7 @@ export type CloudBook = {
   title: string;
   fileName: string;
   fileSize: number;
+  contentHash: string | null;
   addedAt: string;
   updatedAt: string;
 };
@@ -48,6 +49,7 @@ export async function uploadCloudBook(book: StoredBook) {
   form.set("id", book.id);
   form.set("title", book.title);
   form.set("addedAt", book.addedAt);
+  if (book.id.startsWith("sha256:")) form.set("contentHash", book.id.slice("sha256:".length));
   form.set("file", file);
   return jsonResponse<{ id: string; syncedAt: string }>(await fetch("/api/books", {
     method: "POST",
@@ -78,7 +80,11 @@ export async function saveCloudProgress(bookId: string, position: ReadingPositio
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cfi: position.cfi, percentage: position.percentage }),
+      body: JSON.stringify({
+        cfi: position.cfi,
+        percentage: position.percentage,
+        updatedAt: position.updatedAt,
+      }),
     },
   ));
   return result.position;

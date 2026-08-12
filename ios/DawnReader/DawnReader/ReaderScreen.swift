@@ -54,6 +54,7 @@ struct ReaderScreen: View {
                     Button(mode.title) {
                         if session.pencilMode != mode {
                             session.pencilMode = mode
+                            settings.pencilMode = mode
                             session.clearSelection()
                         }
                     }

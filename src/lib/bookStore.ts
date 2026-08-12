@@ -10,6 +10,11 @@ export type StoredBook = {
   addedAt: string;
 };
 
+export async function epubContentHash(blob: Blob) {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function openLibrary() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -39,7 +44,7 @@ export function cleanBookTitle(fileName: string) {
 
 export async function saveEpub(file: File) {
   const db = await openLibrary();
-  const id = `${file.name}:${file.size}:${file.lastModified}`;
+  const id = `sha256:${await epubContentHash(file)}`;
   const record: StoredBook = {
     id,
     title: cleanBookTitle(file.name),

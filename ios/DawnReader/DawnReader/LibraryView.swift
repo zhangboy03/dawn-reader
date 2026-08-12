@@ -6,6 +6,7 @@ struct LibraryView: View {
     @EnvironmentObject private var settings: SettingsStore
     @State private var importing = false
     @State private var showingSettings = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private let epubType = UTType(filenameExtension: "epub")!
 
@@ -51,6 +52,16 @@ struct LibraryView: View {
         } message: {
             Text(library.errorMessage ?? "")
         }
+        .task {
+            await library.synchronize(settings: settings)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dawnReaderSyncRequested)) { _ in
+            Task { await library.synchronize(settings: settings) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await library.synchronize(settings: settings) }
+        }
     }
 
     private var header: some View {
@@ -58,6 +69,9 @@ struct LibraryView: View {
             Text("Dawn Reader")
                 .font(.system(size: 31, weight: .semibold, design: .serif))
                 .foregroundStyle(Palette.ink)
+            Text(syncLabel)
+                .font(.caption2)
+                .foregroundStyle(syncColor)
             Spacer()
             Button {
                 showingSettings = true
@@ -73,6 +87,23 @@ struct LibraryView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Palette.ink)
+        }
+    }
+
+    private var syncLabel: String {
+        switch library.syncState {
+        case .disconnected: "仅本机"
+        case .syncing: "同步中…"
+        case .synced: "已同步"
+        case .failed: "同步失败"
+        }
+    }
+
+    private var syncColor: Color {
+        switch library.syncState {
+        case .synced: Palette.ember
+        case .failed: .red.opacity(0.8)
+        default: Palette.mutedInk
         }
     }
 

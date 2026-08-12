@@ -20,6 +20,7 @@
 		807E0EEC5E3C536A52E50677 /* PencilSelectionScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */; };
 		9858B8B2073739176E7903C1 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 5F902CAB0A59F16BA1F97343 /* ReadiumStreamer */; };
 		9DE4E05AAED1001F33D7F9AC /* PencilMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562EF7D7B73340E52BEA68FF /* PencilMode.swift */; };
+		B19E77AC2A58176F0E13CF71 /* DawnSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C88684D2AE319DD0DA0EE50 /* DawnSyncClient.swift */; };
 		B2491D745F285681F154662F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E10E081EB7CB2F4F929321B5 /* Assets.xcassets */; };
 		BDD78F390C9E0F5E9B2A9816 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = FC7385D9ADE7903930F20B2C /* ReadiumShared */; };
 		C1EB020DF35B889CDCB33002 /* AIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34CC3717FEFD369AED49819E /* AIClientTests.swift */; };
@@ -54,6 +55,7 @@
 		7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreen.swift; sourceTree = "<group>"; };
 		984ADE6764B24040FFBA52B9 /* DawnReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DawnReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9C3F7D05BDE8255EBA28B62B /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		9C88684D2AE319DD0DA0EE50 /* DawnSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DawnSyncClient.swift; sourceTree = "<group>"; };
 		A40096CF8E32B4120764C61B /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PencilSelectionScript.swift; sourceTree = "<group>"; };
 		ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRecord.swift; sourceTree = "<group>"; };
@@ -85,6 +87,7 @@
 				E10E081EB7CB2F4F929321B5 /* Assets.xcassets */,
 				ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */,
 				41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */,
+				9C88684D2AE319DD0DA0EE50 /* DawnSyncClient.swift */,
 				F190CCD34CD0BC67DC990F0E /* Info.plist */,
 				A40096CF8E32B4120764C61B /* KeychainStore.swift */,
 				26ECC55FD4DD89055F2580DD /* LibraryModel.swift */,
@@ -237,6 +240,7 @@
 				12A3BC4BF5A2A1F9AD0D1E52 /* AIClient.swift in Sources */,
 				627516B8D54AA3913BEE7BDF /* BookRecord.swift in Sources */,
 				F04CAE8CFDB0A8F53689F930 /* DawnReaderApp.swift in Sources */,
+				B19E77AC2A58176F0E13CF71 /* DawnSyncClient.swift in Sources */,
 				1D56555DEE337A88032FA0D4 /* KeychainStore.swift in Sources */,
 				D4066D590E0AE8293AB6A3C5 /* LibraryModel.swift in Sources */,
 				6D3A05EE79714EF3C041A4B7 /* LibraryView.swift in Sources */,

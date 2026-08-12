@@ -10,6 +10,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     private let publication: Publication
     private let navigator: EPUBNavigatorViewController
     private let session: ReadingSession
+    private let initialProgression: Double?
     private lazy var pencilGesture = UILongPressGestureRecognizer(target: self, action: #selector(handlePencilGesture(_:)))
     private lazy var fingerDismissTap = UITapGestureRecognizer(target: self, action: #selector(handleFingerDismissTap(_:)))
     private var gestureStart: CGPoint?
@@ -22,7 +23,12 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     private var appliedMode: PencilMode?
     private var appliedAppearance: ReaderAppearance?
 
-    init(publication: Publication, initialLocatorJSON: String?, session: ReadingSession) throws {
+    init(
+        publication: Publication,
+        initialLocatorJSON: String?,
+        initialProgression: Double? = nil,
+        session: ReadingSession
+    ) throws {
         let locator = initialLocatorJSON.flatMap { try? Locator(jsonString: $0) }
         let preferences = Self.preferences(for: session.settings.readerAppearance)
         navigator = try EPUBNavigatorViewController(
@@ -43,6 +49,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         )
         self.publication = publication
         self.session = session
+        self.initialProgression = initialProgression
         super.init(nibName: nil, bundle: nil)
         navigator.delegate = self
     }
@@ -108,6 +115,14 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             Task { [weak self] in
                 guard let self else { return }
                 _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
+            }
+        }
+        if let initialProgression, initialProgression > 0 {
+            Task { [weak self] in
+                guard let self,
+                      let locator = await self.publication.locate(progression: initialProgression)
+                else { return }
+                _ = await self.navigator.go(to: locator, options: .init(animated: false))
             }
         }
         apply(mode: session.pencilMode, appearance: session.settings.readerAppearance)
