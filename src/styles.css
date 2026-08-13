@@ -254,8 +254,12 @@ body:has(.onboarding), body:has(.test-screen) {
 .delete-dialog > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .delete-dialog button { min-height: 42px; padding: 0 15px; border: 1px solid #aebabb; border-radius: var(--radius-control); color: #52636a; background: transparent; font-size: 11px; }
 .delete-dialog button.danger { border-color: #9d4337; color: #fff8f3; background: #9d4337; }
-.stored-spine { width: 76px; height: 112px; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 10px 9px; overflow: hidden; border-radius: 3px 8px 8px 3px; color: #dfe8e7; background: #172631; box-shadow: 6px 9px 20px rgba(39, 54, 59, .17); }
-.stored-spine::after { content: ""; position: absolute; right: -18px; bottom: 20px; width: 90px; border-top: 5px solid var(--accent); transform: rotate(-23deg); }
+.stored-cover, .stored-spine { width: 76px; height: 112px; position: relative; overflow: hidden; border-radius: 3px 8px 8px 3px; box-shadow: 6px 9px 20px rgba(39, 54, 59, .2); }
+.stored-cover { background: #d8d7cf; }
+.stored-cover::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(90deg, rgba(20, 28, 33, .26), transparent); pointer-events: none; }
+.stored-cover img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.stored-spine { display: flex; flex-direction: column; justify-content: space-between; padding: 10px 9px; color: var(--book-cover-ink, #dfe8e7); background: var(--book-cover-bg, #172631); }
+.stored-spine::after { content: ""; position: absolute; right: -18px; bottom: 20px; width: 90px; border-top: 5px solid var(--book-cover-accent, var(--accent)); transform: rotate(-23deg); }
 .stored-spine > span { font: 6px/1.35 "SFMono-Regular", monospace; letter-spacing: .08em; }
 .stored-spine > strong { font-size: 29px; font-weight: 500; letter-spacing: -.08em; }
 .stored-spine i { width: 27px; border-top: 1px solid #8ea0a5; }
@@ -359,14 +363,17 @@ body:has(.onboarding), body:has(.test-screen) {
 .epub-frame iframe { touch-action: pan-y pinch-zoom; overscroll-behavior: none; }
 .epub-sepia { background: #e9dfc8; }
 .epub-night { background: #1b1d1a; box-shadow: 0 24px 70px rgba(0, 0, 0, .34); }
-.page-controls { width: 100%; margin: 13px auto 0; display: grid; grid-template-columns: auto minmax(120px, 280px) auto; align-items: center; justify-content: center; gap: 18px; }
+.page-controls { width: 100%; margin: 13px auto 0; display: grid; grid-template-columns: auto minmax(190px, 360px) auto; align-items: center; justify-content: center; gap: 18px; }
 .page-controls button { min-height: 40px; padding: 8px 12px; border: 1px solid #93a3a6; border-radius: var(--radius-control); color: #43545b; background: rgba(244, 247, 245, .58); }
 .page-controls button:hover { border-color: var(--accent-strong); color: var(--accent-strong); }
 .reader-theme-night .page-controls button { border-color: #3e535f; color: #aab9bf; background: #172631; }
-.progress-scrubber { display: grid; grid-template-columns: 1fr 34px; align-items: center; gap: 8px; }
+.progress-scrubber { display: grid; grid-template-columns: minmax(90px, 1fr) auto; align-items: center; gap: 10px; }
 .progress-scrubber input { width: 100%; height: 2px; accent-color: var(--accent); }
-.progress-scrubber span { color: #65777d; font: 8px "SFMono-Regular", monospace; text-align: right; }
-.reader-theme-night .progress-scrubber span { color: #748892; }
+.page-position { min-width: 76px; display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 7px; color: #56686e; white-space: nowrap; }
+.page-position b { font: 500 9px/1 "SFMono-Regular", monospace; letter-spacing: -.03em; }
+.page-position small { padding-left: 7px; border-left: 1px solid #aeb9b9; color: #7a898d; font: 7px/1 "SFMono-Regular", monospace; }
+.reader-theme-night .page-position { color: #aab9bf; }
+.reader-theme-night .page-position small { border-left-color: #4a5d67; color: #748892; }
 .selection-assist {
   position: fixed;
   z-index: 24;
@@ -428,7 +435,7 @@ body:has(.onboarding), body:has(.test-screen) {
   .ai-status span { white-space: normal; }
   .shelf { padding: 42px 22px 64px; }
   .book-open { grid-template-columns: 70px 1fr; gap: 18px; padding-right: 48px; }
-  .stored-spine { width: 61px; height: 94px; }
+  .stored-cover, .stored-spine { width: 61px; height: 94px; }
 
   .reader-shell { display: grid; padding-top: 0; }
   .reader-topbar { position: relative; z-index: 4; }
@@ -438,7 +445,9 @@ body:has(.onboarding), body:has(.test-screen) {
   .epub-frame { height: 100%; }
   .page-controls { grid-template-columns: auto 1fr auto; gap: 7px; }
   .page-controls button { padding: 8px; font-size: 10px; }
-  .progress-scrubber { grid-template-columns: 1fr 30px; }
+  .progress-scrubber { grid-template-columns: minmax(70px, 1fr) auto; gap: 7px; }
+  .page-position { min-width: 58px; }
+  .page-position small { display: none; }
   .reader-title { display: none; }
   .pencil-switch > span { display: none; }
   .pencil-switch button { min-width: 44px; padding: 0 7px; }

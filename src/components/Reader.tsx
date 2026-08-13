@@ -12,6 +12,11 @@ import { isSingleWord } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
+  pageNumberFromLocation,
+  publisherPageNumber,
+  type EpubPageNumber,
+} from "../lib/epubPagination";
+import {
   desktopPageTurnFromPointer,
   pageTurnFromKey,
   pageTurnFromPointer,
@@ -186,6 +191,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
   const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
   const [pageProgress, setPageProgress] = useState(0);
+  const [pageNumber, setPageNumber] = useState<EpubPageNumber | null>(null);
   const [locationsReady, setLocationsReady] = useState(false);
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -373,6 +379,21 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     return epubRef.current?.querySelector<HTMLElement>(".epub-container")?.scrollLeft ?? 0;
   }
 
+  function updatePageNumber(cfi: string | null | undefined) {
+    const book = bookRef.current;
+    if (!book || !cfi) return;
+    const pageListPage = book.pageList?.pageFromCfi?.(cfi) ?? -1;
+    const fromPublisher = publisherPageNumber(pageListPage, book.pageList?.lastPage ?? -1);
+    if (fromPublisher) {
+      setPageNumber(fromPublisher);
+      return;
+    }
+    setPageNumber(pageNumberFromLocation(
+      book.locations?.locationFromCfi?.(cfi) ?? -1,
+      book.locations?.total ?? -1,
+    ));
+  }
+
   function startGesture(kind: ReaderInputKind, x: number, y: number, pointerId?: number, touchSeen = false, startedOnBlank = false) {
     gestureRef.current = {
       kind,
@@ -529,6 +550,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   useEffect(() => {
     if (source.type !== "epub" || !epubRef.current) return;
+    setLocationsReady(false);
+    setPageNumber(null);
     let cancelled = false;
     let book: any;
     let frameResizeObserver: ResizeObserver | null = null;
@@ -670,6 +693,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         const ratio = location.start?.percentage ?? (locationsGenerated && cfi ? book.locations.percentageFromCfi(cfi) : 0);
         const percentage = Math.round(ratio * 100);
         setPageProgress(percentage);
+        if (locationsGenerated) updatePageNumber(cfi);
         if (canPersistProgress && cfi) persistProgress(progressKey, cfi, percentage);
       });
       await rendition.display(savedPosition?.cfi ?? undefined);
@@ -677,6 +701,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (cancelled) return;
       locationsGenerated = true;
       setLocationsReady(true);
+      updatePageNumber(rendition.currentLocation?.()?.start?.cfi);
       if (savedPosition?.cfi) {
         const percentage = Math.round(book.locations.percentageFromCfi(savedPosition.cfi) * 100);
         setPageProgress(percentage);
@@ -839,7 +864,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   return <div className={`reader-shell reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
     <header className="reader-topbar">
       <button className="back-button" onClick={onClose}>← <span>书架</span></button>
-      <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageProgress}%</small>}</div>
+      <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`}</small>}</div>
       <div className="reader-actions">
         {source.type === "epub" && !desktopReader && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">
           <span>Pencil</span>
@@ -875,8 +900,23 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       {source.type === "epub" && <div className="page-controls" style={{ maxWidth: readingWidth }}>
         <button onClick={() => turnPage("prev")} aria-label="上一页">←</button>
         <label className="progress-scrubber">
-          <input aria-label="阅读进度" type="range" min="0" max="100" value={pageProgress} disabled={!locationsReady} onChange={(event) => goToPercentage(Number(event.target.value))} />
-          <span>{locationsReady ? `${pageProgress}%` : "…"}</span>
+          <input
+            aria-label="阅读进度"
+            aria-valuetext={pageNumber ? `第 ${pageNumber.current} 页，共 ${pageNumber.total} 页` : `${pageProgress}%`}
+            type="range"
+            min="0"
+            max="100"
+            value={pageProgress}
+            disabled={!locationsReady}
+            onChange={(event) => goToPercentage(Number(event.target.value))}
+          />
+          <span
+            className="page-position"
+            title={pageNumber?.source === "publisher" ? "电子书内置页码" : "按阅读位置计算的页码"}
+          >
+            <b>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : "…"}</b>
+            <small>{locationsReady ? `${pageProgress}%` : ""}</small>
+          </span>
         </label>
         <button onClick={() => turnPage("next")} aria-label="下一页">→</button>
       </div>}

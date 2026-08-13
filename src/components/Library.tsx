@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { ReaderProfile } from "../lib/storage";
 import {
   cacheStoredBook,
   deleteStoredBook,
+  hydrateStoredBookPresentation,
   listStoredBooks,
   saveEpub,
   storedBookFile,
@@ -35,6 +36,47 @@ type ShelfBook = StoredBook & {
 };
 
 type SyncState = "loading" | "syncing" | "ready" | "local";
+
+const fallbackCoverPalettes = [
+  { background: "#173147", ink: "#d8e8ea", accent: "#e78349" },
+  { background: "#314339", ink: "#e5eadb", accent: "#c9a852" },
+  { background: "#46303e", ink: "#eee0e7", accent: "#d67d68" },
+  { background: "#473a2e", ink: "#efe5d4", accent: "#82a99c" },
+  { background: "#26364d", ink: "#e0e6f1", accent: "#c79462" },
+];
+
+function fallbackCoverStyle(id: string) {
+  let hash = 0;
+  for (const character of id) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+  const palette = fallbackCoverPalettes[Math.abs(hash) % fallbackCoverPalettes.length];
+  return {
+    "--book-cover-bg": palette.background,
+    "--book-cover-ink": palette.ink,
+    "--book-cover-accent": palette.accent,
+  } as CSSProperties;
+}
+
+function BookCover({ book }: { book: ShelfBook }) {
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!book.cover) {
+      setCoverUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(book.cover);
+    setCoverUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [book.cover]);
+
+  if (coverUrl) {
+    return <div className="stored-cover" aria-hidden="true"><img src={coverUrl} alt="" /></div>;
+  }
+  return <div className="stored-spine" style={fallbackCoverStyle(book.id)} aria-hidden="true">
+    <span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span>
+    <strong>{book.title.slice(0, 2).toUpperCase()}</strong>
+    <i />
+  </div>;
+}
 
 function AiStatus() {
   const [health, setHealth] = useState<AiHealth | null>(null);
@@ -90,19 +132,24 @@ function AiStatus() {
 
 function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
   const localById = new Map(local.map((book) => [book.id, book]));
-  const merged: ShelfBook[] = cloud.map((book) => ({
-    ...(localById.get(book.id) ?? {
-      id: book.id,
-      title: book.title,
+  const merged: ShelfBook[] = cloud.map((book) => {
+    const localBook = localById.get(book.id);
+    return {
+      ...(localBook ?? {
+        id: book.id,
+        title: book.title,
+        fileName: book.fileName,
+        blob: null,
+        cover: null,
+        coverChecked: false,
+        addedAt: book.addedAt,
+      }),
+      title: localBook?.title ?? book.title,
       fileName: book.fileName,
-      blob: null,
-      addedAt: book.addedAt,
-    }),
-    title: book.title,
-    fileName: book.fileName,
-    synced: true,
-    cloud: book,
-  }));
+      synced: true,
+      cloud: book,
+    };
+  });
   for (const book of local) {
     if (!cloud.some((remote) => remote.id === book.id)) merged.push({ ...book, synced: false });
   }
@@ -116,6 +163,8 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   onProfileChange: (profile: ReaderProfile) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const coverJobsRef = useRef(new Set<string>());
+  const libraryMountedRef = useRef(true);
   const [storedBooks, setStoredBooks] = useState<ShelfBook[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>("loading");
@@ -125,6 +174,11 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
+
+  useEffect(() => {
+    libraryMountedRef.current = true;
+    return () => { libraryMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +228,32 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     void syncLibrary();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (syncState === "loading" || syncState === "syncing") return;
+    for (const book of storedBooks) {
+      if (book.cover || book.coverChecked || coverJobsRef.current.has(book.id)) continue;
+      coverJobsRef.current.add(book.id);
+      void (async () => {
+        try {
+          const blob = book.blob ?? (book.cloud ? await downloadCloudBook(book.cloud) : null);
+          if (!blob) return;
+          const hydrated = await hydrateStoredBookPresentation(book, blob);
+          if (!libraryMountedRef.current) return;
+          setStoredBooks((books) => books.map((candidate) => candidate.id === book.id ? {
+            ...candidate,
+            ...hydrated,
+            synced: candidate.synced,
+            cloud: candidate.cloud,
+          } : candidate));
+        } catch {
+          // The distinctive fallback cover remains when an EPUB has no readable artwork.
+        } finally {
+          coverJobsRef.current.delete(book.id);
+        }
+      })();
+    }
+  }, [storedBooks, syncState]);
 
   useEffect(() => {
     if (!bookToDelete) return;
@@ -370,7 +450,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
         <div className="stored-shelf">
           {storedBooks.map((book) => <article className="stored-book" key={book.id}>
             <button className="book-open" disabled={openingId === book.id || deletingId === book.id} onClick={() => void openBook(book)}>
-              <div className="stored-spine" aria-hidden="true"><span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span><strong>{book.title.slice(0, 2).toUpperCase()}</strong><i /></div>
+              <BookCover book={book} />
               <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
             <button className="book-delete" disabled={deletingId === book.id} onClick={() => setBookToDelete(book)} aria-label={`从书架删除《${book.title}》`}>

@@ -7,7 +7,14 @@ export type StoredBook = {
   title: string;
   fileName: string;
   blob: Blob | null;
+  cover?: Blob | null;
+  coverChecked?: boolean;
   addedAt: string;
+};
+
+type EpubPresentation = {
+  title: string | null;
+  cover: Blob | null;
 };
 
 export async function epubContentHash(blob: Blob) {
@@ -50,24 +57,64 @@ export function cleanBookTitle(fileName: string) {
     .trim();
 }
 
-export async function saveEpub(file: File) {
+export async function extractEpubPresentation(blob: Blob): Promise<EpubPresentation> {
+  const epubModule = await import("epubjs") as any;
+  const ePub = epubModule.default?.default ?? epubModule.default;
+  const book = ePub(await blob.arrayBuffer(), { replacements: "none" });
+  try {
+    await book.opened;
+    const metadata = await book.loaded.metadata.catch(() => null) as { title?: string } | null;
+    const coverUrl = await book.coverUrl().catch(() => null);
+    let cover: Blob | null = null;
+    if (coverUrl) {
+      try {
+        const response = await fetch(coverUrl);
+        if (response.ok) cover = await response.blob();
+      } catch {
+        // Keep usable metadata even when an embedded cover cannot be decoded.
+      }
+    }
+    return {
+      title: metadata?.title?.trim() || null,
+      cover,
+    };
+  } finally {
+    book.destroy?.();
+  }
+}
+
+async function putStoredBook(record: StoredBook) {
   const db = await openLibrary();
-  const id = `sha256:${await epubContentHash(file)}`;
-  const lookup = db.transaction(STORE_NAME, "readonly");
-  const existing = await requestResult(lookup.objectStore(STORE_NAME).get(id)) as StoredBook | undefined;
-  const record: StoredBook = {
-    id,
-    title: cleanBookTitle(file.name),
-    fileName: file.name,
-    blob: file,
-    addedAt: existing?.addedAt ?? new Date().toISOString(),
-  };
   const transaction = db.transaction(STORE_NAME, "readwrite");
   const finished = transactionFinished(transaction);
   transaction.objectStore(STORE_NAME).put(record);
   await finished;
   db.close();
   return record;
+}
+
+export async function saveEpub(file: File) {
+  const db = await openLibrary();
+  const id = `sha256:${await epubContentHash(file)}`;
+  const lookup = db.transaction(STORE_NAME, "readonly");
+  const existing = await requestResult(lookup.objectStore(STORE_NAME).get(id)) as StoredBook | undefined;
+  db.close();
+  let presentation: EpubPresentation | null = null;
+  try {
+    presentation = await extractEpubPresentation(file);
+  } catch {
+    // A readable EPUB can still be imported when its presentation metadata is malformed.
+  }
+  const record: StoredBook = {
+    id,
+    title: presentation?.title ?? existing?.title ?? cleanBookTitle(file.name),
+    fileName: file.name,
+    blob: file,
+    cover: presentation?.cover ?? existing?.cover ?? null,
+    coverChecked: Boolean(presentation) || existing?.coverChecked,
+    addedAt: existing?.addedAt ?? new Date().toISOString(),
+  };
+  return putStoredBook(record);
 }
 
 export async function listStoredBooks() {
@@ -93,12 +140,27 @@ export function storedBookFile(book: StoredBook) {
 }
 
 export async function cacheStoredBook(book: StoredBook, blob: Blob) {
-  const db = await openLibrary();
-  const record = { ...book, blob };
-  const transaction = db.transaction(STORE_NAME, "readwrite");
-  const finished = transactionFinished(transaction);
-  transaction.objectStore(STORE_NAME).put(record);
-  await finished;
-  db.close();
-  return record;
+  return putStoredBook({
+    id: book.id,
+    title: book.title,
+    fileName: book.fileName,
+    blob,
+    cover: book.cover ?? null,
+    coverChecked: book.coverChecked,
+    addedAt: book.addedAt,
+  });
+}
+
+export async function hydrateStoredBookPresentation(book: StoredBook, blob = book.blob) {
+  if (!blob) throw new Error("The book is not cached on this device.");
+  const presentation = await extractEpubPresentation(blob);
+  return putStoredBook({
+    id: book.id,
+    title: presentation.title ?? book.title,
+    fileName: book.fileName,
+    blob,
+    cover: presentation.cover,
+    coverChecked: true,
+    addedAt: book.addedAt,
+  });
 }
