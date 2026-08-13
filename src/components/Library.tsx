@@ -121,6 +121,10 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   const [syncState, setSyncState] = useState<SyncState>("loading");
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [bookToDelete, setBookToDelete] = useState<ShelfBook | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [libraryMessage, setLibraryMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -171,27 +175,86 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     return () => { cancelled = true; };
   }, []);
 
-  async function importFile(file?: File) {
-    if (!file) return;
-    const extension = file.name.split(".").pop()?.toLowerCase();
-    if (extension === "epub") {
-      const stored = await saveEpub(file);
-      forgetDeletedBook(stored.id);
-      setStoredBooks((books) => [{ ...stored, synced: false }, ...books.filter((book) => book.id !== stored.id)]);
-      setSyncState("syncing");
+  useEffect(() => {
+    if (!bookToDelete) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBookToDelete(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [bookToDelete]);
+
+  async function importFiles(files: File[]) {
+    if (!files.length || isImporting) return;
+    const accepted = files.filter((file) => ["epub", "txt", "md", "markdown"].includes(file.name.split(".").pop()?.toLowerCase() ?? ""));
+    const supported = files.length === 1
+      ? accepted
+      : accepted.filter((file) => file.name.split(".").pop()?.toLowerCase() === "epub");
+    const unsupportedCount = files.length - supported.length;
+    if (!supported.length) {
+      setLibraryMessage("请选择 EPUB、TXT、MD 或 Markdown 文件。");
+      return;
+    }
+
+    setIsImporting(true);
+    setLibraryMessage(supported.length > 1 ? `正在把 ${supported.length} 本书放上书架…` : `正在导入《${supported[0].name}》…`);
+    let importedCount = 0;
+    let existingCount = 0;
+    let failedCount = 0;
+    let singleBookToOpen: BookSource | null = null;
+    const knownBookIds = new Set(storedBooks.map((book) => book.id));
+
+    for (const file of supported) {
+      const extension = file.name.split(".").pop()?.toLowerCase();
       try {
-        await uploadCloudBook(stored);
-        setStoredBooks((books) => books.map((book) => book.id === stored.id ? { ...book, synced: true } : book));
-        setSyncState("ready");
+        if (extension === "epub") {
+          const stored = await saveEpub(file);
+          const existing = storedBooks.find((book) => book.id === stored.id);
+          const alreadyKnown = knownBookIds.has(stored.id);
+          knownBookIds.add(stored.id);
+          forgetDeletedBook(stored.id);
+          if (!alreadyKnown || existing) {
+            setStoredBooks((books) => [
+              { ...stored, addedAt: existing?.addedAt ?? stored.addedAt, synced: existing?.synced ?? false, cloud: existing?.cloud },
+              ...books.filter((book) => book.id !== stored.id),
+            ]);
+          }
+          if (alreadyKnown) {
+            existingCount += 1;
+          } else {
+            importedCount += 1;
+          }
+          if (!existing?.synced && (!alreadyKnown || Boolean(existing))) {
+            setSyncState("syncing");
+            try {
+              await uploadCloudBook(stored);
+              setStoredBooks((books) => books.map((book) => book.id === stored.id ? { ...book, synced: true } : book));
+              setSyncState("ready");
+            } catch {
+              setSyncState("local");
+            }
+          }
+          if (supported.length === 1 && !alreadyKnown) singleBookToOpen = { type: "epub", id: stored.id, title: stored.title, file };
+        } else {
+          importedCount += 1;
+          if (supported.length === 1) {
+            singleBookToOpen = { type: "text", title: file.name.replace(/\.(txt|md|markdown)$/i, ""), text: await file.text() };
+          }
+        }
       } catch {
-        setSyncState("local");
+        failedCount += 1;
       }
-      return onOpen({ type: "epub", id: stored.id, title: stored.title, file });
     }
-    if (["txt", "md", "markdown"].includes(extension ?? "")) {
-      return onOpen({ type: "text", title: file.name.replace(/\.(txt|md|markdown)$/i, ""), text: await file.text() });
-    }
-    window.alert("第一版支持 EPUB、TXT、MD 和 Markdown 文件。");
+
+    const messages = [
+      importedCount ? `已导入 ${importedCount} 本` : "",
+      existingCount ? `${existingCount} 本已在书架中` : "",
+      unsupportedCount ? `跳过 ${unsupportedCount} 个${files.length > 1 ? "非 EPUB" : "不支持的"}文件` : "",
+      failedCount ? `${failedCount} 本导入失败` : "",
+    ].filter(Boolean);
+    setLibraryMessage(messages.join(" · "));
+    setIsImporting(false);
+    if (singleBookToOpen) onOpen(singleBookToOpen);
   }
 
   async function openBook(book: ShelfBook) {
@@ -215,8 +278,9 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   }
 
   async function removeBook(book: ShelfBook) {
-    if (deletingId || !window.confirm(`从书架删除《${book.title}》？\n\n电子书文件和阅读进度会从已同步设备中移除。`)) return;
+    if (deletingId) return;
     setDeletingId(book.id);
+    setBookToDelete(null);
     try {
       await deleteBookRemoteFirst({
         bookId: book.id,
@@ -225,6 +289,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
         deleteLocal: () => deleteStoredBook(book.id),
       });
       setStoredBooks((books) => books.filter((candidate) => candidate.id !== book.id));
+      setLibraryMessage(`已从书架删除《${book.title}》。`);
     } catch (error) {
       if (deletedBookIds().has(book.id)) {
         setStoredBooks((books) => books.filter((candidate) => candidate.id !== book.id));
@@ -249,7 +314,19 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       ? { title: "云端暂时不可用。", detail: "你仍然可以在本机导入和阅读。" }
       : { title: "从一本真正想读的书开始。", detail: "导入 EPUB，它会留在你的书架里。" };
 
-  return <main className="library-shell">
+  return <main
+    className={`library-shell ${isDragging ? "is-dragging" : ""}`}
+    onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+    onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setIsDragging(true); }}
+    onDragLeave={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false);
+    }}
+    onDrop={(event) => {
+      event.preventDefault();
+      setIsDragging(false);
+      void importFiles(Array.from(event.dataTransfer.files));
+    }}
+  >
     <header className="topbar">
       <div className="brand-lockup"><div className="brand">Dawn Reader</div><span className={`sync-mark ${syncState}`}>{syncLabel}</span></div>
       <div className="topbar-actions">
@@ -270,11 +347,29 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       <div className="hero-copy">
         <h1>书架</h1>
         <div className="library-actions">
-          <button className="primary" onClick={() => fileRef.current?.click()}>导入 <span>＋</span></button>
-          <input ref={fileRef} hidden type="file" accept=".epub,.txt,.md,.markdown" onChange={(event) => importFile(event.target.files?.[0])} />
+          <button className="primary" disabled={isImporting} onClick={() => fileRef.current?.click()}>{isImporting ? "正在导入…" : "选择电子书"} <span>＋</span></button>
+          <input
+            ref={fileRef}
+            hidden
+            multiple
+            type="file"
+            accept=".epub,.txt,.md,.markdown"
+            onChange={(event) => {
+              void importFiles(Array.from(event.target.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
         </div>
       </div>
       <AiStatus />
+    </section>
+    <section className={`import-shelf ${isDragging ? "active" : ""}`} aria-label="导入电子书">
+      <button disabled={isImporting} onClick={() => fileRef.current?.click()}>
+        <span className="import-mark" aria-hidden="true">↘</span>
+        <span><strong>{isDragging ? "松手，把书放上书架" : "把 EPUB 拖到这里"}</strong><small>也可以一次选择多本；TXT 与 Markdown 仍可直接阅读</small></span>
+        <span className="import-browse">浏览文件</span>
+      </button>
+      {libraryMessage && <p className="library-message" role="status">{libraryMessage}</p>}
     </section>
     <section className="shelf">
       {storedBooks.length > 0 && <>
@@ -285,10 +380,9 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
               <div className="stored-spine" aria-hidden="true"><span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span><strong>{book.title.slice(0, 2).toUpperCase()}</strong><i /></div>
               <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
-            <details className="book-menu">
-              <summary aria-label={`管理《${book.title}》`}>•••</summary>
-              <div><button className="danger" onClick={() => void removeBook(book)}>从书架删除</button></div>
-            </details>
+            <button className="book-delete" disabled={deletingId === book.id} onClick={() => setBookToDelete(book)} aria-label={`从书架删除《${book.title}》`}>
+              <span aria-hidden="true">×</span> 删除
+            </button>
           </article>)}
         </div>
       </>}
@@ -297,5 +391,16 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
         {emptyState.detail && <p>{emptyState.detail}</p>}
       </div>}
     </section>
+    {bookToDelete && <div className="delete-dialog-backdrop" role="presentation" onMouseDown={() => setBookToDelete(null)}>
+      <section className="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-book-title" onMouseDown={(event) => event.stopPropagation()}>
+        <small>从书架移除</small>
+        <h2 id="delete-book-title">删除《{bookToDelete.title}》？</h2>
+        <p>应用内的电子书副本和阅读进度会从已同步设备移除。你原来下载或保存在“文件”里的 EPUB 不会被删除。</p>
+        <div>
+          <button onClick={() => setBookToDelete(null)}>保留</button>
+          <button className="danger" onClick={() => void removeBook(bookToDelete)}>删除电子书</button>
+        </div>
+      </section>
+    </div>}
   </main>;
 }

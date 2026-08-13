@@ -14,6 +14,7 @@ final class LibraryModel: ObservableObject {
     @Published private(set) var books: [BookRecord] = []
     @Published var openedBook: OpenedBook?
     @Published var errorMessage: String?
+    @Published private(set) var importNotice: String?
     @Published var isWorking = false
     @Published private(set) var syncState: SyncState = .disconnected
 
@@ -29,39 +30,79 @@ final class LibraryModel: ObservableObject {
     }
 
     func importBook(from sourceURL: URL, settings: SettingsStore) async {
+        await importBooks(from: [sourceURL], settings: settings)
+    }
+
+    func importBooks(from sourceURLs: [URL], settings: SettingsStore) async {
+        guard !isWorking, !sourceURLs.isEmpty else { return }
         isWorking = true
         defer { isWorking = false }
-        do {
-            let granted = sourceURL.startAccessingSecurityScopedResource()
-            defer { if granted { sourceURL.stopAccessingSecurityScopedResource() } }
+        var importedCount = 0
+        var existingCount = 0
+        var failedNames: [String] = []
+        var singleBookToOpen: (record: BookRecord, publication: Publication)?
 
-            let id = UUID()
-            let fileName = "\(id.uuidString).epub"
-            let destination = try booksDirectory().appendingPathComponent(fileName)
-            try FileManager.default.copyItem(at: sourceURL, to: destination)
+        for sourceURL in sourceURLs where sourceURL.pathExtension.lowercased() == "epub" {
+            var copiedURL: URL?
+            do {
+                let granted = sourceURL.startAccessingSecurityScopedResource()
+                defer { if granted { sourceURL.stopAccessingSecurityScopedResource() } }
 
-            let publication = try await readium.open(url: destination)
-            let title = publication.metadata.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-                ?? sourceURL.deletingPathExtension().lastPathComponent
-            let data = try Data(contentsOf: destination)
-            let hash = DawnSyncClient.contentHash(for: data)
-            let record = BookRecord(
-                id: id,
-                title: title,
-                fileName: fileName,
-                cloudID: "sha256:\(hash)",
-                contentHash: hash,
-                fileSize: data.count,
-                originalFileName: sourceURL.lastPathComponent,
-                addedAt: ISO8601DateFormatter().string(from: Date())
-            )
-            books.append(record)
-            saveBooks()
-            try open(record, publication: publication, settings: settings)
-            Task { await synchronize(settings: settings) }
-        } catch {
-            errorMessage = error.localizedDescription
+                let data = try Data(contentsOf: sourceURL)
+                let hash = DawnSyncClient.contentHash(for: data)
+                if let existing = books.first(where: { $0.contentHash == hash || $0.cloudID == "sha256:\(hash)" }) {
+                    existingCount += 1
+                    if sourceURLs.count == 1 {
+                        let publication = try await readium.open(url: try booksDirectory().appendingPathComponent(existing.fileName))
+                        singleBookToOpen = (existing, publication)
+                    }
+                    continue
+                }
+
+                let id = UUID()
+                let fileName = "\(id.uuidString).epub"
+                let destination = try booksDirectory().appendingPathComponent(fileName)
+                copiedURL = destination
+                try FileManager.default.copyItem(at: sourceURL, to: destination)
+
+                let publication = try await readium.open(url: destination)
+                let title = publication.metadata.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ?? sourceURL.deletingPathExtension().lastPathComponent
+                let record = BookRecord(
+                    id: id,
+                    title: title,
+                    fileName: fileName,
+                    cloudID: "sha256:\(hash)",
+                    contentHash: hash,
+                    fileSize: data.count,
+                    originalFileName: sourceURL.lastPathComponent,
+                    addedAt: ISO8601DateFormatter().string(from: Date())
+                )
+                books.append(record)
+                importedCount += 1
+                if sourceURLs.count == 1 { singleBookToOpen = (record, publication) }
+            } catch {
+                if let copiedURL { try? FileManager.default.removeItem(at: copiedURL) }
+                failedNames.append(sourceURL.lastPathComponent)
+            }
         }
+
+        saveBooks()
+        if let singleBookToOpen {
+            do {
+                try open(singleBookToOpen.record, publication: singleBookToOpen.publication, settings: settings)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        let summary = [
+            importedCount > 0 ? "已导入 \(importedCount) 本" : nil,
+            existingCount > 0 ? "\(existingCount) 本已在书架中" : nil,
+            failedNames.isEmpty ? nil : "\(failedNames.count) 本导入失败"
+        ].compactMap { $0 }.joined(separator: " · ")
+        if !summary.isEmpty { showLibraryNotice(summary) }
+        if !failedNames.isEmpty { errorMessage = "无法导入：\(failedNames.joined(separator: "、"))" }
+        if importedCount > 0 { Task { await synchronize(settings: settings) } }
     }
 
     func open(_ record: BookRecord, settings: SettingsStore) async {
@@ -101,6 +142,7 @@ final class LibraryModel: ObservableObject {
             }
             books.removeAll { $0.id == record.id }
             saveBooks()
+            showLibraryNotice("已从书架删除《\(record.title)》")
             if let cloudID = record.cloudID,
                DawnSyncClient.normalizePairingCode(settings.syncCode) != nil
             {
@@ -344,6 +386,15 @@ final class LibraryModel: ObservableObject {
     private func saveBooks() {
         guard let data = try? JSONEncoder().encode(books) else { return }
         UserDefaults.standard.set(data, forKey: defaultsKey)
+    }
+
+    private func showLibraryNotice(_ message: String) {
+        importNotice = message
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard self?.importNotice == message else { return }
+            self?.importNotice = nil
+        }
     }
 
     private func deletedCloudIDs() -> Set<String> {

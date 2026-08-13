@@ -53,12 +53,14 @@ export function cleanBookTitle(fileName: string) {
 export async function saveEpub(file: File) {
   const db = await openLibrary();
   const id = `sha256:${await epubContentHash(file)}`;
+  const lookup = db.transaction(STORE_NAME, "readonly");
+  const existing = await requestResult(lookup.objectStore(STORE_NAME).get(id)) as StoredBook | undefined;
   const record: StoredBook = {
     id,
     title: cleanBookTitle(file.name),
     fileName: file.name,
     blob: file,
-    addedAt: new Date().toISOString(),
+    addedAt: existing?.addedAt ?? new Date().toISOString(),
   };
   const transaction = db.transaction(STORE_NAME, "readwrite");
   const finished = transactionFinished(transaction);

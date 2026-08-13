@@ -7,6 +7,7 @@ struct LibraryView: View {
     @State private var importing = false
     @State private var showingSettings = false
     @State private var bookToDelete: BookRecord?
+    @State private var isDropTarget = false
     @Environment(\.scenePhase) private var scenePhase
 
     private let epubType = UTType(filenameExtension: "epub")!
@@ -17,6 +18,12 @@ struct LibraryView: View {
                 Palette.fog.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 24) {
                     header
+                    if let notice = library.importNotice {
+                        Label(notice, systemImage: "checkmark.circle.fill")
+                            .font(.callout)
+                            .foregroundStyle(Palette.ember)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if library.books.isEmpty {
                         emptyLibrary
                     } else {
@@ -26,16 +33,30 @@ struct LibraryView: View {
                 }
                 .padding(.horizontal, 34)
                 .padding(.vertical, 28)
+                if isDropTarget {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Palette.ember, style: StrokeStyle(lineWidth: 3, dash: [10, 8]))
+                        .padding(12)
+                        .allowsHitTesting(false)
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [epubType]) { result in
-            guard case let .success(url) = result else { return }
-            Task { await library.importBook(from: url, settings: settings) }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [epubType], allowsMultipleSelection: true) { result in
+            guard case let .success(urls) = result else { return }
+            Task { await library.importBooks(from: urls, settings: settings) }
         }
         .onOpenURL { url in
             guard url.pathExtension.lowercased() == "epub" else { return }
             Task { await library.importBook(from: url, settings: settings) }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            let epubs = urls.filter { $0.pathExtension.lowercased() == "epub" }
+            guard !epubs.isEmpty else { return false }
+            Task { await library.importBooks(from: epubs, settings: settings) }
+            return true
+        } isTargeted: { targeted in
+            isDropTarget = targeted
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -78,7 +99,7 @@ struct LibraryView: View {
             }
             Button("取消", role: .cancel) { bookToDelete = nil }
         } message: {
-            Text("已同步的副本也会删除。这个操作不能撤销。")
+            Text("应用内的电子书副本和阅读进度会从已同步设备移除。你原来下载或保存在“文件”里的 EPUB 不会被删除。")
         }
     }
 
@@ -105,6 +126,7 @@ struct LibraryView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Palette.ink)
+            .disabled(library.isWorking)
         }
     }
 
@@ -129,7 +151,7 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: 13) {
             Text("书架是空的")
                 .font(.system(size: 22, weight: .medium, design: .serif))
-            Text("从“文件”中导入一本 EPUB。")
+            Text("从“文件”中选择一本或多本 EPUB，也可以直接拖到这里。")
                 .foregroundStyle(Palette.mutedInk)
             Button("选择 EPUB") { importing = true }
                 .buttonStyle(.bordered)
@@ -171,20 +193,18 @@ struct LibraryView: View {
                         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
                         }
                         .buttonStyle(.plain)
-                        Menu {
-                            Button("删除", systemImage: "trash", role: .destructive) {
-                                bookToDelete = book
-                            }
+                        Button(role: .destructive) {
+                            bookToDelete = book
                         } label: {
-                            Image(systemName: "ellipsis")
+                            Image(systemName: "trash")
                                 .frame(width: 38, height: 38)
                                 .contentShape(Rectangle())
                         }
-                        .menuStyle(.button)
                         .buttonStyle(.plain)
                         .foregroundStyle(Palette.mutedInk)
                         .padding(10)
-                        .accessibilityLabel("管理《\(book.title)》")
+                        .accessibilityLabel("从书架删除《\(book.title)》")
+                        .disabled(library.isWorking)
                     }
                 }
             }

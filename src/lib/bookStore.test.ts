@@ -6,4 +6,9 @@ describe("book title cleanup", () => {
     expect(cleanBookTitle("Zen and the Art of Motorcycle Maintenance (Robert M. Pirsig) (z-library.sk, 1lib.sk, z-lib.sk).epub"))
       .toBe("Zen and the Art of Motorcycle Maintenance (Robert M. Pirsig)");
   });
+
+  it("cleans the supplied Outlive filename", () => {
+    expect(cleanBookTitle("Outlive - The Science and Art of Longevity (Peter Attia, MD) (z-library.sk, 1lib.sk, z-lib.sk).epub"))
+      .toBe("Outlive - The Science and Art of Longevity (Peter Attia, MD)");
+  });
 });
