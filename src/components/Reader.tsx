@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { BookSource } from "./Library";
 import type { ReaderProfile } from "../lib/storage";
 import {
@@ -12,6 +12,7 @@ import { isSingleWord } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
+  desktopPageTurnFromPointer,
   pageTurnFromKey,
   pageTurnFromPointer,
   pointerInputKind,
@@ -33,13 +34,40 @@ type GestureState = {
   startScrollLeft: number;
   touchSeen: boolean;
   completed: boolean;
+  startedOnBlank: boolean;
   pointerId?: number;
 };
 type CaretPoint = { node: Node; offset: number };
+type StageGesture = { startX: number; startY: number; width: number; pointerId: number };
 
 function isPageTurnControlTarget(target: EventTarget | null) {
   const element = target as { closest?: (selector: string) => Element | null } | null;
   return Boolean(element?.closest?.("input, textarea, select, button, a, [contenteditable='true'], [role='slider']"));
+}
+
+function isDesktopReaderEnvironment() {
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches && navigator.maxTouchPoints === 0;
+}
+
+function pointHitsReadableContent(document: Document, x: number, y: number) {
+  const hit = document.elementFromPoint(x, y);
+  if (!hit) return false;
+  if (hit.closest("a, button, input, textarea, select, img, picture, svg, video, audio, canvas, iframe, [contenteditable='true']")) return true;
+  const textRoot = hit.closest("p, li, blockquote, h1, h2, h3, h4, h5, h6, figcaption, td, th") ?? hit;
+  const showText = document.defaultView?.NodeFilter.SHOW_TEXT ?? NodeFilter.SHOW_TEXT;
+  const walker = document.createTreeWalker(textRoot, showText);
+  let node = walker.nextNode();
+  while (node) {
+    if (node.textContent?.trim()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of Array.from(range.getClientRects())) {
+        if (x >= rect.left - 2 && x <= rect.right + 2 && y >= rect.top - 2 && y <= rect.bottom + 2) return true;
+      }
+    }
+    node = walker.nextNode();
+  }
+  return false;
 }
 
 function caretPointFromCoordinates(document: Document, x: number, y: number): CaretPoint | null {
@@ -145,6 +173,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const pendingCloudProgressRef = useRef<ReturnType<typeof saveReadingPosition> | null>(null);
   const pencilModeRef = useRef(loadReaderSettings().pencilMode);
   const gestureRef = useRef<GestureState | null>(null);
+  const stageGestureRef = useRef<StageGesture | null>(null);
+  const desktopReaderRef = useRef(false);
   const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
   const selectedKeyRef = useRef("");
@@ -159,6 +189,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [locationsReady, setLocationsReady] = useState(false);
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [desktopReader, setDesktopReader] = useState(false);
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
 
   function updateSettings(patch: Partial<ReaderSettings>) {
@@ -173,14 +204,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   function applyPencilModeToContents(contents: any, mode: PencilMode) {
+    const effectiveMode = desktopReaderRef.current ? "select" : mode;
     const root = contents?.document?.documentElement as HTMLElement | undefined;
     const body = contents?.document?.body as HTMLElement | undefined;
     for (const element of [root, body]) {
       element?.style.setProperty("touch-action", "pan-y pinch-zoom", "important");
       element?.style.setProperty("overscroll-behavior", "none", "important");
-      element?.style.setProperty("user-select", mode === "page" ? "none" : "text", "important");
-      element?.style.setProperty("-webkit-user-select", mode === "page" ? "none" : "text", "important");
-      element?.setAttribute("data-dawn-pencil-mode", mode);
+      element?.style.setProperty("user-select", effectiveMode === "page" ? "none" : "text", "important");
+      element?.style.setProperty("-webkit-user-select", effectiveMode === "page" ? "none" : "text", "important");
+      element?.setAttribute("data-dawn-input-mode", desktopReaderRef.current ? "desktop" : effectiveMode);
     }
   }
 
@@ -341,7 +373,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     return epubRef.current?.querySelector<HTMLElement>(".epub-container")?.scrollLeft ?? 0;
   }
 
-  function startGesture(kind: ReaderInputKind, x: number, y: number, pointerId?: number, touchSeen = false) {
+  function startGesture(kind: ReaderInputKind, x: number, y: number, pointerId?: number, touchSeen = false, startedOnBlank = false) {
     gestureRef.current = {
       kind,
       mode: pencilModeRef.current,
@@ -352,6 +384,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       startScrollLeft: epubScrollLeft(),
       touchSeen,
       completed: false,
+      startedOnBlank,
       pointerId,
     };
     if (!(kind === "pen" && pencilModeRef.current === "select")) clearSelection();
@@ -364,6 +397,34 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     gesture.lastX = x;
     gesture.lastY = y;
     gestureRef.current = null;
+
+    if (gesture.kind === "mouse" && desktopReaderRef.current) {
+      const selection = contents.document.getSelection() as Selection | null;
+      const hasSelection = Boolean(selection?.rangeCount && !selection.isCollapsed && selection.toString().trim());
+      const bookRect = epubRef.current?.getBoundingClientRect();
+      const frame = contents.document.defaultView?.frameElement as HTMLElement | null;
+      const frameRect = frame?.getBoundingClientRect();
+      const frameOffsetX = (frameRect?.left ?? bookRect?.left ?? 0) - (bookRect?.left ?? 0);
+      const direction = desktopPageTurnFromPointer({
+        startX: gesture.startX + frameOffsetX,
+        startY: gesture.startY,
+        endX: x + frameOffsetX,
+        endY: y,
+        width: Math.max(1, bookRect?.width ?? contents.document.documentElement.clientWidth),
+        startedOnBlank: gesture.startedOnBlank,
+        hasSelection,
+      });
+      if (direction) {
+        if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
+        pageFallbackTimerRef.current = window.setTimeout(() => {
+          const epubHandledGesture = Math.abs(epubScrollLeft() - gesture.startScrollLeft) > 8;
+          if (!epubHandledGesture) turnPage(direction);
+        }, 160);
+        return;
+      }
+      scheduleEpubSelection(contents, 140);
+      return;
+    }
 
     if (gesture.kind === "pen" && gesture.mode === "select") {
       const selection = contents.document.getSelection() as Selection | null;
@@ -414,6 +475,21 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       document.documentElement.classList.remove("reader-active");
       document.body.classList.remove("reader-active");
     };
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const updateInputEnvironment = () => {
+      const desktop = isDesktopReaderEnvironment();
+      desktopReaderRef.current = desktop;
+      setDesktopReader(desktop);
+      applyPencilModeToOpenContents(settings.pencilMode);
+    };
+    updateInputEnvironment();
+    media.addEventListener("change", updateInputEnvironment);
+    return () => media.removeEventListener("change", updateInputEnvironment);
+    // settings changes already reapply the current input mode
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -496,7 +572,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             if (kind === "pen") gestureRef.current.kind = "pen";
             return;
           }
-          startGesture(kind, event.clientX, event.clientY, event.pointerId);
+          startGesture(
+            kind,
+            event.clientX,
+            event.clientY,
+            event.pointerId,
+            false,
+            kind === "mouse" && !pointHitsReadableContent(document, event.clientX, event.clientY),
+          );
         };
         const onPointerMove = (event: PointerEvent) => {
           const gesture = gestureRef.current;
@@ -706,6 +789,35 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     clearSelection();
   }
 
+  function handleStagePointerDown(event: ReactPointerEvent<HTMLElement>) {
+    if (source.type !== "epub" || !desktopReaderRef.current || event.pointerType !== "mouse" || event.target !== event.currentTarget) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    stageGestureRef.current = {
+      startX: event.clientX - rect.left,
+      startY: event.clientY - rect.top,
+      width: rect.width,
+      pointerId: event.pointerId,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleStagePointerUp(event: ReactPointerEvent<HTMLElement>) {
+    const gesture = stageGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    stageGestureRef.current = null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const direction = desktopPageTurnFromPointer({
+      startX: gesture.startX,
+      startY: gesture.startY,
+      endX: event.clientX - rect.left,
+      endY: event.clientY - rect.top,
+      width: gesture.width,
+      startedOnBlank: true,
+      hasSelection: false,
+    });
+    if (direction) turnPage(direction);
+  }
+
   const readingWidth = settings.pageWidth + 380;
   const paperStyle = {
     "--reader-font-size": `${settings.fontSize}px`,
@@ -729,7 +841,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       <button className="back-button" onClick={onClose}>← <span>书架</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageProgress}%</small>}</div>
       <div className="reader-actions">
-        {source.type === "epub" && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">
+        {source.type === "epub" && !desktopReader && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">
           <span>Pencil</span>
           <button className={settings.pencilMode === "page" ? "active" : ""} aria-pressed={settings.pencilMode === "page"} onClick={() => setPencilMode("page")}>翻页</button>
           <button className={settings.pencilMode === "select" ? "active" : ""} aria-pressed={settings.pencilMode === "select"} onClick={() => setPencilMode("select")}>画词</button>
@@ -745,11 +857,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       </div>}
     </header>
 
-    <main className={`reading-stage ${source.type === "epub" ? "epub-stage" : ""}`} style={paperStyle}>
-      {source.type === "epub" && <>
-        <button className="page-edge page-edge-prev" onClick={() => turnPage("prev")} aria-label="上一页，或按左方向键" title="上一页（←）"><span aria-hidden="true">←</span></button>
-        <button className="page-edge page-edge-next" onClick={() => turnPage("next")} aria-label="下一页，或按右方向键" title="下一页（→）"><span aria-hidden="true">→</span></button>
-      </>}
+    <main
+      className={`reading-stage ${source.type === "epub" ? "epub-stage" : ""}`}
+      style={paperStyle}
+      onPointerDown={handleStagePointerDown}
+      onPointerUp={handleStagePointerUp}
+      onPointerCancel={() => { stageGestureRef.current = null; }}
+    >
       {source.type === "text" ? <article className={`paper paper-${settings.theme}`} onMouseUp={captureSelection} onPointerUp={(event) => {
         if (event.pointerType === "pen" && settings.pencilMode === "select") captureSelection();
       }}>

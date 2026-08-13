@@ -216,23 +216,8 @@ body:has(.onboarding), body:has(.test-screen) {
   border-bottom: 1px solid var(--line);
 }
 .library-hero h1 { margin: 0 0 8px; font: 650 clamp(38px, 5vw, 56px)/1 "Avenir Next", Avenir, sans-serif; letter-spacing: -.05em; }
-.library-actions { display: flex; align-items: center; margin-top: 20px; }
-
-.import-shelf { padding: 20px 7vw 0; }
-.import-shelf > button {
-  width: 100%; min-height: 88px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 18px;
-  padding: 16px 20px; border: 1px dashed #9facad; border-radius: var(--radius-panel); color: #3b4b51; background: rgba(255, 255, 255, .22); text-align: left;
-  transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
-}
-.import-shelf > button:hover, .import-shelf.active > button { border-color: var(--accent-strong); background: rgba(255, 255, 255, .58); }
-.import-shelf.active > button { transform: translateY(-2px); }
-.import-shelf > button:disabled { cursor: wait; opacity: .6; }
-.import-mark { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid #abb7b7; border-radius: 50%; color: var(--accent-strong); font: 500 19px/1 "Avenir Next", Avenir, sans-serif; }
-.import-shelf strong, .import-shelf small { display: block; }
-.import-shelf strong { font: 600 16px/1.3 "Iowan Old Style", Baskerville, Georgia, serif; }
-.import-shelf small { margin-top: 5px; color: #728187; font-size: 10px; }
-.import-browse { min-height: 36px; display: inline-flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--line); color: var(--accent-strong); font-size: 10px; font-weight: 650; }
-.library-message { margin: 10px 2px 0; color: #64757a; font-size: 10px; line-height: 1.5; }
+.library-actions { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+.library-message { margin: 0; color: #64757a; font-size: 10px; line-height: 1.5; }
 .library-shell.is-dragging::after { content: ""; position: fixed; z-index: 70; inset: 8px; border: 2px solid color-mix(in srgb, var(--accent) 72%, transparent); border-radius: 14px; pointer-events: none; }
 
 .ai-status { min-height: 54px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line); color: #4c5d63; }
@@ -382,19 +367,6 @@ body:has(.onboarding), body:has(.test-screen) {
 .progress-scrubber input { width: 100%; height: 2px; accent-color: var(--accent); }
 .progress-scrubber span { color: #65777d; font: 8px "SFMono-Regular", monospace; text-align: right; }
 .reader-theme-night .progress-scrubber span { color: #748892; }
-.page-edge { display: none; }
-@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
-  .page-edge {
-    width: clamp(52px, 6vw, 86px); position: absolute; z-index: 8; top: 30px; bottom: 66px; display: grid; place-items: center;
-    padding: 0; border: 0; color: transparent; background: transparent; cursor: pointer;
-  }
-  .page-edge-prev { left: 0; }
-  .page-edge-next { right: 0; }
-  .page-edge span { width: 36px; height: 52px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 999px; font-size: 20px; transition: color .16s ease, border-color .16s ease, background-color .16s ease, transform .16s ease; }
-  .page-edge:hover span, .page-edge:focus-visible span { border-color: rgba(79, 96, 99, .24); color: #4b5d62; background: rgba(244, 247, 245, .78); }
-  .page-edge:active span { transform: scale(.94); }
-  .reader-theme-night .page-edge:hover span, .reader-theme-night .page-edge:focus-visible span { border-color: #3e535f; color: #aab9bf; background: rgba(23, 38, 49, .88); }
-}
 .selection-assist {
   position: fixed;
   z-index: 24;
@@ -452,9 +424,6 @@ body:has(.onboarding), body:has(.test-screen) {
   .profile-menu { position: fixed; top: 62px; right: 12px; left: 12px; width: auto; }
   .sync-button { padding-inline: 6px; }
   .library-hero { padding: 44px 22px 28px; gap: 28px; }
-  .import-shelf { padding: 16px 22px 0; }
-  .import-shelf > button { grid-template-columns: 38px minmax(0, 1fr); gap: 13px; padding: 14px; }
-  .import-browse { display: none; }
   .ai-status { grid-template-columns: 1fr auto; gap: 10px; }
   .ai-status span { white-space: normal; }
   .shelf { padding: 42px 22px 64px; }

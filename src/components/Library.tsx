@@ -347,7 +347,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       <div className="hero-copy">
         <h1>书架</h1>
         <div className="library-actions">
-          <button className="primary" disabled={isImporting} onClick={() => fileRef.current?.click()}>{isImporting ? "正在导入…" : "选择电子书"} <span>＋</span></button>
+          <button className="primary" disabled={isImporting} onClick={() => fileRef.current?.click()}>{isImporting ? "正在导入…" : "添加电子书"} <span>＋</span></button>
           <input
             ref={fileRef}
             hidden
@@ -359,17 +359,10 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
               event.currentTarget.value = "";
             }}
           />
+          {libraryMessage && <p className="library-message" role="status">{libraryMessage}</p>}
         </div>
       </div>
       <AiStatus />
-    </section>
-    <section className={`import-shelf ${isDragging ? "active" : ""}`} aria-label="导入电子书">
-      <button disabled={isImporting} onClick={() => fileRef.current?.click()}>
-        <span className="import-mark" aria-hidden="true">↘</span>
-        <span><strong>{isDragging ? "松手，把书放上书架" : "把 EPUB 拖到这里"}</strong><small>也可以一次选择多本；TXT 与 Markdown 仍可直接阅读</small></span>
-        <span className="import-browse">浏览文件</span>
-      </button>
-      {libraryMessage && <p className="library-message" role="status">{libraryMessage}</p>}
     </section>
     <section className="shelf">
       {storedBooks.length > 0 && <>

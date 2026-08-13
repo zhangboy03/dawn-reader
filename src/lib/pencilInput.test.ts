@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  desktopPageTurnFromPointer,
   pageTurnFromKey,
   pageTurnFromPointer,
   pointerInputKind,
@@ -31,5 +32,17 @@ describe("Pencil input", () => {
     expect(pageTurnFromKey("ArrowLeft")).toBe("prev");
     expect(pageTurnFromKey("ArrowRight")).toBe("next");
     expect(pageTurnFromKey("Enter")).toBeNull();
+  });
+
+  it("turns desktop pages only from blank edge clicks or blank horizontal drags", () => {
+    const gesture = { startX: 100, startY: 200, endX: 100, endY: 200, width: 1000, startedOnBlank: true, hasSelection: false };
+    expect(desktopPageTurnFromPointer(gesture)).toBe("prev");
+    expect(desktopPageTurnFromPointer({ ...gesture, startX: 800, endX: 800 })).toBe("next");
+    expect(desktopPageTurnFromPointer({ ...gesture, startX: 500, endX: 500 })).toBeNull();
+    expect(desktopPageTurnFromPointer({ ...gesture, startX: 500, endX: 430 })).toBe("next");
+    expect(desktopPageTurnFromPointer({ ...gesture, startX: 500, endX: 570 })).toBe("prev");
+    expect(desktopPageTurnFromPointer({ ...gesture, startedOnBlank: false })).toBeNull();
+    expect(desktopPageTurnFromPointer({ ...gesture, hasSelection: true })).toBeNull();
+    expect(desktopPageTurnFromPointer({ ...gesture, startX: 100, endX: 105, endY: 250 })).toBeNull();
   });
 });
