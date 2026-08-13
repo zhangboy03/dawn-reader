@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  pageTurnFromKey,
   pageTurnFromPointer,
   pointerInputKind,
   shouldTurnPage,
@@ -24,5 +25,11 @@ describe("Pencil input", () => {
     expect(shouldTurnPage("pen", "select")).toBe(false);
     expect(shouldTurnPage("touch", "select")).toBe(true);
     expect(shouldTurnPage("mouse", "page")).toBe(false);
+  });
+
+  it("maps desktop arrow keys without claiming unrelated keys", () => {
+    expect(pageTurnFromKey("ArrowLeft")).toBe("prev");
+    expect(pageTurnFromKey("ArrowRight")).toBe("next");
+    expect(pageTurnFromKey("Enter")).toBeNull();
   });
 });

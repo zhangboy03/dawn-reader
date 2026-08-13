@@ -348,7 +348,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .theme-dot.swatch-night { background: #1b1d1a; }
 
 .reading-stage { min-width: 0; min-height: 0; padding: 30px clamp(20px, 3vw, 48px) 48px; overflow: auto; background: #deddd6; transition: background-color .2s ease; }
-.reading-stage.epub-stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; overscroll-behavior: none; }
+.reading-stage.epub-stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; overscroll-behavior: none; }
 .reader-theme-sepia .reading-stage { background: #d8d0c1; }
 .reader-theme-night .reading-stage { background: #151713; }
 .paper {
@@ -382,6 +382,19 @@ body:has(.onboarding), body:has(.test-screen) {
 .progress-scrubber input { width: 100%; height: 2px; accent-color: var(--accent); }
 .progress-scrubber span { color: #65777d; font: 8px "SFMono-Regular", monospace; text-align: right; }
 .reader-theme-night .progress-scrubber span { color: #748892; }
+.page-edge { display: none; }
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .page-edge {
+    width: clamp(52px, 6vw, 86px); position: absolute; z-index: 8; top: 30px; bottom: 66px; display: grid; place-items: center;
+    padding: 0; border: 0; color: transparent; background: transparent; cursor: pointer;
+  }
+  .page-edge-prev { left: 0; }
+  .page-edge-next { right: 0; }
+  .page-edge span { width: 36px; height: 52px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 999px; font-size: 20px; transition: color .16s ease, border-color .16s ease, background-color .16s ease, transform .16s ease; }
+  .page-edge:hover span, .page-edge:focus-visible span { border-color: rgba(79, 96, 99, .24); color: #4b5d62; background: rgba(244, 247, 245, .78); }
+  .page-edge:active span { transform: scale(.94); }
+  .reader-theme-night .page-edge:hover span, .reader-theme-night .page-edge:focus-visible span { border-color: #3e535f; color: #aab9bf; background: rgba(23, 38, 49, .88); }
+}
 .selection-assist {
   position: fixed;
   z-index: 24;

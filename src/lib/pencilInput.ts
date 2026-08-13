@@ -25,3 +25,9 @@ export function pageTurnFromPointer(startX: number, startY: number, endX: number
   const pageX = ((endX % width) + width) % width;
   return pageX < width / 2 ? "prev" : "next";
 }
+
+export function pageTurnFromKey(key: string) {
+  if (key === "ArrowLeft") return "prev" as const;
+  if (key === "ArrowRight") return "next" as const;
+  return null;
+}

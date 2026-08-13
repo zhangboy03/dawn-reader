@@ -12,6 +12,7 @@ import { isSingleWord } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
+  pageTurnFromKey,
   pageTurnFromPointer,
   pointerInputKind,
   shouldTurnPage,
@@ -35,6 +36,11 @@ type GestureState = {
   pointerId?: number;
 };
 type CaretPoint = { node: Node; offset: number };
+
+function isPageTurnControlTarget(target: EventTarget | null) {
+  const element = target as { closest?: (selector: string) => Element | null } | null;
+  return Boolean(element?.closest?.("input, textarea, select, button, a, [contenteditable='true'], [role='slider']"));
+}
 
 function caretPointFromCoordinates(document: Document, x: number, y: number): CaretPoint | null {
   const caretDocument = document as Document & {
@@ -385,6 +391,22 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     scheduleEpubSelection(contents, 140);
   }
 
+  function handlePageKey(event: KeyboardEvent) {
+    if (
+      source.type !== "epub"
+      || event.defaultPrevented
+      || event.altKey
+      || event.ctrlKey
+      || event.metaKey
+      || event.shiftKey
+      || isPageTurnControlTarget(event.target)
+    ) return;
+    const direction = pageTurnFromKey(event.key);
+    if (!direction) return;
+    event.preventDefault();
+    turnPage(direction);
+  }
+
   useEffect(() => {
     document.documentElement.classList.add("reader-active");
     document.body.classList.add("reader-active");
@@ -393,6 +415,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       document.body.classList.remove("reader-active");
     };
   }, []);
+
+  useEffect(() => {
+    if (source.type !== "epub") return;
+    const onKeyDown = (event: KeyboardEvent) => handlePageKey(event);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // key handling reads the current rendition through refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
 
   useEffect(() => {
     if (!selected) return;
@@ -520,6 +551,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         const onSelectionChange = () => {
           scheduleEpubSelection(contents);
         };
+        const onKeyDown = (event: KeyboardEvent) => handlePageKey(event);
 
         document.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
         document.addEventListener("pointermove", onPointerMove, { capture: true, passive: false });
@@ -530,6 +562,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         document.addEventListener("touchend", onTouchEnd, { capture: true, passive: false });
         document.addEventListener("touchcancel", () => { gestureRef.current = null; }, { capture: true, passive: false });
         document.addEventListener("selectionchange", onSelectionChange, { passive: true });
+        document.addEventListener("keydown", onKeyDown);
       });
       rendition.on("selected", (cfiRange: string, contents: any) => {
         captureEpubSelection(contents, cfiRange);
@@ -713,6 +746,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     </header>
 
     <main className={`reading-stage ${source.type === "epub" ? "epub-stage" : ""}`} style={paperStyle}>
+      {source.type === "epub" && <>
+        <button className="page-edge page-edge-prev" onClick={() => turnPage("prev")} aria-label="上一页，或按左方向键" title="上一页（←）"><span aria-hidden="true">←</span></button>
+        <button className="page-edge page-edge-next" onClick={() => turnPage("next")} aria-label="下一页，或按右方向键" title="下一页（→）"><span aria-hidden="true">→</span></button>
+      </>}
       {source.type === "text" ? <article className={`paper paper-${settings.theme}`} onMouseUp={captureSelection} onPointerUp={(event) => {
         if (event.pointerType === "pen" && settings.pencilMode === "select") captureSelection();
       }}>
