@@ -223,25 +223,54 @@ struct LibraryView: View {
     }
 
     private func assistantModeControl(for book: BookRecord) -> some View {
-        HStack(spacing: 3) {
-            Text("划线后")
-                .font(.caption2.monospaced())
-                .foregroundStyle(Palette.mutedInk)
-                .padding(.horizontal, 6)
-            ForEach(BookAssistantMode.allCases) { mode in
-                Button(mode.title) {
-                    library.setAssistantMode(mode, for: book)
-                }
-                .font(.caption2.weight(.medium))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 7)
-                .foregroundStyle(book.effectiveAssistantMode == mode ? Color.white : Palette.mutedInk)
-                .background(book.effectiveAssistantMode == mode ? Palette.ember : .clear, in: RoundedRectangle(cornerRadius: 5))
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(book.effectiveAssistantMode == mode ? .isSelected : [])
+        Menu {
+            Picker(
+                "划线后的动作",
+                selection: Binding(
+                    get: { book.effectiveAssistantMode },
+                    set: { library.setAssistantMode($0, for: book) }
+                )
+            ) {
+                Label("英文改写", systemImage: "textformat")
+                    .tag(BookAssistantMode.rewrite)
+                Label("AI 提问", systemImage: "bubble.left.and.bubble.right")
+                    .tag(BookAssistantMode.ask)
             }
+        } label: {
+            HStack(spacing: 9) {
+                Text(book.effectiveAssistantMode == .rewrite ? "Aa" : "?")
+                    .font(.system(size: 11, weight: .semibold, design: .serif))
+                    .foregroundStyle(book.effectiveAssistantMode == .ask ? Palette.ember : Palette.mutedInk)
+                    .frame(width: 30, height: 30)
+                    .background(Palette.paper.opacity(0.72))
+                    .clipShape(.rect(cornerRadius: 15, style: .continuous))
+                    .overlay {
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 15,
+                            bottomLeadingRadius: 4,
+                            bottomTrailingRadius: 15,
+                            topTrailingRadius: 15
+                        )
+                        .stroke(book.effectiveAssistantMode == .ask ? Palette.ember.opacity(0.58) : Palette.line)
+                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("划线后")
+                        .font(.system(size: 8, design: .monospaced))
+                        .tracking(0.6)
+                        .foregroundStyle(Palette.mutedInk.opacity(0.74))
+                    Text(book.effectiveAssistantMode.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(Palette.mutedInk.opacity(0.72))
+            }
+            .padding(.vertical, 5)
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
         }
-        .padding(3)
-        .background(Palette.fog.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .buttonStyle(.plain)
+        .accessibilityLabel("划线后的动作：\(book.effectiveAssistantMode.title)")
     }
 }

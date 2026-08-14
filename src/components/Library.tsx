@@ -46,6 +46,19 @@ type ShelfBook = StoredBook & {
 
 type SyncState = "loading" | "syncing" | "ready" | "local";
 
+const assistantModePresentation: Record<BookAssistantMode, { title: string; description: string; mark: string }> = {
+  rewrite: {
+    title: "英文改写",
+    description: "换成更易读的英文",
+    mark: "Aa",
+  },
+  ask: {
+    title: "AI 提问",
+    description: "带上附近原文继续聊",
+    mark: "?",
+  },
+};
+
 const fallbackCoverPalettes = [
   { background: "#173147", ink: "#d8e8ea", accent: "#e78349" },
   { background: "#314339", ink: "#e5eadb", accent: "#c9a852" },
@@ -184,6 +197,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   const [isDragging, setIsDragging] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
   const [bookAssistantModes, setBookAssistantModes] = useState(loadBookAssistantModes);
+  const [assistantMenuBookId, setAssistantMenuBookId] = useState<string | null>(null);
 
   useEffect(() => {
     libraryMountedRef.current = true;
@@ -411,6 +425,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
 
   function chooseAssistantMode(bookId: string, mode: BookAssistantMode) {
     setBookAssistantModes(saveBookAssistantMode(bookId, mode));
+    setAssistantMenuBookId(null);
   }
 
   const syncLabel = {
@@ -481,15 +496,53 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
         <div className="stored-shelf">
           {storedBooks.map((book) => {
             const assistantMode = bookAssistantModes[book.id] ?? "rewrite";
+            const modePresentation = assistantModePresentation[assistantMode];
+            const menuOpen = assistantMenuBookId === book.id;
             return <article className="stored-book" key={book.id}>
             <button className="book-open" disabled={openingId === book.id || deletingId === book.id} onClick={() => void openBook(book)}>
               <BookCover book={book} />
               <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
-            <div className="book-assistant-choice" role="group" aria-label={`《${book.title}》划线后的 AI 用法`}>
-              <small>划线后</small>
-              <button className={assistantMode === "rewrite" ? "active" : ""} aria-pressed={assistantMode === "rewrite"} onClick={() => chooseAssistantMode(book.id, "rewrite")}>英文改写</button>
-              <button className={assistantMode === "ask" ? "active" : ""} aria-pressed={assistantMode === "ask"} onClick={() => chooseAssistantMode(book.id, "ask")}>AI 提问</button>
+            <div
+              className={`book-assistant-menu ${menuOpen ? "open" : ""}`}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAssistantMenuBookId(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setAssistantMenuBookId(null);
+              }}
+            >
+              <button
+                type="button"
+                className="book-assistant-trigger"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-controls={`assistant-menu-${book.id}`}
+                onClick={() => setAssistantMenuBookId(menuOpen ? null : book.id)}
+              >
+                <span className={`assistant-mode-mark ${assistantMode}`} aria-hidden="true">{modePresentation.mark}</span>
+                <span className="assistant-mode-current"><small>划线后</small><strong>{modePresentation.title}</strong></span>
+                <span className="assistant-chevron" aria-hidden="true" />
+              </button>
+              {menuOpen && <div className="book-assistant-popover" id={`assistant-menu-${book.id}`} role="menu" aria-label={`《${book.title}》划线后的动作`}>
+                <p>划线后</p>
+                {(Object.keys(assistantModePresentation) as BookAssistantMode[]).map((mode) => {
+                  const presentation = assistantModePresentation[mode];
+                  const selected = assistantMode === mode;
+                  return <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected}
+                    className={selected ? "selected" : ""}
+                    onClick={() => chooseAssistantMode(book.id, mode)}
+                    key={mode}
+                  >
+                    <span className={`assistant-option-mark ${mode}`} aria-hidden="true">{presentation.mark}</span>
+                    <span><strong>{presentation.title}</strong><small>{presentation.description}</small></span>
+                    <i aria-hidden="true">{selected ? "✓" : ""}</i>
+                  </button>;
+                })}
+              </div>}
             </div>
             <button className="book-delete" disabled={deletingId === book.id} onClick={() => setBookToDelete(book)} aria-label={`从书架删除《${book.title}》`}>
               <span aria-hidden="true">×</span> 删除

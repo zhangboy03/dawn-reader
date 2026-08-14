@@ -246,11 +246,29 @@ body:has(.onboarding), body:has(.test-screen) {
 .book-delete span { display: inline-block; margin-right: 4px; font-size: 15px; font-weight: 300; transform: translateY(1px); }
 .book-delete:hover { border-color: #d8c4be; color: #9d4337; background: #f5eae7; }
 .book-delete:disabled { opacity: .45; }
-.book-assistant-choice { position: absolute; right: 8px; bottom: 25px; display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #b8c3c2; border-radius: var(--radius-control); background: rgba(247, 249, 247, .64); }
-.book-assistant-choice > small { padding: 0 8px 0 6px; color: #7a898d; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .03em; }
-.book-assistant-choice button { min-height: 32px; padding: 0 11px; border: 0; border-radius: 5px; color: #65757b; background: transparent; font-size: 10px; }
-.book-assistant-choice button:hover { color: #35474e; }
-.book-assistant-choice button.active { color: #fff9f4; background: var(--accent-strong); box-shadow: 0 4px 12px rgba(111, 61, 40, .14); }
+.book-assistant-menu { position: absolute; z-index: 3; right: 8px; bottom: 24px; }
+.book-assistant-trigger { min-height: 44px; display: grid; grid-template-columns: 30px auto 12px; align-items: center; gap: 9px; padding: 5px 8px 5px 6px; border: 0; border-radius: 9px; color: #42535a; background: transparent; text-align: left; transition: color .18s ease, background-color .18s ease; }
+.book-assistant-trigger:hover, .book-assistant-menu.open .book-assistant-trigger { color: #26363d; background: rgba(255, 255, 255, .56); }
+.assistant-mode-mark, .assistant-option-mark { display: grid; place-items: center; border: 1px solid #aebbbb; color: #53646a; background: rgba(247, 249, 247, .72); font: 650 10px/1 "Iowan Old Style", Baskerville, Georgia, serif; }
+.assistant-mode-mark { width: 30px; height: 30px; border-radius: 50% 50% 50% 4px; }
+.assistant-mode-mark.ask, .assistant-option-mark.ask { border-color: #c79078; color: var(--accent-strong); }
+.assistant-mode-current { display: grid; gap: 2px; min-width: 72px; }
+.assistant-mode-current small { color: #849195; font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .08em; }
+.assistant-mode-current strong { font-size: 11px; font-weight: 650; white-space: nowrap; }
+.assistant-chevron { width: 7px; height: 7px; justify-self: center; border-right: 1px solid #879396; border-bottom: 1px solid #879396; transform: translateY(-2px) rotate(45deg); transition: transform .18s ease; }
+.book-assistant-menu.open .assistant-chevron { transform: translateY(2px) rotate(225deg); }
+.book-assistant-popover { width: 286px; position: absolute; right: 0; bottom: calc(100% + 9px); padding: 8px; border: 1px solid #b8c3c2; border-radius: 13px; color: #304047; background: rgba(247, 249, 247, .97); box-shadow: 0 22px 48px rgba(37, 52, 57, .2); backdrop-filter: blur(18px); animation: assistant-menu-in .16s cubic-bezier(.2, .8, .2, 1); }
+.book-assistant-popover::after { content: ""; position: absolute; right: 20px; bottom: -5px; width: 9px; height: 9px; border-right: 1px solid #b8c3c2; border-bottom: 1px solid #b8c3c2; background: #f7f9f7; transform: rotate(45deg); }
+.book-assistant-popover > p { margin: 0; padding: 6px 9px 9px; color: #7c898d; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .08em; }
+.book-assistant-popover > button { width: 100%; min-height: 58px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 20px; align-items: center; gap: 11px; padding: 8px 9px; border: 0; border-top: 1px solid #d8dfdd; color: #526269; background: transparent; text-align: left; }
+.book-assistant-popover > button:first-of-type { border-top: 0; }
+.book-assistant-popover > button:hover { background: #eef2ef; }
+.book-assistant-popover > button.selected { color: #26363d; }
+.assistant-option-mark { width: 32px; height: 32px; border-radius: 50% 50% 50% 4px; }
+.book-assistant-popover > button > span:nth-child(2) { display: grid; gap: 4px; }
+.book-assistant-popover strong { font-size: 12px; font-weight: 650; }
+.book-assistant-popover small { color: #7c898d; font-size: 9px; font-weight: 400; }
+.book-assistant-popover i { color: var(--accent-strong); font-size: 12px; font-style: normal; text-align: center; }
 .delete-dialog-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(16, 26, 36, .42); backdrop-filter: blur(7px); }
 .delete-dialog { width: min(470px, 100%); padding: 28px; border: 1px solid #b7c2c2; border-radius: var(--radius-panel); color: #2f3d43; background: #f7f8f5; box-shadow: 0 30px 80px rgba(25, 40, 47, .28); }
 .delete-dialog > small { color: #9d4337; font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
@@ -435,6 +453,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .chat-compose button { width: 38px; height: 38px; border: 1px solid var(--reader-control-active); border-radius: 50%; color: #fff8f2; background: var(--reader-control-active); font-size: 17px; }
 .chat-compose button:disabled { border-color: var(--reader-note-line); color: var(--reader-chrome-muted); background: transparent; opacity: .55; }
 
+@keyframes assistant-menu-in { from { opacity: 0; transform: translateY(5px) scale(.985); } }
 @keyframes note-in { from { opacity: 0; } }
 @keyframes waiting-line { from { width: 7px; opacity: .45; } to { width: 22px; opacity: 1; } }
 @keyframes sync-pulse { from { opacity: .38; } to { opacity: 1; } }
@@ -468,8 +487,9 @@ body:has(.onboarding), body:has(.test-screen) {
   .stored-book { min-height: 196px; }
   .book-open { min-height: 196px; grid-template-columns: 70px 1fr; gap: 18px; padding: 24px 48px 76px 0; }
   .stored-cover, .stored-spine { width: 61px; height: 94px; }
-  .book-assistant-choice { right: auto; bottom: 18px; left: 0; }
-  .book-assistant-choice > small { padding-left: 5px; }
+  .book-assistant-menu { right: auto; bottom: 15px; left: -5px; }
+  .book-assistant-popover { right: auto; left: 0; }
+  .book-assistant-popover::after { right: auto; left: 19px; }
 
   .reader-shell { display: grid; padding-top: 0; }
   .reader-topbar { position: relative; z-index: 4; }
