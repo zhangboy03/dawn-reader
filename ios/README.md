@@ -6,7 +6,9 @@ Native iPad reader built with SwiftUI and Readium Swift Toolkit.
 
 - Finger: Readium's normal page navigation.
 - Pencil · Page: horizontal stroke turns one page.
-- Pencil · Select: stroke across text creates a DOM selection and requests a complete DeepSeek rewrite.
+- Each book chooses what selection does: `英文改写` or `AI 提问`.
+- Pencil · Select: stroke across text creates a DOM selection, then opens the selected book's rewrite or compact chat interaction.
+- AI questions keep the selected passage, nearby context, and follow-up history. A paired device can use the hosted search-backed service; an unpaired device falls back to its local DeepSeek key without claiming live search.
 - Pencil double tap: switches Page and Select modes through `UIPencilInteraction`.
 - Reading location is stored after every location change.
 - EPUB files can be imported from the system picker, opened from Files, or placed in `On My iPad/Dawn Reader`.

@@ -11,6 +11,7 @@ interface Env {
   AI_BASE_URL?: string;
   AI_API_KEY?: string;
   AI_MODEL?: string;
+  BRAVE_SEARCH_API_KEY?: string;
   DB?: D1Database;
   BOOKS?: R2Bucket;
   IMAGES: {

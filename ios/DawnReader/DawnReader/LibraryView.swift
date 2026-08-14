@@ -188,11 +188,16 @@ struct LibraryView: View {
                             ProgressView(value: book.progress)
                                 .tint(Palette.ember)
                         }
-                        .padding(22)
-                        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 22)
+                        .padding(.bottom, 68)
+                        .frame(maxWidth: .infinity, minHeight: 196, alignment: .topLeading)
                         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
                         }
                         .buttonStyle(.plain)
+                        assistantModeControl(for: book)
+                            .frame(maxWidth: .infinity, minHeight: 196, alignment: .bottomLeading)
+                            .padding(14)
                         Button(role: .destructive) {
                             bookToDelete = book
                         } label: {
@@ -215,5 +220,28 @@ struct LibraryView: View {
                     .controlSize(.large)
             }
         }
+    }
+
+    private func assistantModeControl(for book: BookRecord) -> some View {
+        HStack(spacing: 3) {
+            Text("划线后")
+                .font(.caption2.monospaced())
+                .foregroundStyle(Palette.mutedInk)
+                .padding(.horizontal, 6)
+            ForEach(BookAssistantMode.allCases) { mode in
+                Button(mode.title) {
+                    library.setAssistantMode(mode, for: book)
+                }
+                .font(.caption2.weight(.medium))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .foregroundStyle(book.effectiveAssistantMode == mode ? Color.white : Palette.mutedInk)
+                .background(book.effectiveAssistantMode == mode ? Palette.ember : .clear, in: RoundedRectangle(cornerRadius: 5))
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(book.effectiveAssistantMode == mode ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(Palette.fog.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
     }
 }

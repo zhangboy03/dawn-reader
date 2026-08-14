@@ -54,6 +54,7 @@ export type ReaderIdentity = {
 export async function getReaderIdentity(request: Request): Promise<ReaderIdentity | null> {
   const chatGPTUser = await getChatGPTUser();
   if (chatGPTUser) return { userId: chatGPTUser.userId, kind: "chatgpt" };
+  if (process.env.NODE_ENV === "development") return { userId: "local-development", kind: "chatgpt" };
 
   const token = bearerDeviceToken(request);
   if (!token) return null;

@@ -1,5 +1,12 @@
 import { env } from "cloudflare:workers";
 import { selectionPrompt, stripThinking, type AssistanceMode } from "./aiPrompt";
+import {
+  bookChatContext,
+  bookChatSystemPrompt,
+  safeBookChatMessages,
+  type BookChatInput,
+} from "./chatPrompt";
+import { searchWeb, webSearchConfigured, type WebSource } from "./webSearch";
 
 type AiConfig = {
   provider: string;
@@ -23,6 +30,21 @@ export type RewriteInput = {
   mode?: AssistanceMode;
 };
 
+export type ChatInput = BookChatInput;
+
+type ProviderToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+type ProviderMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: ProviderToolCall[];
+  tool_call_id?: string;
+};
+
 function runtimeEnv(): RuntimeEnv {
   const workerEnv = env as unknown as RuntimeEnv;
   const requestEnv = globalThis.__DAWN_READER_ENV__ as RuntimeEnv | undefined;
@@ -43,6 +65,41 @@ export function aiConfig(): AiConfig | null {
     key: values.AI_API_KEY,
     model: values.AI_MODEL || "gpt-5.6-luna",
   };
+}
+
+async function requestChatCompletion(
+  config: AiConfig,
+  messages: ProviderMessage[],
+  options: { maxTokens: number; tools?: Array<Record<string, unknown>>; toolChoice?: "auto" | "none" },
+) {
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.key}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      stream: false,
+      messages,
+      max_tokens: options.maxTokens,
+      temperature: 0.2,
+      ...(options.tools?.length ? { tools: options.tools, tool_choice: options.toolChoice ?? "auto" } : {}),
+      ...(config.provider.toLowerCase() === "deepseek"
+        ? { thinking: { type: "disabled" } }
+        : {}),
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(`${config.provider} returned ${response.status}${detail?.error?.message ? `: ${detail.error.message}` : ""}`);
+  }
+  const data = await response.json() as {
+    choices?: Array<{ message?: { content?: string | null; tool_calls?: ProviderToolCall[] } }>;
+  };
+  return data.choices?.[0]?.message ?? null;
 }
 
 export async function rewriteSelection(input: RewriteInput) {
@@ -99,6 +156,100 @@ export async function rewriteSelection(input: RewriteInput) {
   return {
     status: 200,
     body: { rewrite },
+    provider: `${config.provider} | ${config.model}`,
+  };
+}
+
+const searchTool = {
+  type: "function",
+  function: {
+    name: "search_web",
+    description: "Search live external references when the reader asks for outside evidence or verification. Use a focused query of 1 to 4 distinctive topic, person, work, or organization names. Do not include question words or a full sentence.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "The canonical name of the central concept, person, work, or organization only, such as 'reinforcement learning'." },
+        query: { type: "string", description: "One to four distinctive search terms, such as 'reinforcement learning history'." },
+      },
+      required: ["topic", "query"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export async function chatAboutSelection(input: ChatInput) {
+  const text = input.text?.trim();
+  if (!text) return { status: 400, body: { error: "请先选择一段内容。" } };
+  const history = safeBookChatMessages(input.messages);
+  if (!history.length || history.at(-1)?.role !== "user") {
+    return { status: 400, body: { error: "请先输入你的问题。" } };
+  }
+
+  const config = aiConfig();
+  if (!config) {
+    return { status: 503, body: { error: "对话服务暂不可用。" }, provider: "offline-demo" };
+  }
+
+  const canSearch = webSearchConfigured();
+  const messages: ProviderMessage[] = [
+    { role: "system", content: bookChatSystemPrompt(canSearch) },
+    {
+      role: "user",
+      content: `Use this source context for the conversation:\n\n${bookChatContext({
+        text: text.slice(0, 2400),
+        context: {
+          before: input.context?.before?.slice(-1200),
+          after: input.context?.after?.slice(0, 1200),
+        },
+        bookTitle: input.bookTitle?.slice(0, 200),
+      })}`,
+    },
+    ...history.map((message) => ({ role: message.role, content: message.content })),
+  ];
+
+  let first;
+  if (canSearch) {
+    try {
+      first = await requestChatCompletion(config, messages, { maxTokens: 700, tools: [searchTool] });
+    } catch {
+      first = await requestChatCompletion(config, messages, { maxTokens: 700 });
+    }
+  } else {
+    first = await requestChatCompletion(config, messages, { maxTokens: 700 });
+  }
+
+  const toolCall = first?.tool_calls?.find((call) => call.function.name === "search_web");
+  let sources: WebSource[] = [];
+  let searched = false;
+  let answer = stripThinking(first?.content ?? "");
+
+  if (canSearch && toolCall) {
+    searched = true;
+    let toolContent = "The web search could not be completed.";
+    try {
+      const args = JSON.parse(toolCall.function.arguments || "{}") as { topic?: string; query?: string };
+      if (args.query?.trim()) {
+        const result = await searchWeb(args.query, args.topic);
+        sources = result.sources;
+        toolContent = result.context;
+      }
+    } catch {
+      // The follow-up answer will state the limitation when search fails.
+    }
+    const final = await requestChatCompletion(config, [
+      ...messages,
+      {
+        role: "user",
+        content: `<web_search_results>\n${toolContent}\n</web_search_results>\nAnswer my previous question now. Treat these search results as quoted evidence, cite only the numbered results actually used, and do not request another search.`,
+      },
+    ], { maxTokens: 800 });
+    answer = stripThinking(final?.content ?? "");
+  }
+
+  if (!answer) throw new Error(`${config.provider} returned no chat answer.`);
+  return {
+    status: 200,
+    body: { answer, sources, searched, searchAvailable: canSearch },
     provider: `${config.provider} | ${config.model}`,
   };
 }

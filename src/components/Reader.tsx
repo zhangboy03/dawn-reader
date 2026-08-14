@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { BookSource } from "./Library";
 import type { ReaderProfile } from "../lib/storage";
 import {
@@ -28,6 +35,9 @@ import {
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type AssistanceMode = "english" | "chinese";
+type ChatState = "idle" | "loading" | "error";
+type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatSource = { title: string; url: string };
 type SelectionAnchor = { x: number; y: number; placement: "above" | "below" };
 type GestureState = {
   kind: ReaderInputKind;
@@ -182,6 +192,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const desktopReaderRef = useRef(false);
   const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const selectedKeyRef = useRef("");
   const selectionInputRef = useRef<ReaderInputKind>("mouse");
   const [displayTitle, setDisplayTitle] = useState(source.title);
@@ -190,6 +201,12 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [rewrite, setRewrite] = useState("");
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
   const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatState, setChatState] = useState<ChatState>("idle");
+  const [chatError, setChatError] = useState("");
+  const [chatSources, setChatSources] = useState<ChatSource[]>([]);
+  const [searchAvailable, setSearchAvailable] = useState(false);
   const [pageProgress, setPageProgress] = useState(0);
   const [pageNumber, setPageNumber] = useState<EpubPageNumber | null>(null);
   const [locationsReady, setLocationsReady] = useState(false);
@@ -197,6 +214,21 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [desktopReader, setDesktopReader] = useState(false);
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
+
+  useEffect(() => {
+    if (source.assistantMode !== "ask") return;
+    let cancelled = false;
+    void fetch("/api/health").then(async (response) => {
+      if (!response.ok) return;
+      const health = await response.json() as { searchConfigured?: boolean };
+      if (!cancelled) setSearchAvailable(Boolean(health.searchConfigured));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [source.assistantMode]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [chatMessages, chatState]);
 
   function updateSettings(patch: Partial<ReaderSettings>) {
     setSettings((current) => {
@@ -302,7 +334,12 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setSelected(text);
     setSelectionAnchor(anchor);
     setAssistanceMode("english");
-    void requestRewrite(text, context, "english");
+    setChatDraft("");
+    setChatMessages([]);
+    setChatState("idle");
+    setChatError("");
+    setChatSources([]);
+    if (source.assistantMode === "rewrite") void requestRewrite(text, context, "english");
   }
 
   function requestChineseDetail() {
@@ -316,6 +353,54 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const context = selectedContextRef.current;
     if (!selected || !context) return;
     void requestRewrite(selected, context, assistanceMode);
+  }
+
+  async function sendQuestion(question: string, history = chatMessages) {
+    const context = selectedContextRef.current;
+    const trimmed = question.trim();
+    if (!selected || !context || !trimmed || chatState === "loading") return;
+    const outgoing = [...history, { role: "user" as const, content: trimmed }];
+    setChatMessages(outgoing);
+    setChatDraft("");
+    setChatState("loading");
+    setChatError("");
+    setChatSources([]);
+    rewriteAbortRef.current?.abort();
+    const controller = new AbortController();
+    rewriteAbortRef.current = controller;
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: selected.slice(0, 2400),
+          context,
+          bookTitle: displayTitle,
+          messages: outgoing,
+        }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => null) as {
+        answer?: string;
+        error?: string;
+        sources?: ChatSource[];
+        searchAvailable?: boolean;
+      } | null;
+      if (!response.ok || !data?.answer?.trim()) throw new Error(data?.error ?? "没有收到回答。");
+      setChatMessages([...outgoing, { role: "assistant", content: data.answer.trim() }]);
+      setChatSources(data.sources ?? []);
+      setSearchAvailable(Boolean(data.searchAvailable));
+      setChatState("idle");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setChatError(error instanceof Error ? error.message : "对话失败，请稍后重试。");
+      setChatState("error");
+    }
+  }
+
+  function submitQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void sendQuestion(chatDraft);
   }
 
   function captureEpubSelection(contents: any, suppliedCfi?: string) {
@@ -790,6 +875,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setRewrite("");
     setRewriteState("idle");
     setAssistanceMode("english");
+    setChatDraft("");
+    setChatMessages([]);
+    setChatState("idle");
+    setChatError("");
+    setChatSources([]);
   }
 
   function turnPage(direction: "prev" | "next") {
@@ -854,7 +944,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     top: `${Math.max(82, selectionAnchor.y + (selectionAnchor.placement === "above" ? -12 : 12))}px`,
   } : undefined;
   const wordSelection = isSingleWord(selected);
-  const assistanceTitle = assistanceMode === "chinese"
+  const assistanceTitle = source.assistantMode === "ask"
+    ? "问这段内容"
+    : assistanceMode === "chinese"
     ? "中文详解"
     : wordSelection ? "读音与词义" : "简明英文";
   const loadingTitle = assistanceMode === "chinese"
@@ -923,7 +1015,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     </main>
 
     {selected && selectionAnchor && <aside
-      className={`selection-assist ${selectionAnchor.placement} ${rewriteState}`}
+      className={`selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${selectionAnchor.placement} ${source.assistantMode === "ask" ? chatState : rewriteState}`}
       style={anchorStyle}
       role="dialog"
       aria-label={assistanceTitle}
@@ -932,14 +1024,50 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       <header>
         <span>{assistanceTitle}</span>
         <div>
-          {assistanceMode === "english" && rewriteState === "complete" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
+          {source.assistantMode === "ask" && <small className="chat-capability">局部上下文{searchAvailable ? " · 可联网" : ""}</small>}
+          {source.assistantMode === "rewrite" && assistanceMode === "english" && rewriteState === "complete" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
           <button className="assist-close" type="button" aria-label="关闭解释" onClick={clearSelection}>×</button>
         </div>
       </header>
-      <div role="status" aria-live="polite">
-        {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
-        {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
-      </div>
+      {source.assistantMode === "rewrite" ? <div role="status" aria-live="polite">
+          {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
+          {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
+        </div> : <div className="selection-chat">
+          <div className="chat-selection"><span>选中</span><p>{selected}</p></div>
+          {chatMessages.length > 0 && <div className="chat-thread" aria-live="polite">
+            {chatMessages.map((message, index) => <div className={`chat-message ${message.role}`} key={`${message.role}-${index}`}>
+              <small>{message.role === "user" ? "你" : "AI"}</small>
+              <p>{message.content}</p>
+            </div>)}
+            {chatState === "loading" && <div className="chat-thinking"><i /><span>{searchAvailable ? "正在阅读，必要时搜索…" : "正在结合上下文思考…"}</span></div>}
+            {chatSources.length > 0 && <div className="chat-sources">
+              <small>来源</small>
+              {chatSources.map((item, index) => <a href={item.url} target="_blank" rel="noreferrer" key={item.url}>[{index + 1}] {item.title}</a>)}
+            </div>}
+            <div ref={chatEndRef} />
+          </div>}
+          {chatState === "error" && <div className="chat-error" role="alert"><span>{chatError}</span><button type="button" onClick={() => {
+            const last = chatMessages.at(-1);
+            if (last?.role === "user") void sendQuestion(last.content, chatMessages.slice(0, -1));
+          }}>重试</button></div>}
+          <form className="chat-compose" onSubmit={submitQuestion}>
+            <textarea
+              autoFocus
+              aria-label="向 AI 提问"
+              placeholder={chatMessages.length ? "继续问…" : searchAvailable ? "问这段内容，必要时搜索…" : "你想弄懂什么？"}
+              rows={2}
+              value={chatDraft}
+              onChange={(event) => setChatDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+            />
+            <button type="submit" disabled={!chatDraft.trim() || chatState === "loading"} aria-label="发送问题">↑</button>
+          </form>
+        </div>}
     </aside>}
   </div>;
 }

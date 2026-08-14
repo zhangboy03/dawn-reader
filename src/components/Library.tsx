@@ -19,15 +19,24 @@ import {
   type CloudBook,
 } from "../lib/cloudSync";
 import { parseReadingPosition } from "../lib/readingPosition";
+import {
+  loadBookAssistantModes,
+  saveBookAssistantMode,
+  type BookAssistantMode,
+} from "../lib/bookAssistantMode";
 import { DeviceSync } from "./DeviceSync";
 
-export type BookSource = { type: "text"; title: string; text: string } | { type: "epub"; id?: string; title: string; file: File };
+export type BookSource = (
+  { type: "text"; title: string; text: string }
+  | { type: "epub"; id?: string; title: string; file: File }
+) & { assistantMode: BookAssistantMode };
 
 type AiHealth = {
   provider: string;
   model: string | null;
   configured: boolean;
   pendingProvider: string | null;
+  searchConfigured?: boolean;
 };
 
 type ShelfBook = StoredBook & {
@@ -89,7 +98,7 @@ function AiStatus() {
       if (!response.ok) throw new Error("状态检查失败");
       setHealth(await response.json());
     } catch {
-      setHealth({ provider: "offline-demo", model: null, configured: false, pendingProvider: "deepseek" });
+      setHealth({ provider: "offline-demo", model: null, configured: false, pendingProvider: "deepseek", searchConfigured: false });
     }
   }, []);
 
@@ -123,7 +132,7 @@ function AiStatus() {
 
   const waitingForKey = !health?.configured && health?.pendingProvider === "deepseek";
   return <aside className={`ai-status ${testState === "passed" ? "verified" : ""}`} aria-label="AI 连接状态">
-    <div><strong>AI</strong><span>{message || (waitingForKey ? "等待 API 密钥" : health?.model ? `${health.provider} · ${health.model}` : "离线")}</span></div>
+    <div><strong>AI</strong><span>{message || (waitingForKey ? "等待 API 密钥" : health?.model ? `${health.provider} · ${health.model}${health.searchConfigured ? " · 可联网" : ""}` : "离线")}</span></div>
     <button disabled={!health?.configured || testState === "testing"} onClick={testConnection}>
       {testState === "testing" ? "测试中…" : testState === "passed" ? "重测" : "测试"}
     </button>
@@ -174,6 +183,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
+  const [bookAssistantModes, setBookAssistantModes] = useState(loadBookAssistantModes);
 
   useEffect(() => {
     libraryMountedRef.current = true;
@@ -314,11 +324,22 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
               setSyncState("local");
             }
           }
-          if (supported.length === 1 && !alreadyKnown) singleBookToOpen = { type: "epub", id: stored.id, title: stored.title, file };
+          if (supported.length === 1 && !alreadyKnown) singleBookToOpen = {
+            type: "epub",
+            id: stored.id,
+            title: stored.title,
+            file,
+            assistantMode: bookAssistantModes[stored.id] ?? "rewrite",
+          };
         } else {
           importedCount += 1;
           if (supported.length === 1) {
-            singleBookToOpen = { type: "text", title: file.name.replace(/\.(txt|md|markdown)$/i, ""), text: await file.text() };
+            singleBookToOpen = {
+              type: "text",
+              title: file.name.replace(/\.(txt|md|markdown)$/i, ""),
+              text: await file.text(),
+              assistantMode: "rewrite",
+            };
           }
         }
       } catch {
@@ -350,7 +371,13 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       } else {
         throw new Error("这本书尚未同步到当前设备。");
       }
-      onOpen({ type: "epub", id: book.id, title: book.title, file });
+      onOpen({
+        type: "epub",
+        id: book.id,
+        title: book.title,
+        file,
+        assistantMode: bookAssistantModes[book.id] ?? "rewrite",
+      });
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "打开失败");
       setOpeningId(null);
@@ -380,6 +407,10 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function chooseAssistantMode(bookId: string, mode: BookAssistantMode) {
+    setBookAssistantModes(saveBookAssistantMode(bookId, mode));
   }
 
   const syncLabel = {
@@ -448,15 +479,22 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
       {storedBooks.length > 0 && <>
         <div className="section-heading"><h2>继续阅读</h2></div>
         <div className="stored-shelf">
-          {storedBooks.map((book) => <article className="stored-book" key={book.id}>
+          {storedBooks.map((book) => {
+            const assistantMode = bookAssistantModes[book.id] ?? "rewrite";
+            return <article className="stored-book" key={book.id}>
             <button className="book-open" disabled={openingId === book.id || deletingId === book.id} onClick={() => void openBook(book)}>
               <BookCover book={book} />
               <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
+            <div className="book-assistant-choice" role="group" aria-label={`《${book.title}》划线后的 AI 用法`}>
+              <small>划线后</small>
+              <button className={assistantMode === "rewrite" ? "active" : ""} aria-pressed={assistantMode === "rewrite"} onClick={() => chooseAssistantMode(book.id, "rewrite")}>英文改写</button>
+              <button className={assistantMode === "ask" ? "active" : ""} aria-pressed={assistantMode === "ask"} onClick={() => chooseAssistantMode(book.id, "ask")}>AI 提问</button>
+            </div>
             <button className="book-delete" disabled={deletingId === book.id} onClick={() => setBookToDelete(book)} aria-label={`从书架删除《${book.title}》`}>
               <span aria-hidden="true">×</span> 删除
             </button>
-          </article>)}
+          </article>;})}
         </div>
       </>}
       {storedBooks.length === 0 && <div className={`library-state ${syncState}`} aria-live="polite">

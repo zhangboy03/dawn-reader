@@ -1,5 +1,19 @@
 import Foundation
 
+enum BookAssistantMode: String, Codable, CaseIterable, Identifiable {
+    case rewrite
+    case ask
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .rewrite: "英文改写"
+        case .ask: "AI 提问"
+        }
+    }
+}
+
 struct BookRecord: Codable, Identifiable, Equatable {
     let id: UUID
     var title: String
@@ -12,6 +26,7 @@ struct BookRecord: Codable, Identifiable, Equatable {
     var originalFileName: String?
     var addedAt: String?
     var progressUpdatedAt: String?
+    var assistantMode: BookAssistantMode?
 
     init(
         id: UUID = UUID(),
@@ -24,7 +39,8 @@ struct BookRecord: Codable, Identifiable, Equatable {
         fileSize: Int? = nil,
         originalFileName: String? = nil,
         addedAt: String? = nil,
-        progressUpdatedAt: String? = nil
+        progressUpdatedAt: String? = nil,
+        assistantMode: BookAssistantMode? = .rewrite
     ) {
         self.id = id
         self.title = title
@@ -37,5 +53,8 @@ struct BookRecord: Codable, Identifiable, Equatable {
         self.originalFileName = originalFileName
         self.addedAt = addedAt
         self.progressUpdatedAt = progressUpdatedAt
+        self.assistantMode = assistantMode
     }
+
+    var effectiveAssistantMode: BookAssistantMode { assistantMode ?? .rewrite }
 }

@@ -53,6 +53,23 @@ struct CloudBookList: Codable, Sendable {
     let deletedBooks: [CloudDeletedBook]?
 }
 
+struct ReaderChatMessage: Codable, Equatable, Sendable {
+    let role: String
+    let content: String
+}
+
+struct ReaderChatSource: Codable, Equatable, Sendable {
+    let title: String
+    let url: URL
+}
+
+struct ReaderChatResponse: Codable, Equatable, Sendable {
+    let answer: String
+    let sources: [ReaderChatSource]
+    let searched: Bool
+    let searchAvailable: Bool
+}
+
 private struct CloudProgressResponse: Codable, Sendable {
     let position: CloudReadingPosition?
 }
@@ -169,6 +186,41 @@ enum DawnSyncClient {
             body: body,
             contentType: "application/json"
         )
+    }
+
+    static func chat(
+        token: String,
+        context: RewriteContext,
+        title: String,
+        messages: [ReaderChatMessage]
+    ) async throws -> ReaderChatResponse {
+        struct Input: Encodable {
+            struct Context: Encodable {
+                let before: String
+                let after: String
+            }
+            let text: String
+            let context: Context
+            let bookTitle: String
+            let messages: [ReaderChatMessage]
+        }
+        let body = try JSONEncoder().encode(Input(
+            text: String(context.highlight.prefix(2400)),
+            context: .init(
+                before: String(context.before.suffix(1200)),
+                after: String(context.after.prefix(1200))
+            ),
+            bookTitle: String(title.prefix(200)),
+            messages: Array(messages.suffix(10))
+        ))
+        let data = try await send(
+            path: "/api/chat",
+            token: token,
+            method: "POST",
+            body: body,
+            contentType: "application/json"
+        )
+        return try JSONDecoder().decode(ReaderChatResponse.self, from: data)
     }
 
     private static func pathComponent(_ value: String) -> String {

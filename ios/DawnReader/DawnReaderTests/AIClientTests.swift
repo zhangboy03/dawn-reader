@@ -62,6 +62,20 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[0].content.contains("解释："))
     }
 
+    func testChatPromptKeepsSelectionAndConversationHistory() {
+        let body = AIClient.makeChatBody(
+            context: .init(before: "before", highlight: "课程原文", after: "after"),
+            title: "Course",
+            messages: [.init(role: "user", content: "这句话是什么意思？")],
+            model: "deepseek-v4-flash"
+        )
+        XCTAssertEqual(body.maxTokens, 700)
+        XCTAssertTrue(body.messages[1].content.contains("<selection>\n课程原文\n</selection>"))
+        XCTAssertEqual(body.messages.last?.role, "user")
+        XCTAssertEqual(body.messages.last?.content, "这句话是什么意思？")
+        XCTAssertTrue(body.messages[0].content.contains("no live web access"))
+    }
+
     func testSelectionScriptUsesBothCaretAPIs() {
         let script = PencilSelectionScript.make(
             start: CGPoint(x: 20, y: 30),

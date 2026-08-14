@@ -1,4 +1,5 @@
 import { aiConfig } from "../../../src/server/ai";
+import { webSearchConfigured } from "../../../src/server/webSearch";
 import { isAuthorizedReaderRequest } from "../../chatgpt-auth";
 
 export async function GET() {
@@ -10,6 +11,7 @@ export async function GET() {
     provider: config?.provider ?? "offline-demo",
     model: config?.model ?? null,
     configured: Boolean(config),
+    searchConfigured: webSearchConfigured(),
     pendingProvider: config ? null : "deepseek",
   });
 }

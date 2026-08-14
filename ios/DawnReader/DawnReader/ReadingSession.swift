@@ -17,14 +17,24 @@ final class ReadingSession: ObservableObject {
         case failed(String)
     }
 
+    enum ChatState: Equatable {
+        case idle
+        case loading
+        case failed(String)
+    }
+
     @Published var pencilMode: PencilMode
     @Published var selectedText = ""
     @Published var selectionFrame: CGRect?
     @Published var rewriteState: RewriteState = .idle
     @Published var assistanceMode: AssistanceMode = .english
     @Published var progress = 0.0
+    @Published var chatMessages: [ReaderChatMessage] = []
+    @Published var chatSources: [ReaderChatSource] = []
+    @Published var chatState: ChatState = .idle
 
     let title: String
+    let assistantMode: BookAssistantMode
     let settings: SettingsStore
     var goForward: (() -> Void)?
     var goBackward: (() -> Void)?
@@ -38,6 +48,7 @@ final class ReadingSession: ObservableObject {
 
     init(book: BookRecord, settings: SettingsStore, persist: @escaping (String, Double) -> Void) {
         title = book.title
+        assistantMode = book.effectiveAssistantMode
         progress = book.progress
         self.settings = settings
         pencilMode = settings.pencilMode
@@ -60,11 +71,18 @@ final class ReadingSession: ObservableObject {
         selectedText = highlight
         selectionFrame = selection.frame
         assistanceMode = .english
-        rewriteState = .loading
         rewriteTask?.cancel()
 
         let context = RewriteContext(before: text.before ?? "", highlight: highlight, after: text.after ?? "")
         selectedContext = context
+        chatMessages = []
+        chatSources = []
+        chatState = .idle
+        guard assistantMode == .rewrite else {
+            rewriteState = .idle
+            return
+        }
+        rewriteState = .loading
         let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         rewriteTask = Task {
@@ -104,6 +122,51 @@ final class ReadingSession: ObservableObject {
         }
     }
 
+    func ask(_ question: String) {
+        guard assistantMode == .ask,
+              let context = selectedContext else { return }
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, chatState != .loading else { return }
+        let outgoing = chatMessages + [.init(role: "user", content: trimmed)]
+        chatMessages = outgoing
+        chatSources = []
+        chatState = .loading
+        rewriteTask?.cancel()
+
+        let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let syncToken = DawnSyncClient.normalizePairingCode(settings.syncCode)
+        rewriteTask = Task {
+            do {
+                if let syncToken {
+                    let response = try await DawnSyncClient.chat(
+                        token: syncToken,
+                        context: context,
+                        title: title,
+                        messages: outgoing
+                    )
+                    guard !Task.isCancelled else { return }
+                    chatMessages.append(.init(role: "assistant", content: response.answer))
+                    chatSources = response.sources
+                } else {
+                    let answer = try await AIClient.chat(
+                        context: context,
+                        title: title,
+                        messages: outgoing,
+                        apiKey: apiKey,
+                        model: model
+                    )
+                    guard !Task.isCancelled else { return }
+                    chatMessages.append(.init(role: "assistant", content: answer))
+                }
+                chatState = .idle
+            } catch {
+                guard !Task.isCancelled else { return }
+                chatState = .failed(error.localizedDescription)
+            }
+        }
+    }
+
     func clearSelection() {
         rewriteTask?.cancel()
         rewriteTask = nil
@@ -113,6 +176,9 @@ final class ReadingSession: ObservableObject {
         selectionFrame = nil
         assistanceMode = .english
         rewriteState = .idle
+        chatMessages = []
+        chatSources = []
+        chatState = .idle
         clearNativeSelection?()
     }
 

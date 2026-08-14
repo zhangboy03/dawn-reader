@@ -120,6 +120,12 @@ final class LibraryModel: ObservableObject {
         openedBook = nil
     }
 
+    func setAssistantMode(_ mode: BookAssistantMode, for record: BookRecord) {
+        guard let index = books.firstIndex(where: { $0.id == record.id }) else { return }
+        books[index].assistantMode = mode
+        saveBooks()
+    }
+
     func delete(_ record: BookRecord, settings: SettingsStore) async {
         guard !isWorking else { return }
         isWorking = true
