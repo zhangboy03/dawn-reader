@@ -15,8 +15,8 @@ export function LandingPage() {
       <section className="landing-hero">
         <div className="landing-intro">
           <h1>
-            读原文。
-            <span>读下去。</span>
+            <span className="landing-headline-line">读原文。</span>
+            <span className="landing-headline-line landing-headline-line-accent">读下去。</span>
           </h1>
           <a className="landing-primary" href="/reader">
             开始阅读
