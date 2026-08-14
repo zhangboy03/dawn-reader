@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -17,6 +18,7 @@ import {
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { isSingleWord } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
+import { restoredScrollTop, visualAnchorPoints } from "../lib/readingAnchor";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
   pageNumberFromLocation,
@@ -54,6 +56,12 @@ type GestureState = {
 };
 type CaretPoint = { node: Node; offset: number };
 type StageGesture = { startX: number; startY: number; width: number; pointerId: number };
+type EpubAppearanceAnchor = { cfi: string; revision: number };
+type TextAppearanceAnchor = {
+  target: Node | HTMLElement;
+  offset?: number;
+  viewportTop: number;
+};
 
 function isPageTurnControlTarget(target: EventTarget | null) {
   const element = target as { closest?: (selector: string) => Element | null } | null;
@@ -94,6 +102,25 @@ function caretPointFromCoordinates(document: Document, x: number, y: number): Ca
   if (position?.offsetNode) return { node: position.offsetNode, offset: position.offset };
   const range = caretDocument.caretRangeFromPoint?.(x, y);
   return range ? { node: range.startContainer, offset: range.startOffset } : null;
+}
+
+function caretRange(document: Document, point: CaretPoint) {
+  try {
+    const range = document.createRange();
+    range.setStart(point.node, point.offset);
+    range.collapse(true);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
+function viewportTopForTextAnchor(anchor: TextAppearanceAnchor) {
+  if (anchor.target instanceof HTMLElement) return anchor.target.getBoundingClientRect().top;
+  const document = anchor.target.ownerDocument;
+  if (!document || anchor.offset === undefined) return null;
+  const range = caretRange(document, { node: anchor.target, offset: anchor.offset });
+  return range?.getBoundingClientRect().top ?? null;
 }
 
 function selectBetween(document: Document, start: CaretPoint, end: CaretPoint) {
@@ -177,6 +204,7 @@ function contextFromDomSelection(selection: Selection, limit = 700): RewriteCont
 
 export function Reader({ source, profile, onClose }: { source: BookSource; profile: ReaderProfile; onClose: () => void }) {
   const epubRef = useRef<HTMLDivElement>(null);
+  const readingStageRef = useRef<HTMLElement>(null);
   const bookRef = useRef<any>(null);
   const renditionRef = useRef<any>(null);
   const selectedCfiRef = useRef<string | null>(null);
@@ -184,6 +212,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const selectedContextRef = useRef<RewriteContext | null>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
   const reflowTimerRef = useRef<number | null>(null);
+  const appearanceRevisionRef = useRef(0);
+  const pendingEpubAppearanceAnchorRef = useRef<EpubAppearanceAnchor | null>(null);
+  const pendingTextAppearanceAnchorRef = useRef<TextAppearanceAnchor | null>(null);
+  const appearanceReflowingRef = useRef(false);
   const cloudProgressTimerRef = useRef<number | null>(null);
   const pendingCloudProgressRef = useRef<ReturnType<typeof saveReadingPosition> | null>(null);
   const pencilModeRef = useRef(loadReaderSettings().pencilMode);
@@ -230,7 +262,72 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [chatMessages, chatState]);
 
+  function captureEpubAppearanceAnchor() {
+    const rendition = renditionRef.current;
+    const frame = epubRef.current?.getBoundingClientRect();
+    if (!rendition || !frame) return null;
+
+    for (const contents of rendition.getContents?.() ?? []) {
+      const document = contents?.document as Document | undefined;
+      const iframe = document?.defaultView?.frameElement as HTMLElement | null;
+      if (!document || !iframe) continue;
+      const iframeRect = iframe.getBoundingClientRect();
+      const left = Math.max(frame.left, iframeRect.left);
+      const top = Math.max(frame.top, iframeRect.top);
+      const right = Math.min(frame.right, iframeRect.right);
+      const bottom = Math.min(frame.bottom, iframeRect.bottom);
+      if (right <= left || bottom <= top) continue;
+
+      for (const point of visualAnchorPoints({ left, top, width: right - left, height: bottom - top })) {
+        const caret = caretPointFromCoordinates(document, point.x - iframeRect.left, point.y - iframeRect.top);
+        if (!caret || !closestTextBlock(caret.node)?.textContent?.trim()) continue;
+        const range = caretRange(document, caret);
+        if (!range) continue;
+        try {
+          const cfi = contents.cfiFromRange(range);
+          if (cfi) return cfi as string;
+        } catch {
+          // Try another visible text point before falling back to the page CFI.
+        }
+      }
+    }
+    return rendition.currentLocation?.()?.start?.cfi ?? null;
+  }
+
+  function captureTextAppearanceAnchor() {
+    const stage = readingStageRef.current;
+    if (!stage) return null;
+    const rect = stage.getBoundingClientRect();
+    for (const point of visualAnchorPoints(rect)) {
+      const caret = caretPointFromCoordinates(document, point.x, point.y);
+      const paragraph = closestTextBlock(caret?.node ?? null)?.closest<HTMLElement>(".reader-paragraph");
+      if (caret && paragraph) {
+        const range = caretRange(document, caret);
+        const viewportTop = range?.getBoundingClientRect().top;
+        if (viewportTop !== undefined) return { target: caret.node, offset: caret.offset, viewportTop };
+      }
+      if (paragraph) return { target: paragraph, viewportTop: paragraph.getBoundingClientRect().top };
+    }
+    const paragraph = Array.from(stage.querySelectorAll<HTMLElement>(".reader-paragraph"))
+      .find((element) => element.getBoundingClientRect().bottom > rect.top);
+    return paragraph ? { target: paragraph, viewportTop: paragraph.getBoundingClientRect().top } : null;
+  }
+
+  function preserveAppearanceAnchor() {
+    if (source.type === "epub") {
+      const cfi = pendingEpubAppearanceAnchorRef.current?.cfi ?? captureEpubAppearanceAnchor();
+      if (!cfi) return;
+      pendingEpubAppearanceAnchorRef.current = {
+        cfi,
+        revision: ++appearanceRevisionRef.current,
+      };
+      return;
+    }
+    pendingTextAppearanceAnchorRef.current ??= captureTextAppearanceAnchor();
+  }
+
   function updateSettings(patch: Partial<ReaderSettings>) {
+    if (patch.fontSize || patch.lineHeight || patch.pageWidth || patch.theme) preserveAppearanceAnchor();
     setSettings((current) => {
       const next = { ...current, ...patch };
       pencilModeRef.current = next.pencilMode;
@@ -619,19 +716,45 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
-    const currentCfi = rendition.currentLocation?.()?.start?.cfi;
+    const anchor = pendingEpubAppearanceAnchorRef.current;
+    const currentCfi = anchor?.cfi ?? rendition.currentLocation?.()?.start?.cfi;
     applyEpubTheme(rendition);
     rendition.spread?.("auto", 900);
     if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
     reflowTimerRef.current = window.setTimeout(() => {
+      const frame = epubRef.current?.getBoundingClientRect();
+      appearanceReflowingRef.current = true;
+      if (frame) rendition.resize?.(Math.max(1, Math.floor(frame.width)), Math.max(1, Math.floor(frame.height)), currentCfi);
       rendition.clear?.();
-      void rendition.display?.(currentCfi);
+      Promise.resolve(rendition.display?.(currentCfi)).finally(() => {
+        appearanceReflowingRef.current = false;
+        if (!anchor || pendingEpubAppearanceAnchorRef.current?.revision === anchor.revision) {
+          pendingEpubAppearanceAnchorRef.current = null;
+        }
+      });
     }, 60);
     return () => {
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme]);
+
+  useLayoutEffect(() => {
+    if (source.type !== "text") return;
+    const anchor = pendingTextAppearanceAnchorRef.current;
+    const stage = readingStageRef.current;
+    if (!anchor || !stage) return;
+    const nextViewportTop = viewportTopForTextAnchor(anchor);
+    if (nextViewportTop !== null) {
+      stage.scrollTop = restoredScrollTop(
+        stage.scrollTop,
+        anchor.viewportTop,
+        nextViewportTop,
+        stage.scrollHeight - stage.clientHeight,
+      );
+    }
+    pendingTextAppearanceAnchorRef.current = null;
+  }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme, source.type]);
 
   useEffect(() => {
     if (source.type !== "epub" || !epubRef.current) return;
@@ -766,6 +889,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         if (width < 1 || height < 1 || (Math.abs(width - observedWidth) < 2 && Math.abs(height - observedHeight) < 2)) return;
         observedWidth = width;
         observedHeight = height;
+        if (pendingEpubAppearanceAnchorRef.current || appearanceReflowingRef.current) return;
         if (frameResizeTimer) window.clearTimeout(frameResizeTimer);
         frameResizeTimer = window.setTimeout(() => {
           const currentCfi = rendition.currentLocation?.()?.start?.cfi;
@@ -975,6 +1099,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     </header>
 
     <main
+      ref={readingStageRef}
       className={`reading-stage ${source.type === "epub" ? "epub-stage" : ""}`}
       style={paperStyle}
       onPointerDown={handleStagePointerDown}
