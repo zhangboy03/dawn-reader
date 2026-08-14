@@ -19,6 +19,13 @@ import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContex
 import { isSingleWord } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { restoredScrollTop, visualAnchorPoints } from "../lib/readingAnchor";
+import {
+  epubFrameSize,
+  epubReflowAction,
+  mergeEpubReflowRequest,
+  type EpubFrameSize,
+  type EpubReflowRequest,
+} from "../lib/epubReflow";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
   pageNumberFromLocation,
@@ -213,9 +220,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const rewriteAbortRef = useRef<AbortController | null>(null);
   const reflowTimerRef = useRef<number | null>(null);
   const appearanceRevisionRef = useRef(0);
+  const epubReflowRevisionRef = useRef(0);
   const pendingEpubAppearanceAnchorRef = useRef<EpubAppearanceAnchor | null>(null);
+  const pendingEpubReflowRef = useRef<EpubReflowRequest | null>(null);
+  const activeEpubReflowRef = useRef<EpubReflowRequest | null>(null);
+  const epubFrameSizeRef = useRef<EpubFrameSize | null>(null);
+  const epubReadyRef = useRef(false);
   const pendingTextAppearanceAnchorRef = useRef<TextAppearanceAnchor | null>(null);
-  const appearanceReflowingRef = useRef(false);
   const cloudProgressTimerRef = useRef<number | null>(null);
   const pendingCloudProgressRef = useRef<ReturnType<typeof saveReadingPosition> | null>(null);
   const pencilModeRef = useRef(loadReaderSettings().pencilMode);
@@ -311,6 +322,86 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const paragraph = Array.from(stage.querySelectorAll<HTMLElement>(".reader-paragraph"))
       .find((element) => element.getBoundingClientRect().bottom > rect.top);
     return paragraph ? { target: paragraph, viewportTop: paragraph.getBoundingClientRect().top } : null;
+  }
+
+  function clearSettledAppearanceAnchor(request: EpubReflowRequest) {
+    const pendingAppearance = pendingEpubAppearanceAnchorRef.current;
+    if (
+      request.appearance
+      && pendingAppearance
+      && pendingAppearance.revision <= request.appearanceRevision
+      && !pendingEpubReflowRef.current
+    ) {
+      pendingEpubAppearanceAnchorRef.current = null;
+    }
+  }
+
+  function finishEpubReflow() {
+    const completed = activeEpubReflowRef.current;
+    if (!completed) return;
+    activeEpubReflowRef.current = null;
+    const frame = epubRef.current?.getBoundingClientRect();
+    if (frame) epubFrameSizeRef.current = epubFrameSize(frame);
+    if (pendingEpubReflowRef.current) {
+      if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
+      reflowTimerRef.current = window.setTimeout(flushEpubReflow, 0);
+      return;
+    }
+    clearSettledAppearanceAnchor(completed);
+  }
+
+  function flushEpubReflow() {
+    reflowTimerRef.current = null;
+    if (activeEpubReflowRef.current || !epubReadyRef.current) return;
+    const rendition = renditionRef.current;
+    const frame = epubRef.current?.getBoundingClientRect();
+    const request = pendingEpubReflowRef.current;
+    const nextSize = frame ? epubFrameSize(frame) : null;
+    if (!rendition || !request || !nextSize) return;
+
+    const action = epubReflowAction(request, epubFrameSizeRef.current, nextSize);
+    pendingEpubReflowRef.current = null;
+    if (action === "none") {
+      epubFrameSizeRef.current = nextSize;
+      clearSettledAppearanceAnchor(request);
+      return;
+    }
+
+    activeEpubReflowRef.current = request;
+    try {
+      if (action === "resize") {
+        epubFrameSizeRef.current = nextSize;
+        rendition.resize?.(nextSize.width, nextSize.height, request.anchor ?? undefined);
+      } else {
+        rendition.clear?.();
+        Promise.resolve(rendition.display?.(request.anchor ?? undefined)).catch(finishEpubReflow);
+      }
+    } catch {
+      finishEpubReflow();
+    }
+  }
+
+  function requestEpubReflow(appearance: boolean, delay = 120) {
+    if (!epubReadyRef.current || !renditionRef.current) return;
+    const appearanceAnchor = pendingEpubAppearanceAnchorRef.current;
+    const queuedAnchor = pendingEpubReflowRef.current?.anchor
+      ?? activeEpubReflowRef.current?.anchor;
+    const anchor = appearanceAnchor?.cfi
+      ?? queuedAnchor
+      ?? captureEpubAppearanceAnchor()
+      ?? renditionRef.current.currentLocation?.()?.start?.cfi
+      ?? null;
+    pendingEpubReflowRef.current = mergeEpubReflowRequest(
+      pendingEpubReflowRef.current,
+      {
+        anchor,
+        appearance: appearance || Boolean(appearanceAnchor),
+        appearanceRevision: appearanceAnchor?.revision ?? 0,
+        revision: ++epubReflowRevisionRef.current,
+      },
+    );
+    if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
+    reflowTimerRef.current = window.setTimeout(flushEpubReflow, delay);
   }
 
   function preserveAppearanceAnchor() {
@@ -716,26 +807,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
-    const anchor = pendingEpubAppearanceAnchorRef.current;
-    const currentCfi = anchor?.cfi ?? rendition.currentLocation?.()?.start?.cfi;
     applyEpubTheme(rendition);
     rendition.spread?.("auto", 900);
-    if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
-    reflowTimerRef.current = window.setTimeout(() => {
-      const frame = epubRef.current?.getBoundingClientRect();
-      appearanceReflowingRef.current = true;
-      if (frame) rendition.resize?.(Math.max(1, Math.floor(frame.width)), Math.max(1, Math.floor(frame.height)), currentCfi);
-      rendition.clear?.();
-      Promise.resolve(rendition.display?.(currentCfi)).finally(() => {
-        appearanceReflowingRef.current = false;
-        if (!anchor || pendingEpubAppearanceAnchorRef.current?.revision === anchor.revision) {
-          pendingEpubAppearanceAnchorRef.current = null;
-        }
-      });
-    }, 60);
-    return () => {
-      if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
-    };
+    requestEpubReflow(true, 80);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme]);
 
@@ -763,7 +837,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     let cancelled = false;
     let book: any;
     let frameResizeObserver: ResizeObserver | null = null;
-    let frameResizeTimer: number | null = null;
     const progressKey = `dawn-reader-progress:${source.id ?? source.file.name}`;
     let canPersistProgress = false;
     let locationsGenerated = false;
@@ -790,6 +863,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         resizeOnOrientationChange: false,
       });
       renditionRef.current = rendition;
+      epubReadyRef.current = false;
+      epubFrameSizeRef.current = epubFrameSize(initialFrame);
+      pendingEpubReflowRef.current = null;
+      activeEpubReflowRef.current = null;
       applyEpubTheme(rendition);
       rendition.hooks.content.register((contents: any) => {
         const document = contents.document as Document;
@@ -881,29 +958,25 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       rendition.on("selected", (cfiRange: string, contents: any) => {
         captureEpubSelection(contents, cfiRange);
       });
-      let observedWidth = Math.floor(initialFrame.width);
-      let observedHeight = Math.floor(initialFrame.height);
       frameResizeObserver = new ResizeObserver(([entry]) => {
-        const width = Math.floor(entry.contentRect.width);
-        const height = Math.floor(entry.contentRect.height);
-        if (width < 1 || height < 1 || (Math.abs(width - observedWidth) < 2 && Math.abs(height - observedHeight) < 2)) return;
-        observedWidth = width;
-        observedHeight = height;
-        if (pendingEpubAppearanceAnchorRef.current || appearanceReflowingRef.current) return;
-        if (frameResizeTimer) window.clearTimeout(frameResizeTimer);
-        frameResizeTimer = window.setTimeout(() => {
-          const currentCfi = rendition.currentLocation?.()?.start?.cfi;
-          rendition.resize(width, height, currentCfi);
-        }, 120);
+        if (!epubReadyRef.current || !epubFrameSize(entry.contentRect)) return;
+        requestEpubReflow(false, 120);
       });
       frameResizeObserver.observe(epubRef.current);
       rendition.on("relocated", (location: { start?: { cfi?: string; percentage?: number } }) => {
         const cfi = location.start?.cfi ?? null;
         const ratio = location.start?.percentage ?? (locationsGenerated && cfi ? book.locations.percentageFromCfi(cfi) : 0);
         const percentage = Math.round(ratio * 100);
+        if (!epubReadyRef.current) {
+          epubReadyRef.current = true;
+          const readyFrame = epubRef.current?.getBoundingClientRect();
+          if (readyFrame) epubFrameSizeRef.current = epubFrameSize(readyFrame);
+          if (pendingEpubAppearanceAnchorRef.current) requestEpubReflow(true, 0);
+        }
         setPageProgress(percentage);
         if (locationsGenerated) updatePageNumber(cfi);
         if (canPersistProgress && cfi) persistProgress(progressKey, cfi, percentage);
+        finishEpubReflow();
       });
       await rendition.display(savedPosition?.cfi ?? undefined);
       await book.locations.generate(1200);
@@ -945,10 +1018,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     });
     return () => {
       cancelled = true;
+      epubReadyRef.current = false;
+      pendingEpubReflowRef.current = null;
+      activeEpubReflowRef.current = null;
+      epubFrameSizeRef.current = null;
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
       if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
       if (selectionTimerRef.current) window.clearTimeout(selectionTimerRef.current);
-      if (frameResizeTimer) window.clearTimeout(frameResizeTimer);
       frameResizeObserver?.disconnect();
       if (cloudProgressTimerRef.current) window.clearTimeout(cloudProgressTimerRef.current);
       if (source.id && pendingCloudProgressRef.current) {
@@ -1077,7 +1153,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     ? "正在生成中文解释…"
     : wordSelection ? "正在查询读音与词义…" : "正在生成简明英文…";
 
-  return <div className={`reader-shell reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
+  return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
     <header className="reader-topbar">
       <button className="back-button" onClick={onClose}>← <span>书架</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`}</small>}</div>
@@ -1114,7 +1190,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           {textParagraphs.map((paragraph, index) => <p className="reader-paragraph" data-paragraph-index={index} key={index}>{paragraph}</p>)}
         </div>
       </article> : <div className={`epub-frame epub-${settings.theme}`} style={{ maxWidth: readingWidth }} ref={epubRef} />}
-      {source.type === "epub" && <div className="page-controls" style={{ maxWidth: readingWidth }}>
+    </main>
+
+    {source.type === "epub" && <nav className="reader-bottombar" aria-label="阅读导航">
+      <div className="page-controls" style={{ maxWidth: readingWidth }}>
         <button onClick={() => turnPage("prev")} aria-label="上一页">←</button>
         <label className="progress-scrubber">
           <input
@@ -1136,8 +1215,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           </span>
         </label>
         <button onClick={() => turnPage("next")} aria-label="下一页">→</button>
-      </div>}
-    </main>
+      </div>
+    </nav>}
 
     {selected && selectionAnchor && <aside
       className={`selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${selectionAnchor.placement} ${source.assistantMode === "ask" ? chatState : rewriteState}`}
