@@ -6,7 +6,14 @@ body:has(.landing) {
   --landing-night: #06101a;
   --landing-paper: #eee6da;
   --landing-sun: #e56f3b;
-  --landing-gutter: clamp(16px, 4vw, 48px);
+  --landing-gutter: clamp(16px, 5vw, 72px);
+  --landing-nav-height: clamp(56px, 20svh, 72px);
+  /* One coordinate system at every width: narrow screens separate the two
+     anchored layers vertically, then converge continuously as room appears. */
+  --landing-stack-shift: min(
+    clamp(0px, calc(600px - 100vw), 132px),
+    clamp(0px, calc(100svh - 301px), 132px)
+  );
   min-height: 100vh;
   min-height: 100svh;
   overflow-x: clip;
@@ -34,7 +41,7 @@ body:has(.landing) {
 }
 
 .landing-nav {
-  min-height: calc(64px + env(safe-area-inset-top));
+  min-height: calc(var(--landing-nav-height) + env(safe-area-inset-top));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -45,43 +52,45 @@ body:has(.landing) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 15px;
+  font-size: clamp(15px, 2.4vw, 17px);
   font-weight: 650;
   letter-spacing: -.025em;
 }
 
 .landing-brand img {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: clamp(34px, 6vw, 40px);
+  height: clamp(34px, 6vw, 40px);
+  border-radius: clamp(8px, 1.5vw, 10px);
 }
 
 .landing-github {
   padding: 12px 0;
-  font-size: 15px;
+  font-size: clamp(15px, 2.2vw, 16px);
   font-weight: 600;
   transition: color .2s cubic-bezier(.16, 1, .3, 1);
 }
 
 .landing-hero {
-  min-height: calc(100vh - 64px - env(safe-area-inset-top));
-  min-height: calc(100svh - 64px - env(safe-area-inset-top));
+  min-height: calc(100vh - var(--landing-nav-height) - env(safe-area-inset-top));
+  min-height: calc(100svh - var(--landing-nav-height) - env(safe-area-inset-top));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  align-content: center;
-  gap: clamp(8px, 2vh, 20px);
-  padding-top: clamp(24px, 5vh, 52px);
+  align-items: center;
+  padding-top: clamp(20px, 4vh, 44px);
   padding-bottom: max(clamp(20px, 4vh, 44px), env(safe-area-inset-bottom));
 }
 
 .landing-intro {
+  grid-area: 1 / 1;
+  justify-self: start;
   position: relative;
   z-index: 1;
+  transform: translateY(calc(0px - var(--landing-stack-shift)));
 }
 
 .landing h1 {
   margin: 0;
-  font-size: clamp(46px, 14vw, 76px);
+  font-size: clamp(42px, min(7.2vw, 15svh), 110px);
   font-weight: 680;
   line-height: .96;
   letter-spacing: -.075em;
@@ -101,11 +110,11 @@ body:has(.landing) {
 
 .landing-primary {
   min-width: 158px;
-  min-height: 56px;
+  min-height: clamp(48px, 12svh, 56px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: clamp(24px, 4vh, 36px);
+  margin-top: clamp(16px, min(3.5vw, 5svh), 42px);
   padding: 0 24px;
   border-radius: 10px;
   color: var(--landing-night) !important;
@@ -124,137 +133,19 @@ body:has(.landing) {
 }
 
 .landing-visual {
+  grid-area: 1 / 1;
+  justify-self: end;
   min-width: 0;
   display: grid;
-  place-items: center;
+  place-items: center end;
+  transform: translateY(var(--landing-stack-shift));
 }
 
 .landing-visual img {
-  width: min(100%, 480px);
+  width: min(100%, max(220px, 52vw), 68svh, 760px);
   height: auto;
-  max-height: min(42svh, 440px);
   display: block;
   object-fit: contain;
-}
-
-@media (min-width: 600px) {
-  .landing {
-    --landing-gutter: clamp(32px, 6vw, 64px);
-  }
-
-  .landing-nav {
-    min-height: calc(72px + env(safe-area-inset-top));
-  }
-
-  .landing-hero {
-    min-height: calc(100vh - 72px - env(safe-area-inset-top));
-    min-height: calc(100svh - 72px - env(safe-area-inset-top));
-    gap: clamp(12px, 2.5vh, 28px);
-    padding-top: clamp(30px, 5vh, 60px);
-  }
-
-  .landing-brand {
-    font-size: 17px;
-  }
-
-  .landing-brand img {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-  }
-
-  .landing-github {
-    font-size: 16px;
-  }
-
-  .landing h1 {
-    font-size: clamp(68px, 9.5vw, 88px);
-  }
-
-  .landing-visual img {
-    width: min(72vw, 560px);
-    max-height: min(46svh, 520px);
-  }
-}
-
-/* The two-column composition begins only when both phrases and the artwork fit. */
-@media (min-width: 1000px) {
-  .landing-hero {
-    grid-template-columns: minmax(360px, .78fr) minmax(0, 1.22fr);
-    align-content: initial;
-    align-items: center;
-    gap: clamp(32px, 4vw, 76px);
-    padding-top: 20px;
-    padding-bottom: max(44px, env(safe-area-inset-bottom));
-  }
-
-  .landing h1 {
-    font-size: clamp(68px, 7.3vw, 118px);
-    line-height: .94;
-  }
-
-  .landing-primary {
-    margin-top: 42px;
-  }
-
-  .landing-visual img {
-    width: min(100%, 760px);
-    max-height: none;
-    transform: translateX(4%);
-  }
-}
-
-/* Landscape phones and narrow windows need a compact side-by-side composition. */
-@media (min-width: 560px) and (max-width: 999px) and (orientation: landscape) {
-  .landing {
-    --landing-gutter: clamp(20px, 4vw, 40px);
-  }
-
-  .landing-nav {
-    min-height: calc(56px + env(safe-area-inset-top));
-  }
-
-  .landing-hero {
-    min-height: calc(100vh - 56px - env(safe-area-inset-top));
-    min-height: calc(100svh - 56px - env(safe-area-inset-top));
-    grid-template-columns: minmax(210px, .86fr) minmax(0, 1.14fr);
-    align-content: initial;
-    align-items: center;
-    gap: clamp(18px, 4vw, 40px);
-    padding-top: 10px;
-    padding-bottom: max(14px, env(safe-area-inset-bottom));
-  }
-
-  .landing h1 {
-    font-size: clamp(42px, 7.2vw, 60px);
-  }
-
-  .landing-primary {
-    min-height: 48px;
-    margin-top: clamp(16px, 4vh, 24px);
-  }
-
-  .landing-visual img {
-    width: min(100%, 430px);
-    max-height: 68svh;
-    object-fit: contain;
-    transform: none;
-  }
-}
-
-@media (max-width: 359px) {
-  .landing-hero {
-    padding-top: 20px;
-  }
-
-  .landing h1 {
-    font-size: clamp(42px, 14vw, 50px);
-  }
-
-  .landing-primary {
-    min-height: 50px;
-    margin-top: 20px;
-  }
 }
 
 @media (hover: hover) {
