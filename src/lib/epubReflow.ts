@@ -3,7 +3,9 @@ export type EpubFrameSize = { width: number; height: number };
 export type EpubReflowRequest = {
   anchor: string | null;
   appearance: boolean;
+  content: boolean;
   appearanceRevision: number;
+  contentRevision: number;
   revision: number;
 };
 
@@ -21,7 +23,9 @@ export function mergeEpubReflowRequest(
   return {
     anchor: current.anchor ?? next.anchor,
     appearance: current.appearance || next.appearance,
+    content: current.content || next.content,
     appearanceRevision: Math.max(current.appearanceRevision, next.appearanceRevision),
+    contentRevision: Math.max(current.contentRevision, next.contentRevision),
     revision: Math.max(current.revision, next.revision),
   };
 }
@@ -53,6 +57,6 @@ export function epubReflowAction(
   next: EpubFrameSize,
 ): EpubReflowAction {
   if (epubFrameChanged(previous, next)) return "resize";
-  if (request.appearance) return "redisplay";
+  if (request.appearance || request.content) return "redisplay";
   return "none";
 }

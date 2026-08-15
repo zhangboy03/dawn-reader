@@ -46,7 +46,12 @@ import {
   touchInputKind,
   type ReaderInputKind,
 } from "../lib/pencilInput";
-import { isEpubMediaControlTarget, prepareEpubMediaDocument } from "../lib/epubMedia";
+import {
+  isEpubMediaControlTarget,
+  prepareEpubMediaDocument,
+  type EpubEmbedTarget,
+  type EpubImageTarget,
+} from "../lib/epubMedia";
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type AssistanceMode = "english" | "chinese";
@@ -76,6 +81,8 @@ type TextAppearanceAnchor = {
   offset?: number;
   viewportTop: number;
 };
+type EpubImageView = Omit<EpubImageTarget, "element">;
+type EpubEmbedView = Omit<EpubEmbedTarget, "element">;
 
 function TocItems({
   items,
@@ -259,6 +266,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const reflowTimerRef = useRef<number | null>(null);
   const appearanceRevisionRef = useRef(0);
   const epubReflowRevisionRef = useRef(0);
+  const epubContentRevisionRef = useRef(0);
+  const epubContentLayoutSignaturesRef = useRef<Set<string>>(new Set());
   const pendingEpubAppearanceAnchorRef = useRef<EpubAppearanceAnchor | null>(null);
   const pendingEpubReflowRef = useRef<EpubReflowRequest | null>(null);
   const activeEpubReflowRef = useRef<EpubReflowRequest | null>(null);
@@ -274,6 +283,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
   const hlsInstancesRef = useRef<Set<{ destroy: () => void }>>(new Set());
+  const epubMediaCleanupRef = useRef<Set<() => void>>(new Set());
+  const imageDialogRef = useRef<HTMLDialogElement>(null);
+  const imageReturnFocusRef = useRef<HTMLElement | null>(null);
+  const embedDialogRef = useRef<HTMLDialogElement>(null);
+  const embedReturnFocusRef = useRef<HTMLElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const tocPanelRef = useRef<HTMLElement>(null);
   const selectedKeyRef = useRef("");
@@ -300,6 +314,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [tocItems, setTocItems] = useState<EpubTocItem[]>([]);
   const [currentHref, setCurrentHref] = useState("");
   const [desktopReader, setDesktopReader] = useState(false);
+  const [imageView, setImageView] = useState<EpubImageView | null>(null);
+  const [imageZoomed, setImageZoomed] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const [embedView, setEmbedView] = useState<EpubEmbedView | null>(null);
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
 
   useEffect(() => {
@@ -316,6 +334,28 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [chatMessages, chatState]);
+
+  useEffect(() => {
+    const dialog = imageDialogRef.current;
+    if (imageView && dialog && !dialog.open) dialog.showModal();
+    if (!imageView) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeImageView();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [imageView]);
+
+  useEffect(() => {
+    const dialog = embedDialogRef.current;
+    if (embedView && dialog && !dialog.open) dialog.showModal();
+    if (!embedView) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeEmbedView();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [embedView]);
 
   function captureEpubAppearanceAnchor() {
     const rendition = renditionRef.current;
@@ -425,7 +465,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
   }
 
-  function requestEpubReflow(appearance: boolean, delay = 120) {
+  function requestEpubReflow(reason: "frame" | "appearance" | "content", delay = 120) {
     if (!epubReadyRef.current || !renditionRef.current) return;
     const appearanceAnchor = pendingEpubAppearanceAnchorRef.current;
     const queuedAnchor = pendingEpubReflowRef.current?.anchor
@@ -439,8 +479,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       pendingEpubReflowRef.current,
       {
         anchor,
-        appearance: appearance || Boolean(appearanceAnchor),
+        appearance: reason === "appearance" || Boolean(appearanceAnchor),
+        content: reason === "content",
         appearanceRevision: appearanceAnchor?.revision ?? 0,
+        contentRevision: reason === "content" ? ++epubContentRevisionRef.current : 0,
         revision: ++epubReflowRevisionRef.current,
       },
     );
@@ -522,24 +564,115 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         "line-height": "inherit !important",
       },
       a: { color: next.theme === "night" ? "#efa06a !important" : "#a65332 !important" },
-      "[data-dawn-media-card]": {
+      "[data-dawn-media-card][data-dawn-keep-together='true']": {
         "break-inside": "avoid !important",
         "page-break-inside": "avoid !important",
       },
-      "video[data-dawn-media], iframe[data-dawn-media]": {
+      "figure": {
+        width: "100% !important",
+        margin: "1.7em auto !important",
+        padding: "0 !important",
+      },
+      "figure img[data-dawn-media], img[data-dawn-media]": {
+        display: "block !important",
+        width: "auto !important",
+        height: "auto !important",
+        "max-width": "100% !important",
+        "max-height": "min(72vh, 760px) !important",
+        margin: "0 auto !important",
+        "object-fit": "contain !important",
+        "break-inside": "avoid !important",
+        "page-break-inside": "avoid !important",
+      },
+      "[data-dawn-media-root='image']": {
+        position: "relative !important",
+      },
+      "img[data-dawn-inspectable]": {
+        cursor: "zoom-in !important",
+        "border-radius": "4px !important",
+      },
+      "button[data-dawn-image-action]": {
+        position: "absolute !important",
+        top: "8px !important",
+        right: "8px !important",
+        "min-width": "44px !important",
+        "min-height": "44px !important",
+        padding: "0 11px !important",
+        border: `1px solid ${next.theme === "night" ? "#59666a" : "#a9b1ae"} !important`,
+        "border-radius": "6px !important",
+        color: `${next.theme === "night" ? "#eee9df" : "#334044"} !important`,
+        background: `${next.theme === "night" ? "rgba(28,34,34,.92)" : "rgba(250,249,244,.93)"} !important`,
+        "box-shadow": "0 3px 12px rgba(20,28,30,.16) !important",
+        "font-family": "-apple-system, BlinkMacSystemFont, sans-serif !important",
+        "font-size": ".65em !important",
+        "touch-action": "manipulation !important",
+      },
+      "button[data-dawn-image-action]:focus-visible": {
+        outline: `3px solid ${next.theme === "night" ? "#efa06a" : "#a65332"} !important`,
+        "outline-offset": "2px !important",
+      },
+      "figcaption": {
+        "max-width": "66ch !important",
+        margin: ".72em auto 0 !important",
+        color: `${next.theme === "night" ? "#929c9b" : "#66716f"} !important`,
+        "font-family": "-apple-system, BlinkMacSystemFont, sans-serif !important",
+        "font-size": ".72em !important",
+        "line-height": "1.55 !important",
+      },
+      "video[data-dawn-media]": {
         display: "block !important",
         width: "100% !important",
+        height: "auto !important",
         "max-width": "100% !important",
         "max-height": "min(52vh, 480px) !important",
-        "aspect-ratio": "16 / 9 !important",
         border: "0 !important",
         "border-radius": "6px !important",
         background: "#101413 !important",
         "touch-action": "manipulation !important",
       },
+      "iframe[data-dawn-media]": {
+        display: "block !important",
+        width: "100% !important",
+        height: "auto !important",
+        "min-height": "240px !important",
+        "max-width": "100% !important",
+        "max-height": "min(64vh, 560px) !important",
+        border: `1px solid ${next.theme === "night" ? "#354148" : "#c9cfcc"} !important`,
+        "border-radius": "6px !important",
+        background: "#101413 !important",
+        "touch-action": "manipulation !important",
+      },
+      "iframe[data-dawn-media][hidden]": {
+        display: "none !important",
+      },
       "audio[data-dawn-media]": {
         display: "block !important",
         width: "100% !important",
+        "touch-action": "manipulation !important",
+      },
+      "[data-dawn-media-state='unavailable']": {
+        opacity: ".58 !important",
+        filter: "grayscale(.35) !important",
+      },
+      "[data-dawn-media-fallback]": {
+        display: "block !important",
+        width: "fit-content !important",
+        margin: ".65em auto 1.4em !important",
+        "font-family": "-apple-system, BlinkMacSystemFont, sans-serif !important",
+        "font-size": ".68em !important",
+        "line-height": "1.4 !important",
+        "text-underline-offset": ".22em !important",
+      },
+      "[data-dawn-embed-action]": {
+        width: "100% !important",
+        "min-height": "86px !important",
+        margin: "1.3em 0 .4em !important",
+        border: `1px solid ${next.theme === "night" ? "#52636b" : "#aeb8b6"} !important`,
+        "border-radius": "7px !important",
+        color: `${next.theme === "night" ? "#e2ded5" : "#374348"} !important`,
+        background: `${next.theme === "night" ? "#202a2e" : "#eef0eb"} !important`,
+        "font-family": "-apple-system, BlinkMacSystemFont, sans-serif !important",
+        "font-size": ".76em !important",
         "touch-action": "manipulation !important",
       },
     });
@@ -888,7 +1021,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     if (!rendition) return;
     applyEpubTheme(rendition);
     rendition.spread?.("auto", 900);
-    requestEpubReflow(true, 80);
+    requestEpubReflow("appearance", 80);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme]);
 
@@ -957,27 +1090,106 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       epubFrameSizeRef.current = epubFrameSize(initialFrame);
       pendingEpubReflowRef.current = null;
       activeEpubReflowRef.current = null;
+      epubContentLayoutSignaturesRef.current.clear();
       applyEpubTheme(rendition);
       rendition.hooks.content.register((contents: any) => {
         const document = contents.document as Document;
         applyPencilModeToContents(contents, pencilModeRef.current);
-        const preparedMedia = prepareEpubMediaDocument(document);
-        if (preparedMedia.hlsTargets.length) {
-          void import("hls.js").then(({ default: Hls }) => {
-            if (cancelled || !Hls.isSupported()) {
-              for (const target of preparedMedia.hlsTargets) target.element.dataset.dawnMediaState = "unavailable";
-              return;
-            }
-            for (const target of preparedMedia.hlsTargets) {
-              if (cancelled || !target.element.isConnected || target.element.dataset.dawnMediaState === "attached") continue;
+        const preparedMedia = prepareEpubMediaDocument(document, {
+          onImageActivate: (target) => {
+            imageReturnFocusRef.current = target.element;
+            setImageZoomed(false);
+            setImageLoadFailed(false);
+            setImageView({
+              source: target.source,
+              label: target.label,
+              caption: target.caption,
+              sourceHref: target.sourceHref,
+            });
+          },
+          onEmbedActivate: (target) => {
+            embedReturnFocusRef.current = target.element;
+            setEmbedView({ source: target.source, title: target.title });
+          },
+          onIntrinsicSizeChange: (element) => {
+            const media = element as HTMLMediaElement & HTMLImageElement & HTMLVideoElement;
+            const source = media.currentSrc || media.getAttribute("src") || media.dataset.dawnStream || "inline";
+            const width = media.naturalWidth || media.videoWidth || element.clientWidth;
+            const height = media.naturalHeight || media.videoHeight || element.clientHeight;
+            const signature = `${document.baseURI}|${element.tagName}|${source}|${element.dataset.dawnMediaState ?? "ready"}|${width}x${height}`;
+            if (epubContentLayoutSignaturesRef.current.has(signature)) return;
+            epubContentLayoutSignaturesRef.current.add(signature);
+            requestEpubReflow("content", 180);
+          },
+        });
+        const documentHls = new Set<{ destroy: () => void }>();
+        const documentMediaListeners: Array<() => void> = [];
+        const contentWindow = document.defaultView;
+        const cleanupDocumentMedia = () => {
+          preparedMedia.cleanup();
+          for (const cleanup of documentMediaListeners.splice(0)) cleanup();
+          for (const hls of documentHls) {
+            hls.destroy();
+            hlsInstancesRef.current.delete(hls);
+          }
+          documentHls.clear();
+          contentWindow?.removeEventListener("pagehide", cleanupDocumentMedia);
+          epubMediaCleanupRef.current.delete(cleanupDocumentMedia);
+        };
+        contentWindow?.addEventListener("pagehide", cleanupDocumentMedia, { once: true });
+        epubMediaCleanupRef.current.add(cleanupDocumentMedia);
+        for (const target of preparedMedia.hlsTargets) {
+          target.element.dataset.dawnMediaState = "idle";
+          const attach = () => {
+            const state = target.element.dataset.dawnMediaState;
+            if (cancelled || !target.element.isConnected || state === "attaching" || state === "ready") return;
+            target.element.dataset.dawnMediaState = "attaching";
+            void import("hls.js").then(({ default: Hls }) => {
+              if (cancelled || !target.element.isConnected || !Hls.isSupported()) {
+                target.element.dataset.dawnMediaState = "unavailable";
+                return;
+              }
+              let networkRecoveries = 0;
+              let mediaRecoveries = 0;
               const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
               hlsInstancesRef.current.add(hls);
-              target.element.dataset.dawnMediaState = "attached";
+              documentHls.add(hls);
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                target.element.dataset.dawnMediaState = "ready";
+              });
+              hls.on(Hls.Events.ERROR, (_event, data) => {
+                if (!data.fatal) return;
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < 1) {
+                  networkRecoveries += 1;
+                  target.element.dataset.dawnMediaState = "retrying";
+                  hls.startLoad();
+                  return;
+                }
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 1) {
+                  mediaRecoveries += 1;
+                  target.element.dataset.dawnMediaState = "retrying";
+                  hls.recoverMediaError();
+                  return;
+                }
+                target.element.dataset.dawnMediaState = "unavailable";
+                hls.destroy();
+                documentHls.delete(hls);
+                hlsInstancesRef.current.delete(hls);
+              });
               hls.loadSource(target.source);
               hls.attachMedia(target.element);
-            }
-          }).catch(() => {
-            for (const target of preparedMedia.hlsTargets) target.element.dataset.dawnMediaState = "unavailable";
+            }).catch(() => {
+              target.element.dataset.dawnMediaState = "unavailable";
+            });
+          };
+          const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Enter" || event.key === " ") attach();
+          };
+          target.element.addEventListener("pointerdown", attach);
+          target.element.addEventListener("keydown", onKeyDown);
+          documentMediaListeners.push(() => {
+            target.element.removeEventListener("pointerdown", attach);
+            target.element.removeEventListener("keydown", onKeyDown);
           });
         }
 
@@ -1078,7 +1290,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       });
       frameResizeObserver = new ResizeObserver(([entry]) => {
         if (!epubReadyRef.current || !epubFrameSize(entry.contentRect)) return;
-        requestEpubReflow(false, 120);
+        requestEpubReflow("frame", 120);
       });
       frameResizeObserver.observe(epubRef.current);
       rendition.on("relocated", (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => {
@@ -1090,7 +1302,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           epubReadyRef.current = true;
           const readyFrame = epubRef.current?.getBoundingClientRect();
           if (readyFrame) epubFrameSizeRef.current = epubFrameSize(readyFrame);
-          if (pendingEpubAppearanceAnchorRef.current) requestEpubReflow(true, 0);
+          if (pendingEpubAppearanceAnchorRef.current) requestEpubReflow("appearance", 0);
         }
         setPageProgress(percentage);
         if (locationsGenerated) updatePageNumber(cfi);
@@ -1141,6 +1353,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       pendingEpubReflowRef.current = null;
       activeEpubReflowRef.current = null;
       epubFrameSizeRef.current = null;
+      epubContentLayoutSignaturesRef.current.clear();
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
       if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
       if (selectionTimerRef.current) window.clearTimeout(selectionTimerRef.current);
@@ -1151,6 +1364,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       }
       for (const hls of hlsInstancesRef.current) hls.destroy();
       hlsInstancesRef.current.clear();
+      for (const cleanup of epubMediaCleanupRef.current) cleanup();
+      epubMediaCleanupRef.current.clear();
+      setImageView(null);
+      setEmbedView(null);
       renditionRef.current?.destroy?.();
       book?.destroy?.();
     };
@@ -1229,6 +1446,20 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   function handleShellPointerDown() {
     clearSelection();
+  }
+
+  function closeImageView() {
+    imageDialogRef.current?.close();
+    setImageView(null);
+    setImageZoomed(false);
+    setImageLoadFailed(false);
+    window.setTimeout(() => imageReturnFocusRef.current?.focus(), 0);
+  }
+
+  function closeEmbedView() {
+    embedDialogRef.current?.close();
+    setEmbedView(null);
+    window.setTimeout(() => embedReturnFocusRef.current?.focus(), 0);
   }
 
   function handleStagePointerDown(event: ReactPointerEvent<HTMLElement>) {
@@ -1371,6 +1602,71 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         <button onClick={() => turnPage("next")} aria-label="下一页">→</button>
       </div>
     </nav>}
+
+    {imageView && <dialog
+      ref={imageDialogRef}
+      className={`image-viewer ${imageZoomed ? "zoomed" : "fitted"}`}
+      aria-labelledby="image-viewer-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        closeImageView();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) closeImageView();
+      }}
+    >
+      <header>
+        <div>
+          <small>FIGURE</small>
+          <h2 id="image-viewer-title">{imageView.label}</h2>
+        </div>
+        <div className="image-viewer-actions">
+          {!imageLoadFailed && <button
+            type="button"
+            aria-pressed={imageZoomed}
+            onClick={() => setImageZoomed((zoomed) => !zoomed)}
+          >{imageZoomed ? "适应窗口" : "查看原始尺寸"}</button>}
+          {imageView.sourceHref && <a href={imageView.sourceHref} target="_blank" rel="noopener noreferrer">打开原图</a>}
+          <button className="image-viewer-close" type="button" aria-label="关闭大图" onClick={closeImageView}>×</button>
+        </div>
+      </header>
+      <div className="image-viewer-canvas" data-state={imageLoadFailed ? "error" : "ready"}>
+        {imageLoadFailed
+          ? <div className="image-viewer-error" role="alert"><strong>图片无法显示</strong><span>可以尝试从原图链接打开。</span></div>
+          : <img src={imageView.source} alt="" onError={() => setImageLoadFailed(true)} />}
+      </div>
+      {imageView.caption && <p className="image-viewer-caption">{imageView.caption}</p>}
+      <p className="image-viewer-hint">Esc 关闭 · 点击留白关闭 · 可拖动或双指缩放</p>
+    </dialog>}
+
+    {embedView && <dialog
+      ref={embedDialogRef}
+      className="embed-viewer"
+      aria-labelledby="embed-viewer-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        closeEmbedView();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) closeEmbedView();
+      }}
+    >
+      <header>
+        <div><small>MEDIA</small><h2 id="embed-viewer-title">{embedView.title}</h2></div>
+        <div>
+          <a href={embedView.source} target="_blank" rel="noopener noreferrer">在浏览器中打开</a>
+          <button type="button" aria-label="关闭视频" onClick={closeEmbedView}>×</button>
+        </div>
+      </header>
+      <iframe
+        src={embedView.source}
+        title={embedView.title}
+        allow="fullscreen; picture-in-picture; encrypted-media"
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        referrerPolicy="no-referrer"
+        allowFullScreen
+      />
+    </dialog>}
 
     {selected && selectionAnchor && <aside
       className={`selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${selectionAnchor.placement} ${source.assistantMode === "ask" ? chatState : rewriteState}`}

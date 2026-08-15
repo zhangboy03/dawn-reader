@@ -9,7 +9,9 @@ import {
 const request = (overrides: Partial<EpubReflowRequest> = {}): EpubReflowRequest => ({
   anchor: "epubcfi(/6/2!/4/2)",
   appearance: false,
+  content: false,
   appearanceRevision: 0,
+  contentRevision: 0,
   revision: 1,
   ...overrides,
 });
@@ -22,7 +24,9 @@ describe("mergeEpubReflowRequest", () => {
     )).toEqual({
       anchor: "first",
       appearance: true,
+      content: false,
       appearanceRevision: 4,
+      contentRevision: 0,
       revision: 4,
     });
   });
@@ -44,6 +48,14 @@ describe("epubReflowAction", () => {
   it("redisplays once for an appearance-only change", () => {
     expect(epubReflowAction(
       request({ appearance: true }),
+      { width: 760, height: 600 },
+      { width: 760, height: 600 },
+    )).toBe("redisplay");
+  });
+
+  it("redisplays a same-size frame after intrinsic media layout changes", () => {
+    expect(epubReflowAction(
+      request({ content: true, contentRevision: 2 }),
       { width: 760, height: 600 },
       { width: 760, height: 600 },
     )).toBe("redisplay");
