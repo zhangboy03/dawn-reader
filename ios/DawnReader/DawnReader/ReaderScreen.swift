@@ -1,4 +1,5 @@
 import SwiftUI
+import ReadiumShared
 
 struct ReaderScreen: View {
     @EnvironmentObject private var settings: SettingsStore
@@ -6,6 +7,7 @@ struct ReaderScreen: View {
     let openedBook: OpenedBook
     let onClose: () -> Void
     @State private var showingSettings = false
+    @State private var showingContents = false
     @State private var scrubProgress: Double?
     @State private var chatDraft = ""
     @FocusState private var chatFocused: Bool
@@ -37,6 +39,11 @@ struct ReaderScreen: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView().environmentObject(settings)
         }
+        .sheet(isPresented: $showingContents) {
+            contentsSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .preferredColorScheme(settings.readerTheme == .night ? .dark : .light)
     }
 
@@ -51,6 +58,14 @@ struct ReaderScreen: View {
                 .font(.system(size: 16, weight: .medium, design: .serif))
                 .lineLimit(1)
             Spacer()
+            Button {
+                showingContents = true
+            } label: {
+                Label("目录", systemImage: "list.bullet.indent")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("查看目录")
             HStack(spacing: 2) {
                 ForEach(PencilMode.allCases) { mode in
                     Button(mode.title) {
@@ -117,6 +132,55 @@ struct ReaderScreen: View {
         .buttonStyle(.plain)
         .foregroundStyle(chromeForeground)
         .frame(height: 52)
+    }
+
+    private var contentsSheet: some View {
+        NavigationStack {
+            Group {
+                if session.tableOfContents.isEmpty {
+                    ContentUnavailableView("这本书没有目录", systemImage: "list.bullet.indent", description: Text("EPUB 没有提供可用的章节目录。"))
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ContentsRows(
+                                    links: session.tableOfContents,
+                                    isCurrent: session.isCurrentChapter,
+                                    onSelect: { link in
+                                        session.goToChapter?(link)
+                                        showingContents = false
+                                    }
+                                )
+                            }
+                            .padding(.vertical, 10)
+                        }
+                        .onAppear {
+                            if let current = currentContentsHref(in: session.tableOfContents) {
+                                proxy.scrollTo(current, anchor: .center)
+                            }
+                        }
+                    }
+                }
+            }
+            .background(chromeBackground)
+            .foregroundStyle(chromeForeground)
+            .navigationTitle("目录")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { showingContents = false }
+                }
+            }
+        }
+        .preferredColorScheme(settings.readerTheme == .night ? .dark : .light)
+    }
+
+    private func currentContentsHref(in links: [ReadiumShared.Link]) -> String? {
+        for link in links {
+            if session.isCurrentChapter(link) { return link.href }
+            if let child = currentContentsHref(in: link.children) { return child }
+        }
+        return nil
     }
 
     private var chromeBackground: Color {
@@ -319,6 +383,57 @@ struct ReaderScreen: View {
         if session.assistanceMode == .chinese { return "正在生成中文解释…" }
         return AIClient.isSingleWord(session.selectedText) ? "正在查询读音与词义…" : "正在改写…"
     }
+}
+
+private struct ContentsRows: View {
+    let links: [ReadiumShared.Link]
+    let isCurrent: (ReadiumShared.Link) -> Bool
+    let onSelect: (ReadiumShared.Link) -> Void
+    var depth = 0
+
+    var body: some View {
+        ForEach(Array(links.enumerated()), id: \.offset) { _, link in
+            let current = isCurrent(link)
+            Button {
+                onSelect(link)
+            } label: {
+                HStack(spacing: 12) {
+                    Rectangle()
+                        .fill(current ? Palette.ember : .clear)
+                        .frame(width: 2)
+                    Text(link.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未命名章节")
+                        .font(.system(size: 16, weight: current ? .medium : .regular, design: .serif))
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    if current {
+                        Text("正在阅读")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(Palette.ember)
+                    }
+                }
+                .padding(.leading, CGFloat(min(depth, 4) * 18 + 18))
+                .padding(.trailing, 18)
+                .frame(minHeight: 50)
+                .contentShape(Rectangle())
+                .background(current ? Palette.ember.opacity(0.09) : .clear)
+            }
+            .buttonStyle(.plain)
+            .id(link.href)
+
+            if !link.children.isEmpty {
+                ContentsRows(
+                    links: link.children,
+                    isCurrent: isCurrent,
+                    onSelect: onSelect,
+                    depth: depth + 1
+                )
+            }
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 private struct ReaderControllerView: UIViewControllerRepresentable {

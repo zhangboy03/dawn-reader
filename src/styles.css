@@ -363,6 +363,27 @@ body:has(.onboarding), body:has(.test-screen) {
 .pencil-switch button.active { color: #fff8f2; background: var(--reader-control-active); }
 .type-button { width: 40px; height: 40px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-ink); background: var(--reader-control); font: 600 13px "Iowan Old Style", serif; }
 .type-button:hover { border-color: var(--reader-control-active); color: var(--reader-control-active); }
+.toc-button { min-width: 64px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
+.toc-button span { font-size: 17px; line-height: 1; transform: translateY(-1px); }
+.toc-button em { font-size: 10px; font-style: normal; }
+.toc-button:hover, .toc-button.active { border-color: var(--reader-control-active); color: var(--reader-control-active); }
+.toc-layer { position: fixed; z-index: 40; inset: 0; }
+.toc-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: rgba(15, 23, 25, .28); backdrop-filter: blur(2px); }
+.toc-panel { position: absolute; inset: 0 auto 0 0; width: min(390px, calc(100vw - 36px)); display: grid; grid-template-rows: auto minmax(0, 1fr); color: var(--reader-chrome-ink); background: var(--reader-chrome); box-shadow: 18px 0 56px rgba(7, 14, 20, .22); }
+.toc-panel > header { min-height: calc(82px + env(safe-area-inset-top)); display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: calc(18px + env(safe-area-inset-top)) 22px 16px; border-bottom: 1px solid var(--reader-chrome-line); }
+.toc-panel > header small { display: block; margin-bottom: 5px; color: var(--reader-control-active); font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .15em; }
+.toc-panel h2 { margin: 0; font: 500 24px/1 "Iowan Old Style", Baskerville, Georgia, serif; }
+.toc-panel > header button { width: 44px; height: 44px; border: 0; color: var(--reader-chrome-muted); background: transparent; font-size: 24px; font-weight: 300; }
+.toc-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 0 max(28px, env(safe-area-inset-bottom)); }
+.toc-list { margin: 0; padding: 0; list-style: none; }
+.toc-list button { position: relative; width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 22px; border: 0; border-radius: 0; color: var(--reader-chrome-muted); background: transparent; text-align: left; }
+.toc-list button::before { content: ""; position: absolute; top: 10px; bottom: 10px; left: 0; width: 2px; background: transparent; }
+.toc-list button span { font: 400 14px/1.45 "Iowan Old Style", Baskerville, Georgia, serif; }
+.toc-list button small { flex: none; color: var(--reader-control-active); font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .04em; }
+.toc-list button:hover { color: var(--reader-chrome-ink); background: color-mix(in srgb, var(--reader-control-active) 6%, transparent); }
+.toc-list button.current { color: var(--reader-chrome-ink); background: color-mix(in srgb, var(--reader-control-active) 9%, transparent); }
+.toc-list button.current::before { background: var(--reader-control-active); }
+.toc-empty { margin: 0; padding: 34px 22px; color: var(--reader-chrome-muted); font: 400 14px/1.6 "Iowan Old Style", Baskerville, Georgia, serif; }
 .reader-settings { position: absolute; z-index: 30; top: calc(100% - 8px); right: max(18px, env(safe-area-inset-right)); width: 304px; padding: 14px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-panel); color: var(--reader-chrome-ink); background: var(--reader-chrome); box-shadow: 0 24px 54px rgba(7, 14, 20, .22); }
 .reader-settings > div { display: grid; grid-template-columns: 62px repeat(3, 1fr); align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--reader-chrome-line); }
 .reader-settings > div:last-child { border: 0; }
@@ -532,6 +553,8 @@ body:has(.onboarding), body:has(.test-screen) {
   .reader-title { display: none; }
   .pencil-switch > span { display: none; }
   .pencil-switch button { min-width: 44px; padding: 0 7px; }
+  .toc-button { min-width: 44px; width: 44px; padding: 0; }
+  .toc-button em { display: none; }
   .reader-settings { top: calc(100% - 6px); right: 10px; left: 10px; width: auto; }
   .selection-assist { top: auto !important; bottom: 14px; left: 50% !important; transform: translateX(-50%); }
   .selection-assist.ask-mode { max-height: min(620px, calc(100dvh - 86px)); }

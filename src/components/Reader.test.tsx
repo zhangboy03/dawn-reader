@@ -27,6 +27,7 @@ describe("Reader chrome", () => {
     expect(footer).toBeGreaterThan(main);
     expect(markup.slice(main, footer)).not.toContain("page-controls");
     expect(markup).toContain('aria-label="阅读导航"');
+    expect(markup).toContain('aria-label="查看目录"');
   });
 
   it("uses a dynamic viewport shell without fixing the document body", () => {

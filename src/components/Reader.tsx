@@ -33,6 +33,11 @@ import {
   type EpubPageNumber,
 } from "../lib/epubPagination";
 import {
+  normalizeEpubToc,
+  tocItemIsCurrent,
+  type EpubTocItem,
+} from "../lib/epubToc";
+import {
   desktopPageTurnFromPointer,
   pageTurnFromKey,
   pageTurnFromPointer,
@@ -69,6 +74,37 @@ type TextAppearanceAnchor = {
   offset?: number;
   viewportTop: number;
 };
+
+function TocItems({
+  items,
+  currentHref,
+  depth = 0,
+  onNavigate,
+}: {
+  items: EpubTocItem[];
+  currentHref: string;
+  depth?: number;
+  onNavigate: (item: EpubTocItem) => void;
+}) {
+  return <ul className="toc-list" data-depth={depth}>
+    {items.map((item) => {
+      const current = tocItemIsCurrent(item.href, currentHref);
+      return <li key={item.id}>
+        <button
+          className={current ? "current" : ""}
+          data-current={current || undefined}
+          onClick={() => onNavigate(item)}
+          aria-current={current ? "location" : undefined}
+          style={{ paddingLeft: `${22 + Math.min(depth, 4) * 18}px` }}
+        >
+          <span>{item.label}</span>
+          {current && <small>正在阅读</small>}
+        </button>
+        {item.subitems.length > 0 && <TocItems items={item.subitems} currentHref={currentHref} depth={depth + 1} onNavigate={onNavigate} />}
+      </li>;
+    })}
+  </ul>;
+}
 
 function isPageTurnControlTarget(target: EventTarget | null) {
   const element = target as { closest?: (selector: string) => Element | null } | null;
@@ -236,6 +272,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const tocPanelRef = useRef<HTMLElement>(null);
   const selectedKeyRef = useRef("");
   const selectionInputRef = useRef<ReaderInputKind>("mouse");
   const [displayTitle, setDisplayTitle] = useState(source.title);
@@ -255,6 +292,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [locationsReady, setLocationsReady] = useState(false);
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [tocLoaded, setTocLoaded] = useState(false);
+  const [tocItems, setTocItems] = useState<EpubTocItem[]>([]);
+  const [currentHref, setCurrentHref] = useState("");
   const [desktopReader, setDesktopReader] = useState(false);
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
 
@@ -805,6 +846,18 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }, [selected]);
 
   useEffect(() => {
+    if (!tocOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTocOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.requestAnimationFrame(() => {
+      tocPanelRef.current?.querySelector<HTMLElement>("[data-current='true']")?.scrollIntoView({ block: "center" });
+    });
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tocOpen]);
+
+  useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
     applyEpubTheme(rendition);
@@ -834,6 +887,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     if (source.type !== "epub" || !epubRef.current) return;
     setLocationsReady(false);
     setPageNumber(null);
+    setTocLoaded(false);
+    setTocItems([]);
+    setCurrentHref("");
     let cancelled = false;
     let book: any;
     let frameResizeObserver: ResizeObserver | null = null;
@@ -851,6 +907,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       book.loaded.metadata.then((metadata: { title?: string }) => {
         if (metadata.title) setDisplayTitle(metadata.title.trim());
       }).catch(() => undefined);
+      book.loaded.navigation.then((navigation: { toc?: unknown }) => {
+        if (!cancelled) {
+          setTocItems(normalizeEpubToc(navigation.toc));
+          setTocLoaded(true);
+        }
+      }).catch(() => {
+        if (!cancelled) setTocLoaded(true);
+      });
       const initialFrame = epubRef.current.getBoundingClientRect();
       const rendition = book.renderTo(epubRef.current, {
         width: Math.max(1, Math.floor(initialFrame.width)),
@@ -963,8 +1027,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         requestEpubReflow(false, 120);
       });
       frameResizeObserver.observe(epubRef.current);
-      rendition.on("relocated", (location: { start?: { cfi?: string; percentage?: number } }) => {
+      rendition.on("relocated", (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => {
         const cfi = location.start?.cfi ?? null;
+        setCurrentHref(location.start?.href ?? "");
         const ratio = location.start?.percentage ?? (locationsGenerated && cfi ? book.locations.percentageFromCfi(cfi) : 0);
         const percentage = Math.round(ratio * 100);
         if (!epubReadyRef.current) {
@@ -1100,6 +1165,12 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
   }
 
+  function goToTocItem(item: EpubTocItem) {
+    clearSelection();
+    setTocOpen(false);
+    void renditionRef.current?.display(item.href);
+  }
+
   function handleShellPointerDown() {
     clearSelection();
   }
@@ -1163,7 +1234,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           <button className={settings.pencilMode === "page" ? "active" : ""} aria-pressed={settings.pencilMode === "page"} onClick={() => setPencilMode("page")}>翻页</button>
           <button className={settings.pencilMode === "select" ? "active" : ""} aria-pressed={settings.pencilMode === "select"} onClick={() => setPencilMode("select")}>画词</button>
         </div>}
-        <button className="type-button" onClick={() => setSettingsOpen((open) => !open)} aria-label="阅读设置">Aa</button>
+        {source.type === "epub" && <button
+          className={`toc-button ${tocOpen ? "active" : ""}`}
+          onClick={() => {
+            setSettingsOpen(false);
+            setTocOpen((open) => !open);
+          }}
+          aria-label="查看目录"
+          aria-expanded={tocOpen}
+        ><span aria-hidden="true">☷</span><em>目录</em></button>}
+        <button className="type-button" onClick={() => {
+          setTocOpen(false);
+          setSettingsOpen((open) => !open);
+        }} aria-label="阅读设置">Aa</button>
       </div>
       {settingsOpen && <div className="reader-settings" role="dialog" aria-label="阅读设置">
         <div><small>字号</small>{([17, 19, 21] as const).map((size) => <button className={settings.fontSize === size ? "active" : ""} key={size} onClick={() => updateSettings({ fontSize: size })}>A{size === 17 ? "−" : size === 21 ? "+" : ""}</button>)}</div>
@@ -1173,6 +1256,21 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         {source.type === "epub" && <div><small>位置</small>{([25, 50, 75] as const).map((value) => <button className={Math.abs(pageProgress - value) < 2 ? "active" : ""} disabled={!locationsReady} key={value} onClick={() => goToPercentage(value)}>{value}%</button>)}</div>}
       </div>}
     </header>
+
+    {source.type === "epub" && tocOpen && <div className="toc-layer">
+      <button className="toc-backdrop" aria-label="关闭目录" onClick={() => setTocOpen(false)} />
+      <aside className="toc-panel" ref={tocPanelRef} role="dialog" aria-modal="true" aria-label="本书目录">
+        <header>
+          <div><small>CONTENTS</small><h2>目录</h2></div>
+          <button onClick={() => setTocOpen(false)} aria-label="关闭目录">×</button>
+        </header>
+        <div className="toc-scroll">
+          {!tocLoaded ? <p className="toc-empty">正在读取目录…</p>
+            : tocItems.length > 0 ? <TocItems items={tocItems} currentHref={currentHref} onNavigate={goToTocItem} />
+            : <p className="toc-empty">这本书没有提供可用的目录。</p>}
+        </div>
+      </aside>
+    </div>}
 
     <main
       ref={readingStageRef}

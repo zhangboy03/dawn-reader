@@ -106,6 +106,17 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 _ = await self.navigator.go(to: locator, options: .init(animated: false))
             }
         }
+        Task { [weak session, publication] in
+            guard case let .success(links) = await publication.tableOfContents() else { return }
+            session?.tableOfContents = links
+        }
+        session.goToChapter = { [weak self] link in
+            guard let self else { return }
+            self.session.clearSelection()
+            Task {
+                _ = await self.navigator.go(to: link, options: .init(animated: false))
+            }
+        }
         session.clearNativeSelection = { [weak self] in
             guard let self else { return }
             selectionUpdateID += 1

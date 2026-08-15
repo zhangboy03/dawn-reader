@@ -29,6 +29,8 @@ final class ReadingSession: ObservableObject {
     @Published var rewriteState: RewriteState = .idle
     @Published var assistanceMode: AssistanceMode = .english
     @Published var progress = 0.0
+    @Published var tableOfContents: [Link] = []
+    @Published var currentHref = ""
     @Published var chatMessages: [ReaderChatMessage] = []
     @Published var chatSources: [ReaderChatSource] = []
     @Published var chatState: ChatState = .idle
@@ -39,6 +41,7 @@ final class ReadingSession: ObservableObject {
     var goForward: (() -> Void)?
     var goBackward: (() -> Void)?
     var seek: ((Double) -> Void)?
+    var goToChapter: ((Link) -> Void)?
     var clearNativeSelection: (() -> Void)?
 
     private let persist: (String, Double) -> Void
@@ -183,9 +186,25 @@ final class ReadingSession: ObservableObject {
     }
 
     func updateLocation(_ locator: Locator) {
+        currentHref = locator.href.string
         progress = locator.locations.totalProgression ?? progress
         if let json = try? locator.jsonString() {
             persist(json, progress)
         }
+    }
+
+    func isCurrentChapter(_ link: Link) -> Bool {
+        Self.hrefKey(link.href) == Self.hrefKey(currentHref)
+    }
+
+    private static func hrefKey(_ href: String) -> String {
+        let path = href
+            .split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+            .split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        var value = String(path).removingPercentEncoding ?? String(path)
+        while value.hasPrefix("../") || value.hasPrefix("./") {
+            value.removeFirst(value.hasPrefix("../") ? 3 : 2)
+        }
+        return value
     }
 }
