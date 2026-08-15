@@ -46,6 +46,7 @@ import {
   touchInputKind,
   type ReaderInputKind,
 } from "../lib/pencilInput";
+import { isEpubMediaControlTarget, prepareEpubMediaDocument } from "../lib/epubMedia";
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type AssistanceMode = "english" | "chinese";
@@ -64,6 +65,7 @@ type GestureState = {
   touchSeen: boolean;
   completed: boolean;
   startedOnBlank: boolean;
+  interactive: boolean;
   pointerId?: number;
 };
 type CaretPoint = { node: Node; offset: number };
@@ -271,6 +273,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const desktopReaderRef = useRef(false);
   const pageFallbackTimerRef = useRef<number | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
+  const hlsInstancesRef = useRef<Set<{ destroy: () => void }>>(new Set());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const tocPanelRef = useRef<HTMLElement>(null);
   const selectedKeyRef = useRef("");
@@ -519,6 +522,26 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         "line-height": "inherit !important",
       },
       a: { color: next.theme === "night" ? "#efa06a !important" : "#a65332 !important" },
+      "[data-dawn-media-card]": {
+        "break-inside": "avoid !important",
+        "page-break-inside": "avoid !important",
+      },
+      "video[data-dawn-media], iframe[data-dawn-media]": {
+        display: "block !important",
+        width: "100% !important",
+        "max-width": "100% !important",
+        "max-height": "min(52vh, 480px) !important",
+        "aspect-ratio": "16 / 9 !important",
+        border: "0 !important",
+        "border-radius": "6px !important",
+        background: "#101413 !important",
+        "touch-action": "manipulation !important",
+      },
+      "audio[data-dawn-media]": {
+        display: "block !important",
+        width: "100% !important",
+        "touch-action": "manipulation !important",
+      },
     });
     rendition?.themes?.override("font-size", `${next.fontSize}px`, true);
     rendition?.themes?.override("line-height", String(next.lineHeight), true);
@@ -708,7 +731,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     ));
   }
 
-  function startGesture(kind: ReaderInputKind, x: number, y: number, pointerId?: number, touchSeen = false, startedOnBlank = false) {
+  function startGesture(kind: ReaderInputKind, x: number, y: number, pointerId?: number, touchSeen = false, startedOnBlank = false, interactive = false) {
     gestureRef.current = {
       kind,
       mode: pencilModeRef.current,
@@ -720,6 +743,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       touchSeen,
       completed: false,
       startedOnBlank,
+      interactive,
       pointerId,
     };
     if (!(kind === "pen" && pencilModeRef.current === "select")) clearSelection();
@@ -732,6 +756,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     gesture.lastX = x;
     gesture.lastY = y;
     gestureRef.current = null;
+
+    if (gesture.interactive) return;
 
     if (gesture.kind === "mouse" && desktopReaderRef.current) {
       const selection = contents.document.getSelection() as Selection | null;
@@ -935,6 +961,25 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       rendition.hooks.content.register((contents: any) => {
         const document = contents.document as Document;
         applyPencilModeToContents(contents, pencilModeRef.current);
+        const preparedMedia = prepareEpubMediaDocument(document);
+        if (preparedMedia.hlsTargets.length) {
+          void import("hls.js").then(({ default: Hls }) => {
+            if (cancelled || !Hls.isSupported()) {
+              for (const target of preparedMedia.hlsTargets) target.element.dataset.dawnMediaState = "unavailable";
+              return;
+            }
+            for (const target of preparedMedia.hlsTargets) {
+              if (cancelled || !target.element.isConnected || target.element.dataset.dawnMediaState === "attached") continue;
+              const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+              hlsInstancesRef.current.add(hls);
+              target.element.dataset.dawnMediaState = "attached";
+              hls.loadSource(target.source);
+              hls.attachMedia(target.element);
+            }
+          }).catch(() => {
+            for (const target of preparedMedia.hlsTargets) target.element.dataset.dawnMediaState = "unavailable";
+          });
+        }
 
         const onPointerDown = (event: PointerEvent) => {
           const kind = pointerInputKind(event.pointerType);
@@ -951,6 +996,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             event.pointerId,
             false,
             kind === "mouse" && !pointHitsReadableContent(document, event.clientX, event.clientY),
+            isPageTurnControlTarget(event.target) || isEpubMediaControlTarget(event.target),
           );
         };
         const onPointerMove = (event: PointerEvent) => {
@@ -984,7 +1030,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             gestureRef.current.touchSeen = true;
             gestureRef.current.kind = kind;
           } else {
-            startGesture(kind, touch.clientX, touch.clientY, undefined, true);
+            startGesture(
+              kind,
+              touch.clientX,
+              touch.clientY,
+              undefined,
+              true,
+              false,
+              isPageTurnControlTarget(event.target) || isEpubMediaControlTarget(event.target),
+            );
           }
           if (kind === "pen" && pencilModeRef.current === "select") event.stopPropagation();
         };
@@ -1095,6 +1149,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (source.id && pendingCloudProgressRef.current) {
         void saveCloudProgress(source.id, pendingCloudProgressRef.current).catch(() => undefined);
       }
+      for (const hls of hlsInstancesRef.current) hls.destroy();
+      hlsInstancesRef.current.clear();
       renditionRef.current?.destroy?.();
       book?.destroy?.();
     };

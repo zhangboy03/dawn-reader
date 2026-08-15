@@ -13,6 +13,8 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
+Dawn Reader reads EPUB, text, and Markdown with per-book assistance, cross-device progress, and EPUB 3 media support for inline video, HLS streams, audio, and embedded demonstrations.
+
 ## Run
 
 ```bash
