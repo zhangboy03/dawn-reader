@@ -376,12 +376,20 @@ struct ReaderScreen: View {
     private var cardTitle: String {
         if session.assistantMode == .ask { return "问这段内容" }
         if session.assistanceMode == .chinese { return "中文详解" }
-        return AIClient.isSingleWord(session.selectedText) ? "读音与词义" : "简明英文"
+        switch AIClient.selectionKind(session.selectedText) {
+        case .word: return "读音与词义"
+        case .phrase: return "短语含义"
+        case .passage: return "简明英文"
+        }
     }
 
     private var loadingTitle: String {
         if session.assistanceMode == .chinese { return "正在生成中文解释…" }
-        return AIClient.isSingleWord(session.selectedText) ? "正在查询读音与词义…" : "正在改写…"
+        switch AIClient.selectionKind(session.selectedText) {
+        case .word: return "正在查询读音与词义…"
+        case .phrase: return "正在解释短语…"
+        case .passage: return "正在改写…"
+        }
     }
 }
 

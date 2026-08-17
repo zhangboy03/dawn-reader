@@ -16,7 +16,7 @@ import {
   type ReaderSettings,
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
-import { isSingleWord } from "../lib/selectionKind";
+import { selectionKind } from "../lib/selectionKind";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { restoredScrollTop, visualAnchorPoints } from "../lib/readingAnchor";
 import {
@@ -1555,15 +1555,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     left: `${selectionAnchor.x}px`,
     top: `${Math.max(82, selectionAnchor.y + (selectionAnchor.placement === "above" ? -12 : 12))}px`,
   } : undefined;
-  const wordSelection = isSingleWord(selected);
+  const selectedKind = selectionKind(selected);
   const assistanceTitle = source.assistantMode === "ask"
     ? "问这段内容"
     : assistanceMode === "chinese"
     ? "中文详解"
-    : wordSelection ? "读音与词义" : "简明英文";
+    : selectedKind === "word" ? "读音与词义"
+    : selectedKind === "phrase" ? "短语含义"
+    : "简明英文";
   const loadingTitle = assistanceMode === "chinese"
     ? "正在生成中文解释…"
-    : wordSelection ? "正在查询读音与词义…" : "正在生成简明英文…";
+    : selectedKind === "word" ? "正在查询读音与词义…"
+    : selectedKind === "phrase" ? "正在解释短语…"
+    : "正在生成简明英文…";
 
   return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
     <header className="reader-topbar">

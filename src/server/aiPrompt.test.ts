@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSingleWord } from "../lib/selectionKind";
+import { isSingleWord, selectionKind } from "../lib/selectionKind";
 import { formatChineseWordExplanation, selectionPrompt, stripThinking } from "./aiPrompt";
 
 describe("selection AI prompt", () => {
@@ -23,8 +23,17 @@ describe("selection AI prompt", () => {
     expect(prompt.system).toContain("Never rewrite, summarize, or quote the surrounding");
   });
 
-  it("rewrites passages at the selected support level", () => {
-    const prompt = selectionPrompt({ text: "a difficult phrase", preset: "supportive" });
+  it("explains a short phrase as one combined expression", () => {
+    const prompt = selectionPrompt({ text: "in light of", preset: "supportive" });
+    expect(selectionKind("in light of")).toBe("phrase");
+    expect(prompt.maxTokens).toBe(64);
+    expect(prompt.system).toContain("one combined expression");
+    expect(prompt.system).toContain("selected phrase — contextual meaning");
+    expect(prompt.system).toContain("Never rewrite, summarize, translate, or quote the surrounding");
+  });
+
+  it("rewrites complete passages at the selected support level", () => {
+    const prompt = selectionPrompt({ text: "This is a difficult sentence.", preset: "supportive" });
     expect(prompt.maxTokens).toBe(96);
     expect(prompt.system).toContain("clear A2 English");
     expect(prompt.system).toContain("Rewrite only the text inside <selection>");
@@ -39,8 +48,17 @@ describe("selection AI prompt", () => {
     expect(prompt.system).toContain("Never translate or summarize the surrounding");
   });
 
+  it("explains a selected phrase as a combination in Chinese", () => {
+    const prompt = selectionPrompt({ text: "quality of mind", mode: "chinese" });
+    expect(prompt.maxTokens).toBe(240);
+    expect(prompt.system).toContain("Treat all text inside <selection> as one combined expression");
+    expect(prompt.system).toContain("组合义：…");
+    expect(prompt.system).toContain("此处：…");
+    expect(prompt.system).toContain("Never translate, paraphrase, summarize, or rewrite the surrounding sentence");
+  });
+
   it("translates and then explains a selected passage in Chinese", () => {
-    const prompt = selectionPrompt({ text: "a difficult passage", mode: "chinese" });
+    const prompt = selectionPrompt({ text: "This is a difficult passage.", mode: "chinese" });
     expect(prompt.system).toContain("First give an accurate, natural Chinese translation");
     expect(prompt.system).toContain("翻译：");
     expect(prompt.system).toContain("解释：");

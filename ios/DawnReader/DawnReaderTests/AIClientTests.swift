@@ -32,7 +32,7 @@ final class AIClientTests: XCTestCase {
 
     func testPassagePromptStillRewritesOnlySelection() {
         let body = AIClient.makeBody(
-            context: .init(before: "before", highlight: "a difficult phrase", after: "after"),
+            context: .init(before: "before", highlight: "This is a difficult sentence.", after: "after"),
             title: "Book",
             model: "deepseek-v4-flash"
         )
@@ -56,13 +56,52 @@ final class AIClientTests: XCTestCase {
 
     func testChinesePassagePromptTranslatesThenExplains() {
         let body = AIClient.makeChineseBody(
-            context: .init(before: "before", highlight: "a difficult passage", after: "after"),
+            context: .init(before: "before", highlight: "This is a difficult passage.", after: "after"),
             title: "Book",
             model: "deepseek-v4-flash"
         )
         XCTAssertTrue(body.messages[0].content.contains("First give an accurate, natural Chinese translation"))
         XCTAssertTrue(body.messages[0].content.contains("翻译："))
         XCTAssertTrue(body.messages[0].content.contains("解释："))
+    }
+
+    func testClassifiesWordsPhrasesAndPassages() {
+        XCTAssertEqual(AIClient.selectionKind("quality"), .word)
+        XCTAssertEqual(AIClient.selectionKind("self-reliance"), .word)
+        XCTAssertEqual(AIClient.selectionKind("in light of"), .phrase)
+        XCTAssertEqual(AIClient.selectionKind("the quality of mind needed to win"), .phrase)
+        XCTAssertEqual(AIClient.selectionKind("He left because it was late."), .passage)
+        XCTAssertEqual(
+            AIClient.selectionKind("This selected passage contains more than eight separate words"),
+            .passage
+        )
+    }
+
+    func testEnglishPhrasePromptExplainsTheCombinationInsteadOfRewriting() {
+        let body = AIClient.makeBody(
+            context: .init(before: "before", highlight: "in light of", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+
+        XCTAssertEqual(body.maxTokens, 64)
+        XCTAssertTrue(body.messages[0].content.contains("one combined expression"))
+        XCTAssertTrue(body.messages[0].content.contains("selected phrase — contextual meaning"))
+        XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, translate, or quote the surrounding"))
+    }
+
+    func testChinesePhrasePromptExplainsTheCombinedAndContextualMeanings() {
+        let body = AIClient.makeChineseBody(
+            context: .init(before: "before", highlight: "quality of mind", after: "after"),
+            title: "Book",
+            model: "deepseek-v4-flash"
+        )
+
+        XCTAssertEqual(body.maxTokens, 240)
+        XCTAssertTrue(body.messages[0].content.contains("one combined expression"))
+        XCTAssertTrue(body.messages[0].content.contains("组合义：…"))
+        XCTAssertTrue(body.messages[0].content.contains("此处：…"))
+        XCTAssertTrue(body.messages[0].content.contains("Never translate, paraphrase, summarize, or rewrite the surrounding"))
     }
 
     func testChatPromptKeepsSelectionAndConversationHistory() {
