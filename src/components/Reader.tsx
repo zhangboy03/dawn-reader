@@ -1505,7 +1505,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     void renditionRef.current?.display(item.href);
   }
 
-  function handleShellPointerDown() {
+  function dismissSelectionOnly(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    gestureRef.current = null;
+    stageGestureRef.current = null;
     clearSelection();
   }
 
@@ -1630,7 +1634,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     : selectedKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
 
-  return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`} onPointerDown={handleShellPointerDown}>
+  return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
     <header className="reader-topbar">
       <button className="back-button" onClick={onClose}>← <span>书架</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`}</small>}</div>
@@ -1808,6 +1812,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         allowFullScreen
       />
     </dialog>}
+
+    {selected && selectionAnchor && <button
+      className="selection-assist-backdrop"
+      type="button"
+      aria-label="关闭解释"
+      onPointerDown={dismissSelectionOnly}
+      onClick={clearSelection}
+    />}
 
     {selected && selectionAnchor && <aside
       ref={selectionAssistRef}

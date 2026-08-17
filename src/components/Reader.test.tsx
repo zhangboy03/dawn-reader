@@ -17,6 +17,14 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
+Object.defineProperty(globalThis, "ResizeObserver", {
+  configurable: true,
+  value: class {
+    observe() {}
+    disconnect() {}
+  },
+});
+
 describe("Reader chrome", () => {
   it("keeps EPUB navigation outside the reflowing reading stage", () => {
     const markup = renderToStaticMarkup(<Reader
@@ -71,5 +79,37 @@ describe("Reader chrome", () => {
 
     expect(outsidePress.defaultPrevented).toBe(true);
     expect(screen.queryByRole("dialog", { name: "阅读设置" })).toBeNull();
+  });
+
+  it("uses an exclusive outside-press layer while selection help is open", () => {
+    render(<Reader
+      source={{
+        type: "text",
+        title: "Quiet selection",
+        text: "A selected phrase stays on the current page.",
+        assistantMode: "rewrite",
+      }}
+      profile={profile}
+      onClose={() => undefined}
+    />);
+
+    const paragraph = screen.getByText("A selected phrase stays on the current page.");
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    Object.defineProperty(range, "getBoundingClientRect", {
+      value: () => ({ left: 220, right: 420, top: 240, bottom: 270, width: 200, height: 30 }),
+    });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    fireEvent.mouseUp(paragraph);
+
+    expect(screen.getByRole("dialog", { name: "简明英文" })).not.toBeNull();
+    const backdrop = screen.getAllByRole("button", { name: "关闭解释" })[0];
+    const outsidePress = createEvent.pointerDown(backdrop);
+    fireEvent(backdrop, outsidePress);
+
+    expect(outsidePress.defaultPrevented).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "简明英文" })).toBeNull();
   });
 });
