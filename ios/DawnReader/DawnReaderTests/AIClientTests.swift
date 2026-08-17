@@ -14,17 +14,16 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[1].content.contains("<context_before>\nbefore\n</context_before>"))
     }
 
-    func testSingleWordPromptSeparatesCoreAndContextualMeaning() {
+    func testSingleWordPromptKeepsOriginalContextualMeaningFormat() {
         let body = AIClient.makeBody(
             context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
             title: "Book",
             model: "deepseek-v4-flash"
         )
-        XCTAssertEqual(body.maxTokens, 80)
+        XCTAssertEqual(body.maxTokens, 48)
         XCTAssertTrue(body.messages[0].content.contains("Explain only the word"))
-        XCTAssertTrue(body.messages[0].content.contains("Core meaning: …"))
-        XCTAssertTrue(body.messages[0].content.contains("Meaning here: …"))
-        XCTAssertTrue(body.messages[0].content.contains("not its historical etymology"))
+        XCTAssertTrue(body.messages[0].content.contains("selected word /IPA/"))
+        XCTAssertTrue(body.messages[0].content.contains("contextual meaning in clear B1–B2 English"))
         XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, or quote the surrounding"))
         XCTAssertTrue(AIClient.isSingleWord("self-reliance"))
         XCTAssertFalse(AIClient.isSingleWord("a difficult phrase"))
@@ -197,6 +196,13 @@ final class AIClientTests: XCTestCase {
 
     func testProviderThinkingIsRemoved() {
         XCTAssertEqual(AIClient.stripThinking("<think>private analysis</think>final answer"), "final answer")
+    }
+
+    func testChineseWordMeaningsArePutOnSeparateLines() {
+        XCTAssertEqual(
+            AIClient.formatChineseWordExplanation("quality /ˈkwɒləti/ 本义：品质 此处：卓越标准"),
+            "quality /ˈkwɒləti/\n本义：品质\n此处：卓越标准"
+        )
     }
 
     func testPairingCodeNormalizationAndContentHash() {

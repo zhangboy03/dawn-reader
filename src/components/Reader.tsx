@@ -1747,7 +1747,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         </div>
       </header>
       {source.assistantMode === "rewrite" ? <div role="status" aria-live="polite">
-          {rewrite ? <p>{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
+          {rewrite ? <p className="rewrite-result">{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
           {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
         </div> : <div className="selection-chat">
           <div className="chat-selection"><span>选中</span><p>{selected}</p></div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isSingleWord } from "../lib/selectionKind";
-import { selectionPrompt, stripThinking } from "./aiPrompt";
+import { formatChineseWordExplanation, selectionPrompt, stripThinking } from "./aiPrompt";
 
 describe("selection AI prompt", () => {
   it("keeps selected content separate from nearby context", () => {
@@ -17,10 +17,9 @@ describe("selection AI prompt", () => {
     const prompt = selectionPrompt({ text: "self-reliance", context: { before: "his", after: "mattered" } });
     expect(isSingleWord("self-reliance")).toBe(true);
     expect(isSingleWord("a difficult phrase")).toBe(false);
-    expect(prompt.maxTokens).toBe(80);
-    expect(prompt.system).toContain("Core meaning: …");
-    expect(prompt.system).toContain("Meaning here: …");
-    expect(prompt.system).toContain("not its historical etymology");
+    expect(prompt.maxTokens).toBe(48);
+    expect(prompt.system).toContain("selected word /IPA/");
+    expect(prompt.system).toContain("contextual meaning in clear B1 English");
     expect(prompt.system).toContain("Never rewrite, summarize, or quote the surrounding");
   });
 
@@ -49,5 +48,10 @@ describe("selection AI prompt", () => {
 
   it("removes hidden reasoning blocks from provider output", () => {
     expect(stripThinking("<think>private analysis</think>final answer")).toBe("final answer");
+  });
+
+  it("puts Chinese core and contextual meanings on separate lines", () => {
+    expect(formatChineseWordExplanation("quality /ˈkwɒləti/ 本义：品质 此处：卓越标准"))
+      .toBe("quality /ˈkwɒləti/\n本义：品质\n此处：卓越标准");
   });
 });

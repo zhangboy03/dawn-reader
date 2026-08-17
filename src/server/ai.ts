@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
-import { selectionPrompt, stripThinking, type AssistanceMode } from "./aiPrompt";
+import { isSingleWord } from "../lib/selectionKind";
+import { formatChineseWordExplanation, selectionPrompt, stripThinking, type AssistanceMode } from "./aiPrompt";
 import {
   bookChatContext,
   bookChatSystemPrompt,
@@ -151,7 +152,10 @@ export async function rewriteSelection(input: RewriteInput) {
   }
 
   const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-  const rewrite = stripThinking(data.choices?.[0]?.message?.content ?? "");
+  const rawRewrite = stripThinking(data.choices?.[0]?.message?.content ?? "");
+  const rewrite = mode === "chinese" && isSingleWord(text)
+    ? formatChineseWordExplanation(rawRewrite)
+    : rawRewrite;
   if (!rewrite) throw new Error(`${config.provider} returned no rewrite.`);
   return {
     status: 200,

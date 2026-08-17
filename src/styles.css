@@ -549,6 +549,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .selection-assist header .assist-close { width: 40px; height: 40px; padding: 0; border-color: transparent; color: var(--reader-note-ink); font-size: 20px; font-weight: 400; }
 .assist-retry { min-height: 38px; margin-top: 10px; padding: 0 12px; border: 1px solid var(--reader-note-line); border-radius: 6px; color: var(--reader-note-ink); background: transparent; font-size: 11px; }
 .selection-assist p { min-height: 24px; margin: 9px 0 0; font: 400 15px/1.5 "Iowan Old Style", Baskerville, Georgia, serif; }
+.selection-assist .rewrite-result { white-space: pre-line; }
 .selection-assist.error { border-top-color: #a74a3f; }
 .selection-assist.error p { color: #8d443a; }
 .rewrite-wait { height: 30px; margin-top: 8px; display: flex; align-items: center; gap: 10px; color: #747f7d; font: italic 12px "Iowan Old Style", serif; }
