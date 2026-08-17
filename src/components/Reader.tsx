@@ -17,6 +17,11 @@ import {
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { selectionKind } from "../lib/selectionKind";
+import {
+  selectionAssistPosition,
+  type SelectionAssistPosition,
+  type SelectionBounds,
+} from "../lib/selectionAssistPosition";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
 import { restoredScrollTop, visualAnchorPoints } from "../lib/readingAnchor";
 import {
@@ -62,7 +67,7 @@ type AssistanceMode = "english" | "chinese";
 type ChatState = "idle" | "loading" | "error";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ChatSource = { title: string; url: string };
-type SelectionAnchor = { x: number; y: number; placement: "above" | "below" };
+type SelectionAnchor = SelectionBounds;
 type GestureState = {
   kind: ReaderInputKind;
   mode: PencilMode;
@@ -294,6 +299,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const embedDialogRef = useRef<HTMLDialogElement>(null);
   const embedReturnFocusRef = useRef<HTMLElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const selectionAssistRef = useRef<HTMLElement>(null);
   const tocPanelRef = useRef<HTMLElement>(null);
   const settingsRef = useRef<ReaderSettings>(loadReaderSettings());
   const selectedKeyRef = useRef("");
@@ -301,6 +307,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [displayTitle, setDisplayTitle] = useState(source.title);
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
+  const [assistPosition, setAssistPosition] = useState<SelectionAssistPosition | null>(null);
   const [rewrite, setRewrite] = useState("");
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
   const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
@@ -746,6 +753,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   function beginSelection(text: string, anchor: SelectionAnchor, context: RewriteContext) {
     selectedContextRef.current = context;
+    setAssistPosition(null);
     setSelected(text);
     setSelectionAnchor(anchor);
     setAssistanceMode("english");
@@ -855,11 +863,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const frameRect = iframe?.getBoundingClientRect();
     const top = (frameRect?.top ?? 0) + rect.top;
     const bottom = (frameRect?.top ?? 0) + rect.bottom;
-    const placement = top > 230 ? "above" : "below";
     beginSelection(text, {
-      x: Math.min(window.innerWidth - 190, Math.max(190, (frameRect?.left ?? 0) + rect.left + rect.width / 2)),
-      y: placement === "above" ? top : bottom,
-      placement,
+      x: (frameRect?.left ?? 0) + rect.left + rect.width / 2,
+      top,
+      bottom,
     }, contextFromDomSelection(selection));
   }
 
@@ -1438,11 +1445,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const paragraph = closestTextBlock(range.startContainer)?.closest<HTMLElement>(".reader-paragraph");
     const paragraphIndex = Number(paragraph?.dataset.paragraphIndex ?? -1);
     const rect = range.getBoundingClientRect();
-    const placement = rect.top > 230 ? "above" : "below";
     beginSelection(text, {
-      x: Math.min(window.innerWidth - 190, Math.max(190, rect.left + rect.width / 2)),
-      y: placement === "above" ? rect.top : rect.bottom,
-      placement,
+      x: rect.left + rect.width / 2,
+      top: rect.top,
+      bottom: rect.bottom,
     }, contextFromParagraphs(textParagraphs, paragraphIndex, text));
   }
 
@@ -1464,6 +1470,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectedKeyRef.current = "";
     setSelected("");
     setSelectionAnchor(null);
+    setAssistPosition(null);
     setRewrite("");
     setRewriteState("idle");
     setAssistanceMode("english");
@@ -1501,6 +1508,58 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   function handleShellPointerDown() {
     clearSelection();
   }
+
+  useLayoutEffect(() => {
+    const element = selectionAssistRef.current;
+    if (!selectionAnchor || !element) return;
+
+    const updatePosition = () => {
+      const compactLayout = window.matchMedia("(max-width: 720px)").matches;
+      if (compactLayout) {
+        const maxHeight = source.assistantMode === "ask" ? 620 : 420;
+        setAssistPosition({
+          left: window.innerWidth / 2,
+          top: 0,
+          maxHeight: Math.min(maxHeight, Math.max(0, window.innerHeight - 86)),
+          placement: "below",
+        });
+        return;
+      }
+
+      const card = element.getBoundingClientRect();
+      const topbarBottom = document.querySelector<HTMLElement>(".reader-topbar")?.getBoundingClientRect().bottom ?? 64;
+      const bottombarTop = document.querySelector<HTMLElement>(".reader-bottombar")?.getBoundingClientRect().top ?? window.innerHeight;
+      const positioned = selectionAssistPosition({
+        anchor: selectionAnchor,
+        popover: { width: card.width, height: card.height },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        safeArea: {
+          top: topbarBottom + 12,
+          bottom: bottombarTop - 12,
+        },
+      });
+      const next = {
+        ...positioned,
+        maxHeight: Math.min(positioned.maxHeight, source.assistantMode === "ask" ? 540 : 420),
+      };
+      setAssistPosition((current) => current
+        && current.left === next.left
+        && current.top === next.top
+        && current.maxHeight === next.maxHeight
+        && current.placement === next.placement
+        ? current
+        : next);
+    };
+
+    updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(element);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [selectionAnchor, source.assistantMode]);
 
   function closeImageView() {
     imageDialogRef.current?.close();
@@ -1552,9 +1611,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     "--reader-page-width": `${readingWidth}px`,
   } as CSSProperties;
   const anchorStyle = selectionAnchor ? {
-    left: `${selectionAnchor.x}px`,
-    top: `${Math.max(82, selectionAnchor.y + (selectionAnchor.placement === "above" ? -12 : 12))}px`,
-  } : undefined;
+    left: `${assistPosition?.left ?? selectionAnchor.x}px`,
+    top: `${assistPosition?.top ?? selectionAnchor.bottom + 12}px`,
+    maxHeight: assistPosition ? `${assistPosition.maxHeight}px` : undefined,
+    visibility: assistPosition ? "visible" : "hidden",
+  } as CSSProperties : undefined;
   const selectedKind = selectionKind(selected);
   const assistanceTitle = source.assistantMode === "ask"
     ? "问这段内容"
@@ -1749,7 +1810,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     </dialog>}
 
     {selected && selectionAnchor && <aside
-      className={`selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${selectionAnchor.placement} ${source.assistantMode === "ask" ? chatState : rewriteState}`}
+      ref={selectionAssistRef}
+      className={`selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${assistPosition?.placement ?? "below"} ${source.assistantMode === "ask" ? chatState : rewriteState}`}
       style={anchorStyle}
       role="dialog"
       aria-label={assistanceTitle}
