@@ -166,51 +166,7 @@ struct LibraryView: View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 18)], spacing: 18) {
                 ForEach(library.books) { book in
-                    ZStack(alignment: .topTrailing) {
-                        Button {
-                            Task { await library.open(book, settings: settings) }
-                        } label: {
-                        VStack(alignment: .leading, spacing: 20) {
-                            HStack {
-                                Text("EPUB")
-                                    .font(.caption2.weight(.semibold))
-                                    .tracking(1.2)
-                                Spacer()
-                                Text("\(Int(book.progress * 100))%")
-                                    .font(.caption.monospacedDigit())
-                            }
-                            .foregroundStyle(Palette.mutedInk)
-                            Text(book.title)
-                                .font(.system(size: 21, weight: .medium, design: .serif))
-                                .foregroundStyle(Palette.ink)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(3)
-                            ProgressView(value: book.progress)
-                                .tint(Palette.ember)
-                        }
-                        .padding(.horizontal, 22)
-                        .padding(.top, 22)
-                        .padding(.bottom, 68)
-                        .frame(maxWidth: .infinity, minHeight: 196, alignment: .topLeading)
-                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
-                        }
-                        .buttonStyle(.plain)
-                        assistantModeControl(for: book)
-                            .frame(maxWidth: .infinity, minHeight: 196, alignment: .bottomLeading)
-                            .padding(14)
-                        Button(role: .destructive) {
-                            bookToDelete = book
-                        } label: {
-                            Image(systemName: "trash")
-                                .frame(width: 38, height: 38)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Palette.mutedInk)
-                        .padding(10)
-                        .accessibilityLabel("从书架删除《\(book.title)》")
-                        .disabled(library.isWorking)
-                    }
+                    bookCard(for: book)
                 }
             }
         }
@@ -220,6 +176,74 @@ struct LibraryView: View {
                     .controlSize(.large)
             }
         }
+    }
+
+    private func bookCard(for book: BookRecord) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
+                Button {
+                    Task { await library.open(book, settings: settings) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(spacing: 8) {
+                            Text("EPUB")
+                                .font(.caption2.weight(.semibold))
+                                .tracking(1.2)
+                            Spacer(minLength: 8)
+                            Text("\(Int(book.progress * 100))%")
+                                .font(.caption.monospacedDigit())
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .foregroundStyle(Palette.mutedInk)
+                        Text(book.title)
+                            .font(.system(.title3, design: .serif).weight(.medium))
+                            .foregroundStyle(Palette.ink)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ProgressView(value: book.progress)
+                            .tint(Palette.ember)
+                    }
+                    .padding(.leading, 22)
+                    .padding(.trailing, 12)
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity, minHeight: 156, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("打开《\(book.title)》")
+                .accessibilityValue("阅读进度 \(Int(book.progress * 100))%")
+
+                VStack(spacing: 0) {
+                    Button(role: .destructive) {
+                        bookToDelete = book
+                    } label: {
+                        Image(systemName: "trash")
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.mutedInk)
+                    .accessibilityLabel("从书架删除《\(book.title)》")
+                    .disabled(library.isWorking)
+                    Spacer(minLength: 0)
+                }
+                .frame(width: 54)
+                .frame(minHeight: 156, alignment: .top)
+                .padding(.top, 8)
+            }
+
+            Divider()
+                .overlay(Palette.line)
+
+            assistantModeControl(for: book)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+        }
+        .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .accessibilityElement(children: .contain)
     }
 
     private func assistantModeControl(for book: BookRecord) -> some View {
@@ -237,40 +261,64 @@ struct LibraryView: View {
                     .tag(BookAssistantMode.ask)
             }
         } label: {
-            HStack(spacing: 9) {
-                Text(book.effectiveAssistantMode == .rewrite ? "Aa" : "?")
-                    .font(.system(size: 11, weight: .semibold, design: .serif))
-                    .foregroundStyle(book.effectiveAssistantMode == .ask ? Palette.ember : Palette.mutedInk)
-                    .frame(width: 30, height: 30)
-                    .background(Palette.paper.opacity(0.72))
-                    .clipShape(.rect(cornerRadius: 15, style: .continuous))
-                    .overlay {
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 15,
-                            bottomLeadingRadius: 4,
-                            bottomTrailingRadius: 15,
-                            topTrailingRadius: 15
-                        )
-                        .stroke(book.effectiveAssistantMode == .ask ? Palette.ember.opacity(0.58) : Palette.line)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 9) {
+                    assistantModeBadge(for: book)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("划线后")
+                            .font(.system(size: 8, design: .monospaced))
+                            .tracking(0.6)
+                            .foregroundStyle(Palette.mutedInk.opacity(0.74))
+                        Text(book.effectiveAssistantMode.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Palette.ink)
                     }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("划线后")
-                        .font(.system(size: 8, design: .monospaced))
-                        .tracking(0.6)
-                        .foregroundStyle(Palette.mutedInk.opacity(0.74))
+                    assistantModeChevron
+                }
+                HStack(spacing: 7) {
+                    assistantModeBadge(for: book)
                     Text(book.effectiveAssistantMode.title)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                    assistantModeChevron
                 }
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(Palette.mutedInk.opacity(0.72))
+                HStack(spacing: 5) {
+                    assistantModeBadge(for: book)
+                    assistantModeChevron
+                }
             }
-            .padding(.vertical, 5)
+            .frame(minHeight: 44)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("划线后的动作：\(book.effectiveAssistantMode.title)")
+        .accessibilityHint("打开菜单以选择划线后的动作")
+    }
+
+    private func assistantModeBadge(for book: BookRecord) -> some View {
+        Text(book.effectiveAssistantMode == .rewrite ? "Aa" : "?")
+            .font(.system(size: 11, weight: .semibold, design: .serif))
+            .foregroundStyle(book.effectiveAssistantMode == .ask ? Palette.ember : Palette.mutedInk)
+            .frame(width: 30, height: 30)
+            .background(Palette.paper.opacity(0.72))
+            .clipShape(.rect(cornerRadius: 15, style: .continuous))
+            .overlay {
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 15,
+                    bottomLeadingRadius: 4,
+                    bottomTrailingRadius: 15,
+                    topTrailingRadius: 15
+                )
+                .stroke(book.effectiveAssistantMode == .ask ? Palette.ember.opacity(0.58) : Palette.line)
+            }
+    }
+
+    private var assistantModeChevron: some View {
+        Image(systemName: "chevron.up.chevron.down")
+            .font(.system(size: 8, weight: .medium))
+            .foregroundStyle(Palette.mutedInk.opacity(0.72))
     }
 }
