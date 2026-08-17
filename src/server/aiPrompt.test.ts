@@ -17,8 +17,10 @@ describe("selection AI prompt", () => {
     const prompt = selectionPrompt({ text: "self-reliance", context: { before: "his", after: "mattered" } });
     expect(isSingleWord("self-reliance")).toBe(true);
     expect(isSingleWord("a difficult phrase")).toBe(false);
-    expect(prompt.maxTokens).toBe(48);
-    expect(prompt.system).toContain("selected word /IPA/");
+    expect(prompt.maxTokens).toBe(80);
+    expect(prompt.system).toContain("Core meaning: …");
+    expect(prompt.system).toContain("Meaning here: …");
+    expect(prompt.system).toContain("not its historical etymology");
     expect(prompt.system).toContain("Never rewrite, summarize, or quote the surrounding");
   });
 
@@ -32,7 +34,9 @@ describe("selection AI prompt", () => {
   it("gives contextual Chinese detail for a word", () => {
     const prompt = selectionPrompt({ text: "quality", mode: "chinese" });
     expect(prompt.maxTokens).toBe(320);
-    expect(prompt.system).toContain("standard IPA pronunciation");
+    expect(prompt.system).toContain("本义：…");
+    expect(prompt.system).toContain("此处：…");
+    expect(prompt.system).toContain("not its historical etymology");
     expect(prompt.system).toContain("Never translate or summarize the surrounding");
   });
 

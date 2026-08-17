@@ -14,15 +14,17 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[1].content.contains("<context_before>\nbefore\n</context_before>"))
     }
 
-    func testSingleWordPromptOnlyExplainsContextualMeaning() {
+    func testSingleWordPromptSeparatesCoreAndContextualMeaning() {
         let body = AIClient.makeBody(
             context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
             title: "Book",
             model: "deepseek-v4-flash"
         )
-        XCTAssertEqual(body.maxTokens, 48)
+        XCTAssertEqual(body.maxTokens, 80)
         XCTAssertTrue(body.messages[0].content.contains("Explain only the word"))
-        XCTAssertTrue(body.messages[0].content.contains("selected word /IPA/"))
+        XCTAssertTrue(body.messages[0].content.contains("Core meaning: …"))
+        XCTAssertTrue(body.messages[0].content.contains("Meaning here: …"))
+        XCTAssertTrue(body.messages[0].content.contains("not its historical etymology"))
         XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, or quote the surrounding"))
         XCTAssertTrue(AIClient.isSingleWord("self-reliance"))
         XCTAssertFalse(AIClient.isSingleWord("a difficult phrase"))
@@ -47,7 +49,9 @@ final class AIClientTests: XCTestCase {
         )
         XCTAssertEqual(body.maxTokens, 320)
         XCTAssertTrue(body.messages[0].content.contains("one selected English word in Chinese"))
-        XCTAssertTrue(body.messages[0].content.contains("standard IPA pronunciation"))
+        XCTAssertTrue(body.messages[0].content.contains("本义：…"))
+        XCTAssertTrue(body.messages[0].content.contains("此处：…"))
+        XCTAssertTrue(body.messages[0].content.contains("not its historical etymology"))
         XCTAssertTrue(body.messages[0].content.contains("Never translate or summarize the surrounding"))
     }
 
