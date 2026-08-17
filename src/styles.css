@@ -386,6 +386,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .toc-empty { margin: 0; padding: 34px 22px; color: var(--reader-chrome-muted); font: 400 14px/1.6 "Iowan Old Style", Baskerville, Georgia, serif; }
 .reader-settings { position: absolute; z-index: 30; top: calc(100% - 8px); right: max(18px, env(safe-area-inset-right)); width: 304px; padding: 14px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-panel); color: var(--reader-chrome-ink); background: var(--reader-chrome); box-shadow: 0 24px 54px rgba(7, 14, 20, .22); }
 .reader-settings > div { display: grid; grid-template-columns: 62px repeat(3, 1fr); align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--reader-chrome-line); }
+.reader-settings > div.setting-two { grid-template-columns: 62px repeat(2, 1fr); }
 .reader-settings > div:last-child { border: 0; }
 .reader-settings small { color: var(--reader-chrome-muted); font-size: 9px; }
 .reader-settings button { min-height: 32px; border: 1px solid var(--reader-chrome-line); border-radius: 6px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
@@ -415,7 +416,13 @@ body:has(.onboarding), body:has(.test-screen) {
 .paper h1 { margin: 0 0 34px; padding-bottom: 24px; border-bottom: 1px solid #bdc6c3; font: 500 clamp(34px, 4vw, 50px)/1.08 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.04em; text-wrap: balance; }
 .paper-night h1 { border-color: #4a5d67; }
 .reading-columns { column-count: 2; column-gap: clamp(48px, 6vw, 78px); column-rule: 1px solid rgba(79, 96, 99, .2); }
-.paper p { margin: 0 0 1.28em; font: 400 var(--reader-font-size, 19px)/var(--reader-line-height, 1.72) "Iowan Old Style", Baskerville, Georgia, serif; text-wrap: pretty; }
+.paper p { font: 400 var(--reader-font-size, 19px)/var(--reader-line-height, 1.55) "Iowan Old Style", Baskerville, Georgia, serif; font-kerning: normal; orphans: 2; widows: 2; text-wrap: pretty; }
+.paper[data-dawn-typography-mode="dawn"][data-dawn-text-align="justify"] p { text-align: justify; hyphens: auto; hyphenate-limit-chars: 6 3 3; }
+.paper[data-dawn-typography-mode="dawn"][data-dawn-text-align="start"] p { text-align: start; hyphens: none; }
+.paper[data-dawn-typography-mode="dawn"][data-dawn-paragraph-style="book"] p { margin: 0; text-indent: 1.25em; }
+.paper[data-dawn-typography-mode="dawn"][data-dawn-paragraph-style="book"] p:first-child { text-indent: 0; }
+.paper[data-dawn-typography-mode="dawn"][data-dawn-paragraph-style="spaced"] p { margin: 0 0 .75em; text-indent: 0; }
+.paper[data-dawn-typography-mode="publisher"] p { margin: 0 0 1.28em; }
 .paper ::selection { color: #172027; background: rgba(232, 131, 73, .36); }
 .paper-night .reading-columns { column-rule-color: rgba(163, 180, 183, .2); }
 .epub-frame { width: 100%; height: 100%; min-height: 0; margin: auto; overflow: hidden; border-radius: 2px; background: #f4f2ea; box-shadow: 0 24px 70px rgba(47, 66, 70, .18); touch-action: pan-y pinch-zoom; overscroll-behavior: none; transition: background-color .18s ease; }

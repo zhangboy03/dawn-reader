@@ -17,6 +17,30 @@ enum ReaderThemeOption: String, CaseIterable, Identifiable {
     }
 }
 
+enum ReaderTextAlignOption: String, CaseIterable, Identifiable {
+    case justify
+    case start
+
+    var id: Self { self }
+    var title: String { self == .justify ? "两端" : "左齐" }
+}
+
+enum ReaderParagraphStyle: String, CaseIterable, Identifiable {
+    case book
+    case spaced
+
+    var id: Self { self }
+    var title: String { self == .book ? "书籍" : "段间距" }
+}
+
+enum ReaderTypographyMode: String, CaseIterable, Identifiable {
+    case dawn
+    case publisher
+
+    var id: Self { self }
+    var title: String { self == .dawn ? "Dawn" : "原版" }
+}
+
 enum SyncConnectionState: Equatable {
     case disconnected
     case connecting
@@ -29,6 +53,9 @@ struct ReaderAppearance: Equatable {
     let lineHeight: Double
     let pageMargins: Double
     let theme: ReaderThemeOption
+    let textAlign: ReaderTextAlignOption
+    let paragraphStyle: ReaderParagraphStyle
+    let typographyMode: ReaderTypographyMode
 }
 
 @MainActor
@@ -49,6 +76,15 @@ final class SettingsStore: ObservableObject {
     @Published var readerTheme: ReaderThemeOption {
         didSet { UserDefaults.standard.set(readerTheme.rawValue, forKey: Self.themeKey) }
     }
+    @Published var readerTextAlign: ReaderTextAlignOption {
+        didSet { UserDefaults.standard.set(readerTextAlign.rawValue, forKey: Self.textAlignKey) }
+    }
+    @Published var readerParagraphStyle: ReaderParagraphStyle {
+        didSet { UserDefaults.standard.set(readerParagraphStyle.rawValue, forKey: Self.paragraphStyleKey) }
+    }
+    @Published var readerTypographyMode: ReaderTypographyMode {
+        didSet { UserDefaults.standard.set(readerTypographyMode.rawValue, forKey: Self.typographyModeKey) }
+    }
     @Published var pencilMode: PencilMode {
         didSet { UserDefaults.standard.set(pencilMode.rawValue, forKey: Self.pencilModeKey) }
     }
@@ -58,6 +94,9 @@ final class SettingsStore: ObservableObject {
     private static let lineHeightKey = "dawn-reader.line-height"
     private static let pageMarginsKey = "dawn-reader.page-margins"
     private static let themeKey = "dawn-reader.theme"
+    private static let textAlignKey = "dawn-reader.text-align"
+    private static let paragraphStyleKey = "dawn-reader.paragraph-style"
+    private static let typographyModeKey = "dawn-reader.typography-mode"
     private static let pencilModeKey = "dawn-reader.pencil-mode"
     private static let syncCodeAccount = "dawn-reader-sync-code"
 
@@ -72,6 +111,9 @@ final class SettingsStore: ObservableObject {
         readerLineHeight = defaults.object(forKey: Self.lineHeightKey) as? Double ?? 1.55
         readerPageMargins = defaults.object(forKey: Self.pageMarginsKey) as? Double ?? 1.15
         readerTheme = ReaderThemeOption(rawValue: defaults.string(forKey: Self.themeKey) ?? "") ?? .paper
+        readerTextAlign = ReaderTextAlignOption(rawValue: defaults.string(forKey: Self.textAlignKey) ?? "") ?? .justify
+        readerParagraphStyle = ReaderParagraphStyle(rawValue: defaults.string(forKey: Self.paragraphStyleKey) ?? "") ?? .book
+        readerTypographyMode = ReaderTypographyMode(rawValue: defaults.string(forKey: Self.typographyModeKey) ?? "") ?? .dawn
         pencilMode = PencilMode(rawValue: defaults.string(forKey: Self.pencilModeKey) ?? "") ?? .select
     }
 
@@ -80,7 +122,10 @@ final class SettingsStore: ObservableObject {
             fontSize: readerFontSize,
             lineHeight: readerLineHeight,
             pageMargins: readerPageMargins,
-            theme: readerTheme
+            theme: readerTheme,
+            textAlign: readerTextAlign,
+            paragraphStyle: readerParagraphStyle,
+            typographyMode: readerTypographyMode
         )
     }
 
@@ -127,7 +172,10 @@ final class SettingsStore: ObservableObject {
                 lineHeight: readerLineHeight,
                 nativePageMargins: readerPageMargins,
                 theme: readerTheme.rawValue,
-                pencilMode: pencilMode.rawValue
+                pencilMode: pencilMode.rawValue,
+                textAlign: readerTextAlign.rawValue,
+                paragraphStyle: readerParagraphStyle.rawValue,
+                typographyMode: readerTypographyMode.rawValue
             ))
             syncConnectionState = .connected
         } catch {
@@ -141,6 +189,9 @@ final class SettingsStore: ObservableObject {
         if let value = cloudSettings.nativePageMargins { readerPageMargins = min(max(value, 0.7), 1.6) }
         if let value = cloudSettings.theme.flatMap(ReaderThemeOption.init(rawValue:)) { readerTheme = value }
         if let value = cloudSettings.pencilMode.flatMap(PencilMode.init(rawValue:)) { pencilMode = value }
+        if let value = cloudSettings.textAlign.flatMap(ReaderTextAlignOption.init(rawValue:)) { readerTextAlign = value }
+        if let value = cloudSettings.paragraphStyle.flatMap(ReaderParagraphStyle.init(rawValue:)) { readerParagraphStyle = value }
+        if let value = cloudSettings.typographyMode.flatMap(ReaderTypographyMode.init(rawValue:)) { readerTypographyMode = value }
     }
 }
 

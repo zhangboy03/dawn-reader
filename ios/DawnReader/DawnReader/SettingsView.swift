@@ -39,6 +39,27 @@ struct SettingsView: View {
                         minimumLabel: "窄",
                         maximumLabel: "宽"
                     )
+
+                    Picker("对齐", selection: $settings.readerTextAlign) {
+                        ForEach(ReaderTextAlignOption.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker("段落", selection: $settings.readerParagraphStyle) {
+                        ForEach(ReaderParagraphStyle.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker("排版", selection: $settings.readerTypographyMode) {
+                        ForEach(ReaderTypographyMode.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
                 Section("DeepSeek") {
                     SecureField("API Key", text: $settings.apiKey)
@@ -72,7 +93,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
-                    Text("配对后同步书籍、阅读位置、主题、行距和 Apple Pencil 模式。DeepSeek 密钥不会上传。")
+                    Text("配对后同步书籍、阅读位置、主题、排版和 Apple Pencil 模式。DeepSeek 密钥不会上传。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -41,6 +41,9 @@ struct CloudReaderSettings: Codable, Sendable {
     let nativePageMargins: Double?
     let theme: String?
     let pencilMode: String?
+    let textAlign: String?
+    let paragraphStyle: String?
+    let typographyMode: String?
 }
 
 private struct CloudState: Codable, Sendable {

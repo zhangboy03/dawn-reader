@@ -114,6 +114,10 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(install.contains("dataset.dawnPencilMode"))
         XCTAssertTrue(install.contains("user-select: none"))
         XCTAssertTrue(install.contains("html[data-dawn-pencil-mode=\"page\"]"))
+        XCTAssertTrue(install.contains("data-dawn-typography-mode"))
+        XCTAssertTrue(install.contains("data-dawn-typography-exempt"))
+        XCTAssertTrue(install.contains("poem|poetry|verse"))
+        XCTAssertTrue(install.contains("text-indent: 1.25em"))
 
         let selectMode = ReaderContentScript.setMode(.select)
         XCTAssertTrue(selectMode.contains("'select'"))
@@ -121,6 +125,65 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(pageMode.contains("removeAllRanges"))
         XCTAssertTrue(ReaderContentScript.install(mode: .select).contains("::highlight(dawn-reader-live-selection)"))
         XCTAssertTrue(ReaderContentScript.clearSelection.contains("highlights?.delete"))
+    }
+
+    @MainActor
+    func testEnglishDawnTypographyUsesResponsiveJustifiedBookSettings() {
+        let appearance = ReaderAppearance(
+            fontSize: 1,
+            lineHeight: 1.55,
+            pageMargins: 1.15,
+            theme: .paper,
+            textAlign: .justify,
+            paragraphStyle: .book,
+            typographyMode: .dawn
+        )
+        let preferences = ReaderHostViewController.preferences(for: appearance, language: "en-US")
+
+        XCTAssertEqual(preferences.columnCount, .auto)
+        XCTAssertEqual(preferences.spread, nil)
+        XCTAssertEqual(preferences.textAlign, .justify)
+        XCTAssertEqual(preferences.hyphens, true)
+        XCTAssertEqual(preferences.paragraphIndent, 1.25)
+        XCTAssertEqual(preferences.paragraphSpacing, 0)
+        XCTAssertEqual(preferences.publisherStyles, false)
+        XCTAssertEqual(preferences.textNormalization, true)
+    }
+
+    @MainActor
+    func testNonEnglishAndPublisherTypographyDoNotUseEnglishHyphenation() {
+        let dawn = ReaderAppearance(
+            fontSize: 1,
+            lineHeight: 1.55,
+            pageMargins: 1.15,
+            theme: .paper,
+            textAlign: .justify,
+            paragraphStyle: .book,
+            typographyMode: .dawn
+        )
+        let chinese = ReaderHostViewController.preferences(for: dawn, language: "zh-Hant")
+        XCTAssertEqual(chinese.textAlign, .start)
+        XCTAssertEqual(chinese.hyphens, false)
+        XCTAssertEqual(chinese.paragraphIndent, 0)
+        XCTAssertEqual(chinese.paragraphSpacing, 0.75)
+
+        let publisher = ReaderAppearance(
+            fontSize: 1,
+            lineHeight: 1.55,
+            pageMargins: 1.15,
+            theme: .paper,
+            textAlign: .justify,
+            paragraphStyle: .book,
+            typographyMode: .publisher
+        )
+        let original = ReaderHostViewController.preferences(for: publisher, language: "en")
+        XCTAssertNil(original.fontFamily)
+        XCTAssertNil(original.textAlign)
+        XCTAssertNil(original.hyphens)
+        XCTAssertNil(original.paragraphIndent)
+        XCTAssertNil(original.paragraphSpacing)
+        XCTAssertEqual(original.publisherStyles, true)
+        XCTAssertEqual(original.textNormalization, false)
     }
 
     func testNightThemeAvoidsPureBlackAndPureWhite() {

@@ -30,7 +30,10 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         session: ReadingSession
     ) throws {
         let locator = initialLocatorJSON.flatMap { try? Locator(jsonString: $0) }
-        let preferences = Self.preferences(for: session.settings.readerAppearance)
+        let preferences = Self.preferences(
+            for: session.settings.readerAppearance,
+            language: publication.metadata.language
+        )
         navigator = try EPUBNavigatorViewController(
             publication: publication,
             initialLocation: locator,
@@ -160,7 +163,15 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             view.backgroundColor = ReadiumNavigator.Color(
                 hex: Palette.readerBackgroundHex(for: appearance.theme)
             )?.uiColor
-            navigator.submitPreferences(Self.preferences(for: appearance))
+            navigator.submitPreferences(Self.preferences(for: appearance, language: publication.metadata.language))
+            Task { [weak navigator] in
+                _ = await navigator?.evaluateJavaScript(
+                    ReaderContentScript.setTypography(
+                        appearance: appearance,
+                        isEnglish: Self.isEnglish(publication.metadata.language)
+                    )
+                )
+            }
         }
     }
 
@@ -297,28 +308,45 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         )
     }
 
-    private static func preferences(for appearance: ReaderAppearance) -> EPUBPreferences {
+    static func isEnglish(_ language: Language?) -> Bool {
+        guard let code = language?.code.bcp47.lowercased() else { return false }
+        return code == "en" || code.hasPrefix("en-")
+    }
+
+    static func preferences(for appearance: ReaderAppearance, language: Language?) -> EPUBPreferences {
         let theme: Theme
         switch appearance.theme {
         case .paper: theme = .light
         case .sepia: theme = .sepia
         case .night: theme = .dark
         }
+        let standard = appearance.typographyMode == .dawn
+        let english = standard && isEnglish(language)
+        let textAlign: TextAlignment? = standard
+            ? (english && appearance.textAlign == .justify ? .justify : .start)
+            : nil
+        let paragraphIndent: Double? = standard
+            ? (english && appearance.paragraphStyle == .book ? 1.25 : 0)
+            : nil
+        let paragraphSpacing: Double? = standard
+            ? (english && appearance.paragraphStyle == .book ? 0 : 0.75)
+            : nil
         return EPUBPreferences(
             backgroundColor: ReadiumNavigator.Color(hex: Palette.readerBackgroundHex(for: appearance.theme)),
-            columnCount: .two,
-            fontFamily: .iowanOldStyle,
+            columnCount: .auto,
+            fontFamily: standard ? .iowanOldStyle : nil,
             fontSize: appearance.fontSize,
-            hyphens: true,
+            hyphens: standard ? (english && appearance.textAlign == .justify) : nil,
             lineHeight: appearance.lineHeight,
             pageMargins: appearance.pageMargins,
-            paragraphSpacing: 0.75,
-            publisherStyles: false,
+            paragraphIndent: paragraphIndent,
+            paragraphSpacing: paragraphSpacing,
+            publisherStyles: !standard,
             scroll: false,
-            spread: .always,
-            textAlign: .start,
+            spread: .auto,
+            textAlign: textAlign,
             textColor: ReadiumNavigator.Color(hex: Palette.readerTextHex(for: appearance.theme)),
-            textNormalization: true,
+            textNormalization: standard,
             theme: theme
         )
     }
@@ -351,7 +379,11 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
         userContentController.addUserScript(
             WKUserScript(
-                source: ReaderContentScript.install(mode: session.pencilMode),
+                source: ReaderContentScript.install(
+                    mode: session.pencilMode,
+                    appearance: session.settings.readerAppearance,
+                    isEnglish: Self.isEnglish(publication.metadata.language)
+                ),
                 injectionTime: .atDocumentEnd,
                 forMainFrameOnly: false
             )

@@ -52,6 +52,10 @@ import {
   type EpubEmbedTarget,
   type EpubImageTarget,
 } from "../lib/epubMedia";
+import {
+  applyEpubTypographyDocument,
+  normalizePublicationLanguage,
+} from "../lib/epubTypography";
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type AssistanceMode = "english" | "chinese";
@@ -272,6 +276,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const pendingEpubReflowRef = useRef<EpubReflowRequest | null>(null);
   const activeEpubReflowRef = useRef<EpubReflowRequest | null>(null);
   const epubFrameSizeRef = useRef<EpubFrameSize | null>(null);
+  const epubLanguageRef = useRef<string | null>(null);
   const epubReadyRef = useRef(false);
   const pendingTextAppearanceAnchorRef = useRef<TextAppearanceAnchor | null>(null);
   const cloudProgressTimerRef = useRef<number | null>(null);
@@ -290,6 +295,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const embedReturnFocusRef = useRef<HTMLElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const tocPanelRef = useRef<HTMLElement>(null);
+  const settingsRef = useRef<ReaderSettings>(loadReaderSettings());
   const selectedKeyRef = useRef("");
   const selectionInputRef = useRef<ReaderInputKind>("mouse");
   const [displayTitle, setDisplayTitle] = useState(source.title);
@@ -308,6 +314,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [pageNumber, setPageNumber] = useState<EpubPageNumber | null>(null);
   const [locationsReady, setLocationsReady] = useState(false);
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
+  settingsRef.current = settings;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
   const [tocLoaded, setTocLoaded] = useState(false);
@@ -504,7 +511,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   function updateSettings(patch: Partial<ReaderSettings>) {
-    if (patch.fontSize || patch.lineHeight || patch.pageWidth || patch.theme) preserveAppearanceAnchor();
+    if (
+      patch.fontSize
+      || patch.lineHeight
+      || patch.pageWidth
+      || patch.theme
+      || patch.textAlign
+      || patch.paragraphStyle
+      || patch.typographyMode
+    ) preserveAppearanceAnchor();
     setSettings((current) => {
       const next = { ...current, ...patch };
       pencilModeRef.current = next.pencilMode;
@@ -533,6 +548,22 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     for (const content of contents) applyPencilModeToContents(content, mode);
   }
 
+  function applyTypographyToContents(document: Document, next = settingsRef.current) {
+    return applyEpubTypographyDocument(document, {
+      publicationLanguage: epubLanguageRef.current,
+      textAlign: next.textAlign,
+      paragraphStyle: next.paragraphStyle,
+      typographyMode: next.typographyMode,
+    });
+  }
+
+  function applyTypographyToOpenContents(next = settingsRef.current) {
+    for (const contents of renditionRef.current?.getContents?.() ?? []) {
+      const document = contents?.document as Document | undefined;
+      if (document) applyTypographyToContents(document, next);
+    }
+  }
+
   function setPencilMode(mode: PencilMode) {
     updateSettings({ pencilMode: mode });
     clearSelection();
@@ -554,7 +585,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     rendition?.themes?.default({
       html: { background: `${colors.background} !important` },
       body: {
-        "font-family": "Iowan Old Style, Baskerville, Georgia, serif !important",
         color: `${colors.color} !important`,
         background: `${colors.background} !important`,
         padding: "24px 34px !important",
@@ -1020,10 +1050,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const rendition = renditionRef.current;
     if (!rendition) return;
     applyEpubTheme(rendition);
+    applyTypographyToOpenContents();
     rendition.spread?.("auto", 900);
     requestEpubReflow("appearance", 80);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme]);
+  }, [
+    settings.fontSize,
+    settings.lineHeight,
+    settings.pageWidth,
+    settings.theme,
+    settings.textAlign,
+    settings.paragraphStyle,
+    settings.typographyMode,
+  ]);
 
   useLayoutEffect(() => {
     if (source.type !== "text") return;
@@ -1040,7 +1079,16 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       );
     }
     pendingTextAppearanceAnchorRef.current = null;
-  }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.theme, source.type]);
+  }, [
+    settings.fontSize,
+    settings.lineHeight,
+    settings.pageWidth,
+    settings.theme,
+    settings.textAlign,
+    settings.paragraphStyle,
+    settings.typographyMode,
+    source.type,
+  ]);
 
   useEffect(() => {
     if (source.type !== "epub" || !epubRef.current) return;
@@ -1063,9 +1111,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       const { default: ePub } = await import("epubjs");
       book = ePub(buffer);
       bookRef.current = book;
-      book.loaded.metadata.then((metadata: { title?: string }) => {
-        if (metadata.title) setDisplayTitle(metadata.title.trim());
-      }).catch(() => undefined);
+      const metadata = await book.loaded.metadata.catch(() => null) as {
+        title?: string;
+        language?: unknown;
+      } | null;
+      if (cancelled || !epubRef.current) return;
+      if (metadata?.title) setDisplayTitle(metadata.title.trim());
+      epubLanguageRef.current = normalizePublicationLanguage(metadata?.language);
       book.loaded.navigation.then((navigation: { toc?: unknown }) => {
         if (!cancelled) {
           setTocItems(normalizeEpubToc(navigation.toc));
@@ -1095,6 +1147,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       rendition.hooks.content.register((contents: any) => {
         const document = contents.document as Document;
         applyPencilModeToContents(contents, pencilModeRef.current);
+        applyTypographyToContents(document);
         const preparedMedia = prepareEpubMediaDocument(document, {
           onImageActivate: (target) => {
             imageReturnFocusRef.current = target.element;
@@ -1353,6 +1406,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       pendingEpubReflowRef.current = null;
       activeEpubReflowRef.current = null;
       epubFrameSizeRef.current = null;
+      epubLanguageRef.current = null;
       epubContentLayoutSignaturesRef.current.clear();
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
       if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
@@ -1538,7 +1592,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       {settingsOpen && <div className="reader-settings" role="dialog" aria-label="阅读设置">
         <div><small>字号</small>{([17, 19, 21] as const).map((size) => <button className={settings.fontSize === size ? "active" : ""} key={size} onClick={() => updateSettings({ fontSize: size })}>A{size === 17 ? "−" : size === 21 ? "+" : ""}</button>)}</div>
         <div><small>行距</small>{([1.55, 1.72, 1.9] as const).map((height, index) => <button className={settings.lineHeight === height ? "active" : ""} key={height} onClick={() => updateSettings({ lineHeight: height })}>{["紧", "适中", "松"][index]}</button>)}</div>
-        <div><small>版心</small>{([660, 760, 860] as const).map((width, index) => <button className={settings.pageWidth === width ? "active" : ""} key={width} onClick={() => updateSettings({ pageWidth: width })}>{["窄", "适中", "宽"][index]}</button>)}</div>
+        <div><small>行长</small>{([660, 760, 860] as const).map((width, index) => <button className={settings.pageWidth === width ? "active" : ""} key={width} onClick={() => updateSettings({ pageWidth: width })}>{["短", "适中", "长"][index]}</button>)}</div>
+        <div className="setting-two"><small>对齐</small>{(["justify", "start"] as const).map((textAlign, index) => <button className={settings.textAlign === textAlign ? "active" : ""} key={textAlign} onClick={() => updateSettings({ textAlign })}>{["两端", "左齐"][index]}</button>)}</div>
+        <div className="setting-two"><small>段落</small>{(["book", "spaced"] as const).map((paragraphStyle, index) => <button className={settings.paragraphStyle === paragraphStyle ? "active" : ""} key={paragraphStyle} onClick={() => updateSettings({ paragraphStyle })}>{["书籍", "段间距"][index]}</button>)}</div>
+        {source.type === "epub" && <div className="setting-two"><small>排版</small>{(["dawn", "publisher"] as const).map((typographyMode, index) => <button className={settings.typographyMode === typographyMode ? "active" : ""} key={typographyMode} onClick={() => updateSettings({ typographyMode })}>{["Dawn", "原版"][index]}</button>)}</div>}
         <div><small>纸色</small>{(["paper", "sepia", "night"] as const).map((theme, index) => <button className={`theme-dot swatch-${theme} ${settings.theme === theme ? "active" : ""}`} aria-label={["纸白", "暖褐", "夜读"][index]} key={theme} onClick={() => updateSettings({ theme })} />)}</div>
         {source.type === "epub" && <div><small>位置</small>{([25, 50, 75] as const).map((value) => <button className={Math.abs(pageProgress - value) < 2 ? "active" : ""} disabled={!locationsReady} key={value} onClick={() => goToPercentage(value)}>{value}%</button>)}</div>}
       </div>}
@@ -1567,7 +1624,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       onPointerUp={handleStagePointerUp}
       onPointerCancel={() => { stageGestureRef.current = null; }}
     >
-      {source.type === "text" ? <article className={`paper paper-${settings.theme}`} onMouseUp={captureSelection} onPointerUp={(event) => {
+      {source.type === "text" ? <article
+        className={`paper paper-${settings.theme}`}
+        data-dawn-paragraph-style={settings.paragraphStyle}
+        data-dawn-text-align={settings.textAlign}
+        data-dawn-typography-mode={settings.typographyMode}
+        onMouseUp={captureSelection}
+        onPointerUp={(event) => {
         if (event.pointerType === "pen" && settings.pencilMode === "select") captureSelection();
       }}>
         <h1>{displayTitle}</h1>
