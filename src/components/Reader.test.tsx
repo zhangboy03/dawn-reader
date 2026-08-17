@@ -1,9 +1,21 @@
+// @vitest-environment jsdom
+
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Reader } from "./Reader";
 
 const profile = { score: null, band: "未校准 · 平衡辅助", preset: "balanced" as const };
+
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: () => ({
+    matches: false,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }),
+});
 
 describe("Reader chrome", () => {
   it("keeps EPUB navigation outside the reflowing reading stage", () => {
@@ -31,10 +43,33 @@ describe("Reader chrome", () => {
   });
 
   it("uses a dynamic viewport shell without fixing the document body", () => {
-    const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    const css = readFileSync("src/styles.css", "utf8");
 
     expect(css).toMatch(/\.reader-shell\s*\{[\s\S]*?height:\s*100dvh;/);
     expect(css).toMatch(/\.reader-shell-epub\s*\{\s*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/);
     expect(css).not.toMatch(/body\.reader-active\s*\{[^}]*position:\s*fixed/);
+  });
+
+  it("closes settings on the outside press without passing it to the reading surface", () => {
+    render(<Reader
+      source={{
+        type: "text",
+        title: "Quiet settings",
+        text: "A paragraph that should stay where it is.",
+        assistantMode: "rewrite",
+      }}
+      profile={profile}
+      onClose={() => undefined}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "阅读设置" }));
+    expect(screen.getByRole("dialog", { name: "阅读设置" })).not.toBeNull();
+
+    const backdrop = screen.getByRole("button", { name: "关闭阅读设置" });
+    const outsidePress = createEvent.pointerDown(backdrop);
+    fireEvent(backdrop, outsidePress);
+
+    expect(outsidePress.defaultPrevented).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "阅读设置" })).toBeNull();
   });
 });

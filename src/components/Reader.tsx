@@ -1589,15 +1589,28 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           setSettingsOpen((open) => !open);
         }} aria-label="阅读设置">Aa</button>
       </div>
-      {settingsOpen && <div className="reader-settings" role="dialog" aria-label="阅读设置">
-        <div><small>字号</small>{([17, 19, 21] as const).map((size) => <button className={settings.fontSize === size ? "active" : ""} key={size} onClick={() => updateSettings({ fontSize: size })}>A{size === 17 ? "−" : size === 21 ? "+" : ""}</button>)}</div>
-        <div><small>行距</small>{([1.55, 1.72, 1.9] as const).map((height, index) => <button className={settings.lineHeight === height ? "active" : ""} key={height} onClick={() => updateSettings({ lineHeight: height })}>{["紧", "适中", "松"][index]}</button>)}</div>
-        <div><small>行长</small>{([660, 760, 860] as const).map((width, index) => <button className={settings.pageWidth === width ? "active" : ""} key={width} onClick={() => updateSettings({ pageWidth: width })}>{["短", "适中", "长"][index]}</button>)}</div>
-        <div className="setting-two"><small>对齐</small>{(["justify", "start"] as const).map((textAlign, index) => <button className={settings.textAlign === textAlign ? "active" : ""} key={textAlign} onClick={() => updateSettings({ textAlign })}>{["两端", "左齐"][index]}</button>)}</div>
-        <div className="setting-two"><small>段落</small>{(["book", "spaced"] as const).map((paragraphStyle, index) => <button className={settings.paragraphStyle === paragraphStyle ? "active" : ""} key={paragraphStyle} onClick={() => updateSettings({ paragraphStyle })}>{["书籍", "段间距"][index]}</button>)}</div>
-        {source.type === "epub" && <div className="setting-two"><small>排版</small>{(["dawn", "publisher"] as const).map((typographyMode, index) => <button className={settings.typographyMode === typographyMode ? "active" : ""} key={typographyMode} onClick={() => updateSettings({ typographyMode })}>{["Dawn", "原版"][index]}</button>)}</div>}
-        <div><small>纸色</small>{(["paper", "sepia", "night"] as const).map((theme, index) => <button className={`theme-dot swatch-${theme} ${settings.theme === theme ? "active" : ""}`} aria-label={["纸白", "暖褐", "夜读"][index]} key={theme} onClick={() => updateSettings({ theme })} />)}</div>
-        {source.type === "epub" && <div><small>位置</small>{([25, 50, 75] as const).map((value) => <button className={Math.abs(pageProgress - value) < 2 ? "active" : ""} disabled={!locationsReady} key={value} onClick={() => goToPercentage(value)}>{value}%</button>)}</div>}
+      {settingsOpen && <div className="reader-settings-layer">
+        <button
+          className="reader-settings-backdrop"
+          aria-label="关闭阅读设置"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            gestureRef.current = null;
+            stageGestureRef.current = null;
+            setSettingsOpen(false);
+          }}
+        />
+        <div className="reader-settings" role="dialog" aria-modal="true" aria-label="阅读设置">
+          <div><small>字号</small>{([17, 19, 21] as const).map((size) => <button className={settings.fontSize === size ? "active" : ""} key={size} onClick={() => updateSettings({ fontSize: size })}>A{size === 17 ? "−" : size === 21 ? "+" : ""}</button>)}</div>
+          <div><small>行距</small>{([1.55, 1.72, 1.9] as const).map((height, index) => <button className={settings.lineHeight === height ? "active" : ""} key={height} onClick={() => updateSettings({ lineHeight: height })}>{["紧", "适中", "松"][index]}</button>)}</div>
+          <div><small>行长</small>{([660, 760, 860] as const).map((width, index) => <button className={settings.pageWidth === width ? "active" : ""} key={width} onClick={() => updateSettings({ pageWidth: width })}>{["短", "适中", "长"][index]}</button>)}</div>
+          <div className="setting-two"><small>对齐</small>{(["justify", "start"] as const).map((textAlign, index) => <button className={settings.textAlign === textAlign ? "active" : ""} key={textAlign} onClick={() => updateSettings({ textAlign })}>{["两端", "左齐"][index]}</button>)}</div>
+          <div className="setting-two"><small>段落</small>{(["book", "spaced"] as const).map((paragraphStyle, index) => <button className={settings.paragraphStyle === paragraphStyle ? "active" : ""} key={paragraphStyle} onClick={() => updateSettings({ paragraphStyle })}>{["书籍", "段间距"][index]}</button>)}</div>
+          {source.type === "epub" && <div className="setting-two"><small>排版</small>{(["dawn", "publisher"] as const).map((typographyMode, index) => <button className={settings.typographyMode === typographyMode ? "active" : ""} key={typographyMode} onClick={() => updateSettings({ typographyMode })}>{["Dawn", "原版"][index]}</button>)}</div>}
+          <div><small>纸色</small>{(["paper", "sepia", "night"] as const).map((theme, index) => <button className={`theme-dot swatch-${theme} ${settings.theme === theme ? "active" : ""}`} aria-label={["纸白", "暖褐", "夜读"][index]} key={theme} onClick={() => updateSettings({ theme })} />)}</div>
+          {source.type === "epub" && <div><small>位置</small>{([25, 50, 75] as const).map((value) => <button className={Math.abs(pageProgress - value) < 2 ? "active" : ""} disabled={!locationsReady} key={value} onClick={() => goToPercentage(value)}>{value}%</button>)}</div>}
+        </div>
       </div>}
     </header>
 
