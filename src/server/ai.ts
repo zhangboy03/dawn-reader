@@ -8,7 +8,7 @@ import {
   type BookChatInput,
 } from "./chatPrompt";
 import { searchWeb, webSearchConfigured, type WebSource } from "./webSearch";
-import { providerRequestOptions } from "./aiProvider";
+import { providerRequestOptions, providerSamplingOptions } from "./aiProvider";
 
 type AiConfig = {
   provider: string;
@@ -85,7 +85,7 @@ async function requestChatCompletion(
       stream: false,
       messages,
       max_tokens: options.maxTokens,
-      temperature: 0.2,
+      ...providerSamplingOptions(config.provider, 0.2),
       ...(options.tools?.length ? { tools: options.tools, tool_choice: options.toolChoice ?? "auto" } : {}),
       ...providerRequestOptions(config.provider),
     }),
@@ -137,7 +137,7 @@ export async function rewriteSelection(input: RewriteInput) {
         { role: "user", content: prompt.user },
       ],
       max_tokens: prompt.maxTokens,
-      temperature: 0.1,
+      ...providerSamplingOptions(config.provider, 0.1),
       ...providerRequestOptions(config.provider),
     }),
     signal: AbortSignal.timeout(30000),

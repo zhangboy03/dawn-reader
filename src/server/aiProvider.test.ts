@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { providerRequestOptions } from "./aiProvider";
+import { providerRequestOptions, providerSamplingOptions } from "./aiProvider";
 
 describe("AI provider request options", () => {
   it("disables DeepSeek thinking", () => {
@@ -13,5 +13,14 @@ describe("AI provider request options", () => {
 
   it("does not add provider-specific fields for generic endpoints", () => {
     expect(providerRequestOptions("openai-compatible")).toEqual({});
+  });
+
+  it("uses Gemini's minimum reasoning effort without deprecated sampling fields", () => {
+    expect(providerRequestOptions("gemini")).toEqual({ reasoning_effort: "minimal" });
+    expect(providerSamplingOptions("gemini", 0.1)).toEqual({});
+  });
+
+  it("preserves temperature for providers that support it", () => {
+    expect(providerSamplingOptions("qwen", 0.1)).toEqual({ temperature: 0.1 });
   });
 });
