@@ -19,20 +19,17 @@ enum AIClient {
             let content: String
         }
 
-        struct Thinking: Encodable, Equatable {
-            let type: String
-        }
-
         let model: String
         let stream: Bool
         let messages: [Message]
         let maxTokens: Int
         let temperature: Double
-        let thinking: Thinking
+        let enableThinking: Bool
 
         enum CodingKeys: String, CodingKey {
-            case model, stream, messages, temperature, thinking
+            case model, stream, messages, temperature
             case maxTokens = "max_tokens"
+            case enableThinking = "enable_thinking"
         }
     }
 
@@ -78,7 +75,7 @@ enum AIClient {
             messages: [.init(role: "system", content: system), .init(role: "user", content: userMessage(context: context, title: title))],
             maxTokens: maxTokens,
             temperature: 0.1,
-            thinking: .init(type: "disabled")
+            enableThinking: false
         )
     }
 
@@ -116,7 +113,7 @@ enum AIClient {
             messages: [.init(role: "system", content: system), .init(role: "user", content: userMessage(context: context, title: title))],
             maxTokens: maxTokens,
             temperature: 0.1,
-            thinking: .init(type: "disabled")
+            enableThinking: false
         )
     }
 
@@ -140,7 +137,7 @@ enum AIClient {
             ] + history,
             maxTokens: 700,
             temperature: 0.2,
-            thinking: .init(type: "disabled")
+            enableThinking: false
         )
     }
 
@@ -216,7 +213,7 @@ enum AIClient {
 
     private static func complete(body: RequestBody, apiKey: String) async throws -> String {
         guard !apiKey.isEmpty else { throw AIError.missingKey }
-        var request = URLRequest(url: URL(string: "https://api.deepseek.com/chat/completions")!)
+        var request = URLRequest(url: URL(string: "https://llm-jb9klibz2vma4236.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -257,9 +254,9 @@ enum AIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingKey: "请先在设置中填写 DeepSeek API Key。"
-        case .requestFailed: "DeepSeek 请求失败，请检查网络、密钥和模型名称。"
-        case .emptyResponse: "DeepSeek 没有返回内容。"
+        case .missingKey: "请先在设置中填写百炼 API Key。"
+        case .requestFailed: "Qwen 请求失败，请检查网络、密钥和模型名称。"
+        case .emptyResponse: "Qwen 没有返回内容。"
         }
     }
 }

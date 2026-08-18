@@ -99,14 +99,16 @@ final class SettingsStore: ObservableObject {
     private static let typographyModeKey = "dawn-reader.typography-mode"
     private static let pencilModeKey = "dawn-reader.pencil-mode"
     private static let syncCodeAccount = "dawn-reader-sync-code"
+    private static let qwenAPIKeyAccount = "qwen-api-key"
 
     init() {
         let defaults = UserDefaults.standard
-        apiKey = KeychainStore.read("deepseek-api-key")
+        apiKey = KeychainStore.read(Self.qwenAPIKeyAccount)
         let storedSyncCode = KeychainStore.read(Self.syncCodeAccount)
         syncCode = storedSyncCode
         syncConnectionState = storedSyncCode.isEmpty ? .disconnected : .connected
-        model = defaults.string(forKey: modelKey) ?? "deepseek-v4-flash"
+        let storedModel = defaults.string(forKey: modelKey)
+        model = storedModel?.hasPrefix("deepseek-") == true ? "qwen3.7-flash" : storedModel ?? "qwen3.7-flash"
         readerFontSize = defaults.object(forKey: Self.fontSizeKey) as? Double ?? 1.0
         readerLineHeight = defaults.object(forKey: Self.lineHeightKey) as? Double ?? 1.55
         readerPageMargins = defaults.object(forKey: Self.pageMarginsKey) as? Double ?? 1.15
@@ -130,7 +132,7 @@ final class SettingsStore: ObservableObject {
     }
 
     func save() {
-        KeychainStore.write(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), account: "deepseek-api-key")
+        KeychainStore.write(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), account: Self.qwenAPIKeyAccount)
         UserDefaults.standard.set(model.trimmingCharacters(in: .whitespacesAndNewlines), forKey: modelKey)
         if let normalized = DawnSyncClient.normalizePairingCode(syncCode) {
             syncCode = normalized

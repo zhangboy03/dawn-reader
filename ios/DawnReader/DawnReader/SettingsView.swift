@@ -61,7 +61,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                Section("DeepSeek") {
+                Section("Qwen") {
                     SecureField("API Key", text: $settings.apiKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -93,7 +93,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
-                    Text("配对后同步书籍、阅读位置、主题、排版和 Apple Pencil 模式。DeepSeek 密钥不会上传。")
+                    Text("配对后同步书籍、阅读位置、主题、排版和 Apple Pencil 模式。百炼密钥不会上传。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

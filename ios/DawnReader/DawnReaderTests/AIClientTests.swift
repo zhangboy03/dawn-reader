@@ -6,10 +6,11 @@ final class AIClientTests: XCTestCase {
         let body = AIClient.makeBody(
             context: .init(before: "before", highlight: "selected sentence", after: "after"),
             title: "Book",
-            model: "deepseek-v4-flash"
+            model: "qwen3.7-flash"
         )
-        XCTAssertEqual(body.model, "deepseek-v4-flash")
+        XCTAssertEqual(body.model, "qwen3.7-flash")
         XCTAssertEqual(body.stream, false)
+        XCTAssertEqual(body.enableThinking, false)
         XCTAssertTrue(body.messages[1].content.contains("<selection>\nselected sentence\n</selection>"))
         XCTAssertTrue(body.messages[1].content.contains("<context_before>\nbefore\n</context_before>"))
     }
@@ -18,7 +19,7 @@ final class AIClientTests: XCTestCase {
         let body = AIClient.makeBody(
             context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
             title: "Book",
-            model: "deepseek-v4-flash"
+            model: "qwen3.7-flash"
         )
         XCTAssertEqual(body.maxTokens, 48)
         XCTAssertTrue(body.messages[0].content.contains("Explain only the word"))
@@ -34,7 +35,7 @@ final class AIClientTests: XCTestCase {
         let body = AIClient.makeBody(
             context: .init(before: "before", highlight: "This selected passage contains more than eight separate words for the reader.", after: "after"),
             title: "Book",
-            model: "deepseek-v4-flash"
+            model: "qwen3.7-flash"
         )
         XCTAssertEqual(body.maxTokens, 96)
         XCTAssertTrue(body.messages[0].content.contains("Rewrite only the text inside <selection>"))
@@ -44,7 +45,7 @@ final class AIClientTests: XCTestCase {
         let body = AIClient.makeChineseBody(
             context: .init(before: "the pursuit of", highlight: "quality", after: "in work"),
             title: "Book",
-            model: "deepseek-v4-flash"
+            model: "qwen3.7-flash"
         )
         XCTAssertEqual(body.maxTokens, 320)
         XCTAssertTrue(body.messages[0].content.contains("one selected English word in Chinese"))
@@ -58,7 +59,7 @@ final class AIClientTests: XCTestCase {
         let body = AIClient.makeChineseBody(
             context: .init(before: "before", highlight: "This selected passage contains more than eight separate words for the reader.", after: "after"),
             title: "Book",
-            model: "deepseek-v4-flash"
+            model: "qwen3.7-flash"
         )
         XCTAssertTrue(body.messages[0].content.contains("First give an accurate, natural Chinese translation"))
         XCTAssertTrue(body.messages[0].content.contains("翻译："))
@@ -70,7 +71,7 @@ final class AIClientTests: XCTestCase {
             context: .init(before: "before", highlight: "课程原文", after: "after"),
             title: "Course",
             messages: [.init(role: "user", content: "这句话是什么意思？")],
-            model: "deepseek-v4-flash"
+            model: "qwen3.7-flash"
         )
         XCTAssertEqual(body.maxTokens, 700)
         XCTAssertTrue(body.messages[1].content.contains("<selection>\n课程原文\n</selection>"))
