@@ -413,7 +413,6 @@ struct ReaderScreen: View {
                     } else {
                         phoneRewriteContent
                     }
-                    autoSaveStatus
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
@@ -531,23 +530,6 @@ struct ReaderScreen: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("选中原文：\(session.selectedText)")
-    }
-
-    @ViewBuilder
-    private var autoSaveStatus: some View {
-        switch session.autoSaveState {
-        case .idle:
-            EmptyView()
-        case .pending:
-            Label("停留 1 秒后自动保存", systemImage: "circle.dotted")
-                .foregroundStyle(chromeForeground.opacity(0.58))
-        case .saved:
-            Label("已自动保存到查阅记录", systemImage: "checkmark.circle")
-                .foregroundStyle(Color(red: 0.31, green: 0.46, blue: 0.38))
-        case .failed:
-            Label("暂时无法保存到本机", systemImage: "exclamationmark.circle")
-                .foregroundStyle(Palette.ember)
-        }
     }
 
     @ViewBuilder
@@ -748,8 +730,6 @@ struct ReaderScreen: View {
                         .foregroundStyle(chromeForeground.opacity(0.68))
                 }
             }
-            autoSaveStatus
-                .font(.caption2.monospaced())
         }
         .padding(16)
         .frame(width: cardWidth, alignment: .leading)

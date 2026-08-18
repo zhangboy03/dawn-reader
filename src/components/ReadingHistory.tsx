@@ -73,13 +73,11 @@ export function ReadingHistory({
     <header className="reading-history-topbar">
       <button type="button" onClick={onClose}>← <span>书架</span></button>
       <div><small>READING EVIDENCE</small><strong>查阅记录</strong></div>
-      <p>解释完整显示 1 秒后自动保存</p>
     </header>
 
     <section className="reading-history-summary" aria-label="阅读时间（估算）">
       <div><small>今天</small><strong>{formatMinutes(timeSummary.todayMs)}</strong></div>
       <div><small>过去 7 天</small><strong>{formatMinutes(timeSummary.weekMs)}</strong></div>
-      <p>只统计阅读器在前台、且最近有翻页、划词或提问的时间；不代表理解程度。</p>
     </section>
 
     <section className="reading-history-controls">
@@ -126,8 +124,8 @@ export function ReadingHistory({
         </article>;
       })}
       {!visibleRecords.length && <div className="reading-evidence-empty">
-        <h2>{records.length ? "没有匹配的记录" : "划词后，解释会自动来到这里"}</h2>
-        <p>{records.length ? "换一个关键词或筛选条件试试。" : "完整解释在屏幕上停留约 1 秒，就会连同所在句子一起保存。"}</p>
+        <h2>{records.length ? "没有匹配的记录" : "还没有查阅记录"}</h2>
+        <p>{records.length ? "换一个关键词或筛选条件试试。" : "划过的词句、所在原句和完整解释会显示在这里。"}</p>
       </div>}
     </section>
   </main>;

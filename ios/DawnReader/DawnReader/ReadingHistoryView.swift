@@ -173,10 +173,10 @@ struct ReadingHistoryView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(evidenceStore.records.isEmpty ? "划词后，解释会自动来到这里" : "没有匹配的记录")
+            Text(evidenceStore.records.isEmpty ? "还没有查阅记录" : "没有匹配的记录")
                 .font(.system(.title3, design: .serif).weight(.medium))
             Text(evidenceStore.records.isEmpty
-                ? "完整解释在屏幕上停留约 1 秒，就会连同所在句子一起保存。"
+                ? "划过的词句、所在原句和完整解释会显示在这里。"
                 : "换一个关键词或筛选条件试试。")
                 .font(.callout)
                 .foregroundStyle(Palette.mutedInk)

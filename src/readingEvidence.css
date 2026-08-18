@@ -2,11 +2,6 @@
 .history-link span { margin-right: 5px; color: var(--accent-strong); }
 .history-link:hover { border-color: var(--accent-strong); color: var(--accent-strong); }
 
-.evidence-save-status { min-height: 28px; display: flex; align-items: center; gap: 7px; margin: 10px -2px -4px; padding-top: 8px; border-top: 1px solid currentColor; color: var(--reader-chrome-muted); font: 9px/1.2 "SFMono-Regular", Menlo, monospace; letter-spacing: .025em; }
-.evidence-save-status span { width: 14px; height: 14px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; }
-.evidence-save-status.saved { color: #537465; }
-.evidence-save-status.error { color: #a1533b; }
-
 .reference-reading-banner { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 7px 20px; border-bottom: 1px solid rgba(185, 103, 61, .28); color: #3d4e54; background: #efe7d8; }
 .reference-reading-banner > span { display: flex; align-items: baseline; gap: 10px; }
 .reference-reading-banner strong { font: 600 12px/1.2 "Avenir Next", Avenir, sans-serif; }
@@ -23,11 +18,10 @@
 .reading-history-topbar small { color: #899598; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .15em; }
 .reading-history-topbar strong { font: 600 17px/1.2 "Iowan Old Style", Baskerville, Georgia, serif; }
 .reading-history-topbar p { justify-self: end; margin: 0; color: #718087; font-size: 9px; }
-.reading-history-summary { width: min(1040px, calc(100% - 40px)); display: grid; grid-template-columns: 180px 220px 1fr; gap: 22px; align-items: end; margin: 48px auto 0; padding: 0 0 28px; border-bottom: 1px solid #aab7b8; }
+.reading-history-summary { width: min(1040px, calc(100% - 40px)); display: grid; grid-template-columns: 180px 220px; gap: 22px; align-items: end; margin: 48px auto 0; padding: 0 0 28px; border-bottom: 1px solid #aab7b8; }
 .reading-history-summary > div { display: grid; gap: 7px; }
 .reading-history-summary small { color: #7e8c8f; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .11em; }
 .reading-history-summary strong { font: 500 clamp(25px, 4vw, 40px)/1 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.035em; }
-.reading-history-summary p { max-width: 440px; justify-self: end; margin: 0; color: #718087; font-size: 10px; line-height: 1.6; text-align: right; }
 .reading-history-controls { width: min(1040px, calc(100% - 40px)); display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 22px auto 0; }
 .reading-history-controls > div { display: flex; gap: 4px; }
 .reading-history-controls button { min-height: 38px; padding: 0 14px; border: 0; border-bottom: 1px solid transparent; color: #748287; background: transparent; font-size: 10px; }
@@ -58,9 +52,7 @@
   .history-link span { width: 40px; display: inline-grid; place-items: center; margin: 0; color: var(--accent-strong); }
   .reading-history-topbar { grid-template-columns: auto 1fr; padding: 8px 14px; }
   .reading-history-topbar > div { justify-items: start; }
-  .reading-history-topbar p { display: none; }
   .reading-history-summary { grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 32px; }
-  .reading-history-summary p { grid-column: 1 / -1; justify-self: start; text-align: left; }
   .reading-history-controls { align-items: stretch; flex-direction: column; gap: 14px; }
   .reading-history-controls input { width: 100%; }
   .reading-evidence-entry { grid-template-columns: 1fr; }

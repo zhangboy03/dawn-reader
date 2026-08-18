@@ -2127,10 +2127,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             <button type="submit" disabled={!chatDraft.trim() || chatState === "loading"} aria-label="发送问题">↑</button>
           </form>
         </div>}
-      {autoSaveState !== "idle" && <footer className={`evidence-save-status ${autoSaveState}`} aria-live="polite">
-        <span aria-hidden="true">{autoSaveState === "saved" ? "✓" : autoSaveState === "error" ? "!" : "·"}</span>
-        {autoSaveState === "pending" ? "停留 1 秒后自动保存" : autoSaveState === "saved" ? "已自动保存到查阅记录" : "暂时无法保存到本机"}
-      </footer>}
     </aside>}
   </div>;
 }
