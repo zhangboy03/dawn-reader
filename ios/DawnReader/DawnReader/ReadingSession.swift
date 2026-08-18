@@ -138,30 +138,17 @@ final class ReadingSession: ObservableObject {
 
         let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        let syncToken = DawnSyncClient.normalizePairingCode(settings.syncCode)
         rewriteTask = Task {
             do {
-                if let syncToken {
-                    let response = try await DawnSyncClient.chat(
-                        token: syncToken,
-                        context: context,
-                        title: title,
-                        messages: outgoing
-                    )
-                    guard !Task.isCancelled else { return }
-                    chatMessages.append(.init(role: "assistant", content: response.answer))
-                    chatSources = response.sources
-                } else {
-                    let answer = try await AIClient.chat(
-                        context: context,
-                        title: title,
-                        messages: outgoing,
-                        apiKey: apiKey,
-                        model: model
-                    )
-                    guard !Task.isCancelled else { return }
-                    chatMessages.append(.init(role: "assistant", content: answer))
-                }
+                let answer = try await AIClient.chat(
+                    context: context,
+                    title: title,
+                    messages: outgoing,
+                    apiKey: apiKey,
+                    model: model
+                )
+                guard !Task.isCancelled else { return }
+                chatMessages.append(.init(role: "assistant", content: answer))
                 chatState = .idle
             } catch {
                 guard !Task.isCancelled else { return }
