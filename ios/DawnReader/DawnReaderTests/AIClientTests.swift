@@ -260,6 +260,11 @@ final class AIClientTests: XCTestCase {
         )
     }
 
+    func testSyncDeviceClassUsesUniversalDeviceNames() {
+        XCTAssertEqual(DawnSyncClient.deviceClassLabel(for: .phone), "iPhone")
+        XCTAssertEqual(DawnSyncClient.deviceClassLabel(for: .pad), "iPad")
+    }
+
     func testPhonePresentationUsesCompactListBottomSheetAndNoPencilControls() {
         let policy = DawnPresentationPolicy(deviceClass: .phone)
 

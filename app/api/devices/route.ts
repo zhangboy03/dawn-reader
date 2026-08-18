@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const input = await request.json().catch(() => ({})) as { label?: unknown };
   const label = typeof input.label === "string" && input.label.trim()
     ? input.label.trim().slice(0, 80)
-    : "iPad";
+    : "新设备";
   const token = createDeviceToken();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();

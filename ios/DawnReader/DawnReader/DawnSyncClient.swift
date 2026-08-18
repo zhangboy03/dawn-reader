@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import UIKit
 
 enum DawnSyncError: LocalizedError {
     case invalidPairingCode
@@ -83,6 +84,10 @@ private struct CloudErrorBody: Codable, Sendable {
 
 enum DawnSyncClient {
     static let serviceURL = URL(string: "https://dawn-reader-keeplearning.zhangboy.chatgpt.site")!
+
+    static func deviceClassLabel(for idiom: UIUserInterfaceIdiom) -> String {
+        idiom == .phone ? "iPhone" : "iPad"
+    }
 
     static func normalizePairingCode(_ value: String) -> String? {
         let compact = value
@@ -249,6 +254,10 @@ enum DawnSyncClient {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 45
         request.setValue("Bearer \(normalized)", forHTTPHeaderField: "Authorization")
+        let deviceClass = await MainActor.run {
+            deviceClassLabel(for: UIDevice.current.userInterfaceIdiom)
+        }
+        request.setValue(deviceClass, forHTTPHeaderField: "X-Dawn-Device-Class")
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {

@@ -46,10 +46,9 @@ export async function isAuthorizedReaderRequest() {
   return Boolean(await getChatGPTUser());
 }
 
-export type ReaderIdentity = {
-  userId: string;
-  kind: "chatgpt" | "device";
-};
+export type ReaderIdentity =
+  | { userId: string; kind: "chatgpt" }
+  | { userId: string; kind: "device"; deviceId: string };
 
 export async function getReaderIdentity(request: Request): Promise<ReaderIdentity | null> {
   const chatGPTUser = await getChatGPTUser();
@@ -69,7 +68,7 @@ export async function getReaderIdentity(request: Request): Promise<ReaderIdentit
     .set({ lastUsedAt: new Date().toISOString() })
     .where(eq(readerDevices.id, device.id))
     .catch(() => undefined);
-  return { userId: device.userId, kind: "device" };
+  return { userId: device.userId, kind: "device", deviceId: device.id };
 }
 
 function safeDecodeURIComponent(value: string): string | null {
