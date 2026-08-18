@@ -22,7 +22,11 @@ import {
   type SelectionAssistPosition,
   type SelectionBounds,
 } from "../lib/selectionAssistPosition";
-import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
+import {
+  latestReadingPosition,
+  parseReadingPosition,
+  saveReadingPosition,
+} from "../lib/readingPosition";
 import {
   ReadingActivityRecorder,
   readingEvidenceKind,
@@ -343,6 +347,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [pageProgress, setPageProgress] = useState(0);
   const [pageNumber, setPageNumber] = useState<EpubPageNumber | null>(null);
   const [locationsReady, setLocationsReady] = useState(false);
+  const [epubContentReady, setEpubContentReady] = useState(source.type !== "epub");
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
   settingsRef.current = settings;
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1297,6 +1302,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   useEffect(() => {
     if (source.type !== "epub" || !epubRef.current) return;
     setLocationsReady(false);
+    setEpubContentReady(false);
     setPageNumber(null);
     setTocLoaded(false);
     setTocItems([]);
@@ -1305,12 +1311,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     let book: any;
     let frameResizeObserver: ResizeObserver | null = null;
     const progressKey = `dawn-reader-progress:${source.id ?? source.file.name}`;
+    const localPosition = parseReadingPosition(localStorage.getItem(progressKey));
+    const cloudPositionPromise = source.id && !referenceModeRef.current
+      ? loadCloudProgress(source.id).catch(() => null)
+      : Promise.resolve(null);
     let canPersistProgress = false;
     let locationsGenerated = false;
     source.file.arrayBuffer().then(async (buffer) => {
-      if (cancelled || !epubRef.current) return;
-      const localPosition = parseReadingPosition(localStorage.getItem(progressKey));
-      const savedPosition = localPosition;
       if (cancelled || !epubRef.current) return;
       const epubModule = await import("epubjs");
       const ePub = epubModule.default;
@@ -1568,42 +1575,48 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         if (canPersistProgress && cfi) persistProgress(progressKey, cfi, percentage);
         finishEpubReflow();
       });
-      await rendition.display(source.initialCfi ?? savedPosition?.cfi ?? undefined);
-      await book.locations.generate(1200);
+      const cloudPosition = await cloudPositionPromise;
+      if (cancelled || !epubRef.current) return;
+      const savedPosition = referenceModeRef.current
+        ? localPosition
+        : latestReadingPosition(localPosition, cloudPosition);
+      if (savedPosition === cloudPosition && cloudPosition) {
+        saveReadingPosition(progressKey, cloudPosition);
+      }
+
+      let initialCfi = source.initialCfi ?? savedPosition?.cfi ?? null;
+      if (!initialCfi && savedPosition && savedPosition.percentage > 0) {
+        await book.locations.generate(1200);
+        if (cancelled) return;
+        locationsGenerated = true;
+        initialCfi = book.locations.cfiFromPercentage(savedPosition.percentage / 100) ?? null;
+      }
+
+      await rendition.display(initialCfi ?? undefined);
+      if (cancelled) return;
+      setEpubContentReady(true);
+      if (!locationsGenerated) await book.locations.generate(1200);
       if (cancelled) return;
       locationsGenerated = true;
       setLocationsReady(true);
       updatePageNumber(rendition.currentLocation?.()?.start?.cfi);
-      if (savedPosition?.cfi) {
+      if (source.initialCfi) {
+        const cfi = rendition.currentLocation?.()?.start?.cfi ?? source.initialCfi;
+        setPageProgress(Math.round(book.locations.percentageFromCfi(cfi) * 100));
+        canPersistProgress = true;
+      } else if (savedPosition?.cfi) {
         const percentage = Math.round(book.locations.percentageFromCfi(savedPosition.cfi) * 100);
         setPageProgress(percentage);
         saveReadingPosition(progressKey, { cfi: savedPosition.cfi, percentage, updatedAt: savedPosition.updatedAt });
         canPersistProgress = true;
       } else if (savedPosition && savedPosition.percentage > 0) {
-        const cfi = book.locations.cfiFromPercentage(savedPosition.percentage / 100);
+        setPageProgress(savedPosition.percentage);
         canPersistProgress = true;
-        if (cfi) await rendition.display(cfi);
       } else {
         canPersistProgress = true;
       }
-      if (source.id && !referenceModeRef.current) {
-        const cloudPosition = await loadCloudProgress(source.id).catch(() => null);
-        if (cancelled) return;
-        const latestLocal = parseReadingPosition(localStorage.getItem(progressKey));
-        const cloudIsNewer = Boolean(cloudPosition && (
-          !latestLocal
-          || !latestLocal.updatedAt
-          || Boolean(cloudPosition.updatedAt && cloudPosition.updatedAt >= latestLocal.updatedAt)
-        ));
-        if (cloudPosition && cloudIsNewer) {
-          saveReadingPosition(progressKey, cloudPosition);
-          setPageProgress(cloudPosition.percentage);
-          const targetCfi = cloudPosition.cfi
-            || book.locations.cfiFromPercentage(cloudPosition.percentage / 100);
-          if (targetCfi) await rendition.display(targetCfi);
-        } else if (latestLocal) {
-          void saveCloudProgress(source.id, latestLocal).catch(() => undefined);
-        }
+      if (source.id && !referenceModeRef.current && savedPosition === localPosition && localPosition) {
+        void saveCloudProgress(source.id, localPosition).catch(() => undefined);
       }
     });
     return () => {
@@ -1970,7 +1983,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         <div className="reading-columns">
           {textParagraphs.map((paragraph, index) => <p className="reader-paragraph" data-paragraph-index={index} key={index}>{paragraph}</p>)}
         </div>
-      </article> : <div className={`epub-frame epub-${settings.theme}`} style={{ maxWidth: readingWidth }} ref={epubRef} />}
+      </article> : <>
+        <div
+          className={`epub-frame epub-${settings.theme} ${epubContentReady ? "is-ready" : "is-restoring"}`}
+          style={{ maxWidth: readingWidth }}
+          ref={epubRef}
+          aria-busy={!epubContentReady}
+        />
+        {!epubContentReady && <div className="epub-resume-status" role="status">正在恢复阅读位置…</div>}
+      </>}
     </main>
 
     {source.type === "epub" && <nav className="reader-bottombar" aria-label="阅读导航">

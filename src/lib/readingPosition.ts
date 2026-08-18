@@ -4,6 +4,17 @@ export type ReadingPosition = {
   updatedAt?: string;
 };
 
+export function latestReadingPosition(
+  local: ReadingPosition | null,
+  cloud: ReadingPosition | null,
+) {
+  if (!cloud) return local;
+  if (!local) return cloud;
+  if (!cloud.updatedAt) return local;
+  if (!local.updatedAt) return cloud;
+  return cloud.updatedAt > local.updatedAt ? cloud : local;
+}
+
 export function parseReadingPosition(raw: string | null): ReadingPosition | null {
   if (!raw) return null;
 

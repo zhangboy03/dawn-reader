@@ -48,6 +48,8 @@ describe("Reader chrome", () => {
     expect(markup.slice(main, footer)).not.toContain("page-controls");
     expect(markup).toContain('aria-label="阅读导航"');
     expect(markup).toContain('aria-label="查看目录"');
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain("正在恢复阅读位置…");
   });
 
   it("uses a dynamic viewport shell without fixing the document body", () => {

@@ -1,5 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { parseReadingPosition } from "./readingPosition";
+import { latestReadingPosition, parseReadingPosition } from "./readingPosition";
+
+describe("latestReadingPosition", () => {
+  const local = { cfi: "epubcfi(/6/4)", percentage: 40, updatedAt: "2026-08-18T08:00:00.000Z" };
+  const cloud = { cfi: "epubcfi(/6/8)", percentage: 80, updatedAt: "2026-08-18T09:00:00.000Z" };
+
+  it("uses the cloud position before first paint when it is newer", () => {
+    expect(latestReadingPosition(local, cloud)).toBe(cloud);
+  });
+
+  it("keeps the local position when it is current", () => {
+    expect(latestReadingPosition(cloud, local)).toBe(cloud);
+    expect(latestReadingPosition(local, { ...cloud, updatedAt: local.updatedAt })).toBe(local);
+  });
+
+  it("supports one-sided and legacy positions", () => {
+    expect(latestReadingPosition(local, null)).toBe(local);
+    expect(latestReadingPosition(null, cloud)).toBe(cloud);
+    expect(latestReadingPosition({ cfi: null, percentage: 25 }, cloud)).toBe(cloud);
+  });
+});
 
 describe("reading position", () => {
   it("keeps compatibility with percentage-only bookmarks", () => {
