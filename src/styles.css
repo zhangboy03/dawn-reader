@@ -265,6 +265,24 @@ body:has(.onboarding), body:has(.test-screen) {
 .library-state.loading h2, .library-state.syncing h2 { color: #6d7d81; }
 .section-heading { padding-bottom: 13px; border-bottom: 1px solid #b9c4c4; }
 .section-heading h2 { margin: 0; font: 650 24px "Avenir Next", Avenir, sans-serif; letter-spacing: -.03em; }
+.shelf-heading { min-height: 58px; display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; }
+.shelf-heading > div { display: flex; align-items: baseline; gap: 12px; }
+.shelf-heading > div small { color: #748287; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .07em; }
+.shelf-search { width: min(330px, 38vw); min-height: 44px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 34px; align-items: center; gap: 9px; position: relative; margin-bottom: -4px; border-bottom: 1px solid #8f9d9f; color: #53646a; transition: border-color .18s ease, color .18s ease; }
+.shelf-search:focus-within { border-color: var(--accent-strong); color: var(--accent-strong); }
+.shelf-search input { width: 100%; min-width: 0; height: 44px; padding: 0; border: 0; outline: 0; color: #2d3b41; background: transparent; font: 500 13px/1.2 "Avenir Next", Avenir, sans-serif; }
+.shelf-search input::placeholder { color: #849194; }
+.shelf-search input::-webkit-search-cancel-button { appearance: none; }
+.shelf-search button { width: 34px; height: 34px; padding: 0; border: 0; color: #75858a; background: transparent; font-size: 20px; font-weight: 300; }
+.shelf-search button:hover { color: var(--accent-strong); }
+.search-glyph { width: 13px; height: 13px; position: relative; border: 1.5px solid currentColor; border-radius: 50%; }
+.search-glyph::after { content: ""; width: 6px; position: absolute; right: -5px; bottom: -3px; border-top: 1.5px solid currentColor; transform: rotate(45deg); transform-origin: left center; }
+.visually-hidden { width: 1px; height: 1px; position: absolute; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.shelf-no-results { min-height: 240px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; border-bottom: 1px solid #c4cecd; }
+.shelf-no-results h3 { margin: 0; font: 500 clamp(25px, 3vw, 36px)/1.2 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.025em; }
+.shelf-no-results p { margin: 10px 0 0; color: #748287; font-size: 12px; }
+.shelf-no-results button { min-height: 42px; margin-top: 22px; padding: 0 14px; border: 1px solid #9fadae; border-radius: var(--radius-control); color: #45575e; background: transparent; font-size: 11px; }
+.shelf-no-results button:hover { border-color: var(--accent-strong); color: var(--accent-strong); }
 .stored-shelf { margin-bottom: 54px; }
 .stored-book { width: 100%; min-height: 150px; position: relative; border-bottom: 1px solid #c4cecd; color: inherit; background: transparent; text-align: left; transition: background-color .2s ease; }
 .stored-book:hover { background: rgba(255, 255, 255, .24); }
@@ -675,6 +693,9 @@ body:has(.onboarding), body:has(.test-screen) {
   .ai-status { grid-template-columns: 1fr auto; gap: 10px; }
   .ai-status span { white-space: normal; }
   .shelf { padding: 42px 22px 64px; }
+  .shelf-heading { align-items: stretch; flex-direction: column; gap: 18px; padding-bottom: 18px; }
+  .shelf-heading > div { min-height: 29px; }
+  .shelf-search { width: 100%; margin-bottom: 0; }
   .stored-book { min-height: 196px; }
   .book-open { min-height: 196px; grid-template-columns: 70px 1fr; gap: 18px; padding: 24px 48px 76px 0; }
   .stored-cover, .stored-spine { width: 61px; height: 94px; }

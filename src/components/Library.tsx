@@ -3,9 +3,12 @@ import type { ReaderProfile } from "../lib/storage";
 import {
   cacheStoredBook,
   deleteStoredBook,
+  filterBooksByQuery,
   hydrateStoredBookPresentation,
   listStoredBooks,
+  markStoredBookOpened,
   saveEpub,
+  sortBooksByRecency,
   storedBookFile,
   type StoredBook,
 } from "../lib/bookStore";
@@ -180,7 +183,7 @@ function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
   for (const book of local) {
     if (!cloud.some((remote) => remote.id === book.id)) merged.push({ ...book, synced: false });
   }
-  return merged.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+  return sortBooksByRecency(merged);
 }
 
 export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHistory }: {
@@ -204,6 +207,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
   const [libraryMessage, setLibraryMessage] = useState("");
   const [bookAssistantModes, setBookAssistantModes] = useState(loadBookAssistantModes);
   const [assistantMenuBookId, setAssistantMenuBookId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     libraryMountedRef.current = true;
@@ -324,10 +328,10 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
           knownBookIds.add(stored.id);
           forgetDeletedBook(stored.id);
           if (!alreadyKnown || existing) {
-            setStoredBooks((books) => [
+            setStoredBooks((books) => sortBooksByRecency([
               { ...stored, addedAt: existing?.addedAt ?? stored.addedAt, synced: existing?.synced ?? false, cloud: existing?.cloud },
               ...books.filter((book) => book.id !== stored.id),
-            ]);
+            ]));
           }
           if (alreadyKnown) {
             existingCount += 1;
@@ -383,14 +387,20 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     setOpeningId(book.id);
     try {
       let file: File;
+      let localBook: StoredBook = book;
       if (book.blob) {
         file = storedBookFile(book);
       } else if (book.cloud) {
         file = await downloadCloudBook(book.cloud);
-        await cacheStoredBook(book, file);
+        localBook = await cacheStoredBook(book, file);
       } else {
         throw new Error("这本书尚未同步到当前设备。");
       }
+      const openedAt = new Date().toISOString();
+      await markStoredBookOpened(localBook, openedAt).catch(() => undefined);
+      setStoredBooks((books) => sortBooksByRecency(books.map((candidate) => (
+        candidate.id === book.id ? { ...candidate, lastOpenedAt: openedAt } : candidate
+      ))));
       onOpen({
         type: "epub",
         id: book.id,
@@ -445,6 +455,8 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     : syncState === "local"
       ? { title: "云端暂时不可用。", detail: "你仍然可以在本机导入和阅读。" }
       : { title: "从一本真正想读的书开始。", detail: "导入 EPUB，它会留在你的书架里。" };
+  const visibleBooks = filterBooksByQuery(storedBooks, searchQuery);
+  const hasSearch = Boolean(searchQuery.trim());
 
   return <main
     className={`library-shell ${isDragging ? "is-dragging" : ""}`}
@@ -501,9 +513,27 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     </section>
     <section className="shelf">
       {storedBooks.length > 0 && <>
-        <div className="section-heading"><h2>继续阅读</h2></div>
-        <div className="stored-shelf">
-          {storedBooks.map((book) => {
+        <div className="section-heading shelf-heading">
+          <div>
+            <h2>继续阅读</h2>
+            {hasSearch && <small role="status">{visibleBooks.length ? `${visibleBooks.length} 本匹配` : "没有匹配的书"}</small>}
+          </div>
+          <label className="shelf-search">
+            <span className="search-glyph" aria-hidden="true" />
+            <span className="visually-hidden">搜索书架</span>
+            <input
+              type="search"
+              aria-label="搜索书架"
+              value={searchQuery}
+              placeholder="搜索书名"
+              autoComplete="off"
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+            {hasSearch && <button type="button" onClick={() => setSearchQuery("")} aria-label="清空搜索">×</button>}
+          </label>
+        </div>
+        {visibleBooks.length > 0 && <div className="stored-shelf">
+          {visibleBooks.map((book) => {
             const assistantMode = bookAssistantModes[book.id] ?? "rewrite";
             const modePresentation = assistantModePresentation[assistantMode];
             const menuOpen = assistantMenuBookId === book.id;
@@ -557,7 +587,12 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
               <span aria-hidden="true">×</span> 删除
             </button>
           </article>;})}
-        </div>
+        </div>}
+        {hasSearch && visibleBooks.length === 0 && <div className="shelf-no-results" aria-live="polite">
+          <h3>书架里没有“{searchQuery.trim()}”</h3>
+          <p>可以换一个书名或文件名试试。</p>
+          <button type="button" onClick={() => setSearchQuery("")}>查看全部书籍</button>
+        </div>}
       </>}
       {storedBooks.length === 0 && <div className={`library-state ${syncState}`} aria-live="polite">
         <h2>{emptyState.title}</h2>

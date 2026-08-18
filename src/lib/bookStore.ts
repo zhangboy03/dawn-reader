@@ -10,6 +10,7 @@ export type StoredBook = {
   cover?: Blob | null;
   coverChecked?: boolean;
   addedAt: string;
+  lastOpenedAt?: string;
 };
 
 type EpubPresentation = {
@@ -113,8 +114,30 @@ export async function saveEpub(file: File) {
     cover: presentation?.cover ?? existing?.cover ?? null,
     coverChecked: Boolean(presentation) || existing?.coverChecked,
     addedAt: existing?.addedAt ?? new Date().toISOString(),
+    lastOpenedAt: existing?.lastOpenedAt,
   };
   return putStoredBook(record);
+}
+
+export function sortBooksByRecency<T extends Pick<StoredBook, "addedAt" | "lastOpenedAt">>(books: T[]) {
+  return [...books].sort((a, b) => {
+    const recentDifference = (b.lastOpenedAt ?? b.addedAt).localeCompare(a.lastOpenedAt ?? a.addedAt);
+    return recentDifference || b.addedAt.localeCompare(a.addedAt);
+  });
+}
+
+export function filterBooksByQuery<T extends Pick<StoredBook, "title" | "fileName">>(books: T[], query: string) {
+  const terms = query
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!terms.length) return books;
+  return books.filter((book) => {
+    const searchable = `${book.title} ${book.fileName}`.normalize("NFKC").toLocaleLowerCase();
+    return terms.every((term) => searchable.includes(term));
+  });
 }
 
 export async function listStoredBooks() {
@@ -122,7 +145,20 @@ export async function listStoredBooks() {
   const transaction = db.transaction(STORE_NAME, "readonly");
   const records = await requestResult(transaction.objectStore(STORE_NAME).getAll()) as StoredBook[];
   db.close();
-  return records.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+  return sortBooksByRecency(records);
+}
+
+export async function markStoredBookOpened(book: StoredBook, openedAt = new Date().toISOString()) {
+  return putStoredBook({
+    id: book.id,
+    title: book.title,
+    fileName: book.fileName,
+    blob: book.blob,
+    cover: book.cover ?? null,
+    coverChecked: book.coverChecked,
+    addedAt: book.addedAt,
+    lastOpenedAt: openedAt,
+  });
 }
 
 export async function deleteStoredBook(id: string) {
@@ -148,6 +184,7 @@ export async function cacheStoredBook(book: StoredBook, blob: Blob) {
     cover: book.cover ?? null,
     coverChecked: book.coverChecked,
     addedAt: book.addedAt,
+    lastOpenedAt: book.lastOpenedAt,
   });
 }
 
@@ -162,5 +199,6 @@ export async function hydrateStoredBookPresentation(book: StoredBook, blob = boo
     cover: presentation.cover,
     coverChecked: true,
     addedAt: book.addedAt,
+    lastOpenedAt: book.lastOpenedAt,
   });
 }

@@ -25,6 +25,7 @@ struct BookRecord: Codable, Identifiable, Equatable {
     var fileSize: Int?
     var originalFileName: String?
     var addedAt: String?
+    var lastOpenedAt: String?
     var progressUpdatedAt: String?
     var assistantMode: BookAssistantMode?
 
@@ -39,6 +40,7 @@ struct BookRecord: Codable, Identifiable, Equatable {
         fileSize: Int? = nil,
         originalFileName: String? = nil,
         addedAt: String? = nil,
+        lastOpenedAt: String? = nil,
         progressUpdatedAt: String? = nil,
         assistantMode: BookAssistantMode? = .rewrite
     ) {
@@ -52,6 +54,7 @@ struct BookRecord: Codable, Identifiable, Equatable {
         self.fileSize = fileSize
         self.originalFileName = originalFileName
         self.addedAt = addedAt
+        self.lastOpenedAt = lastOpenedAt
         self.progressUpdatedAt = progressUpdatedAt
         self.assistantMode = assistantMode
     }

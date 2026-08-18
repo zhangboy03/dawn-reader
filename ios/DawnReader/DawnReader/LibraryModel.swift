@@ -92,6 +92,7 @@ final class LibraryModel: ObservableObject {
             }
         }
 
+        sortBooksByRecency()
         saveBooks()
         if let singleBookToOpen {
             do {
@@ -222,7 +223,14 @@ final class LibraryModel: ObservableObject {
             referenceReturnLocatorJSON: referenceReturnLocatorJSON,
             session: session
         )
-        openedBook = OpenedBook(record: record, session: session, controller: controller)
+        var openedRecord = record
+        if let index = books.firstIndex(where: { $0.id == record.id }) {
+            books[index].lastOpenedAt = ISO8601DateFormatter().string(from: Date())
+            openedRecord = books[index]
+            sortBooksByRecency()
+            saveBooks()
+        }
+        openedBook = OpenedBook(record: openedRecord, session: session, controller: controller)
     }
 
     private func persistProgress(bookID: UUID, locatorJSON: String, progress: Double) {
@@ -353,7 +361,8 @@ final class LibraryModel: ObservableObject {
                 }
                 books.append(record)
             }
-                saveBooks()
+            sortBooksByRecency()
+            saveBooks()
             syncState = .synced
         } catch {
             syncState = .failed(error.localizedDescription)
@@ -428,7 +437,8 @@ final class LibraryModel: ObservableObject {
                     addedAt: ISO8601DateFormatter().string(from: Date())
                 ))
             }
-                saveBooks()
+            sortBooksByRecency()
+            saveBooks()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -438,6 +448,16 @@ final class LibraryModel: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
               let stored = try? JSONDecoder().decode([BookRecord].self, from: data) else { return }
         books = stored
+        sortBooksByRecency()
+    }
+
+    private func sortBooksByRecency() {
+        books.sort { lhs, rhs in
+            let lhsRecent = lhs.lastOpenedAt ?? lhs.addedAt ?? ""
+            let rhsRecent = rhs.lastOpenedAt ?? rhs.addedAt ?? ""
+            if lhsRecent != rhsRecent { return lhsRecent > rhsRecent }
+            return (lhs.addedAt ?? "") > (rhs.addedAt ?? "")
+        }
     }
 
     private func saveBooks() {
