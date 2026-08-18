@@ -4,12 +4,14 @@ import SwiftUI
 struct DawnReaderApp: App {
     @StateObject private var settings = SettingsStore()
     @StateObject private var library = LibraryModel()
+    @StateObject private var evidenceStore = ReadingEvidenceStore()
 
     var body: some Scene {
         WindowGroup {
             LibraryView()
                 .environmentObject(settings)
                 .environmentObject(library)
+                .environmentObject(evidenceStore)
                 .preferredColorScheme(.light)
                 .onOpenURL { url in
                     guard url.scheme == "dawnreader", url.host == "pair",

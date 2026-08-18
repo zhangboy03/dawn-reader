@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		12A3BC4BF5A2A1F9AD0D1E52 /* AIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413D22ACE52133231A06F30D /* AIClient.swift */; };
+		13993BE576560F1F3F430DBA /* ReadingEvidenceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34002A99D5FE8F61F43AB8F4 /* ReadingEvidenceStoreTests.swift */; };
+		147D4C87D4B14701C2CED3A8 /* ReadingEvidenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FDEE8E25E40427CEBA63E94 /* ReadingEvidenceStore.swift */; };
 		17FAC269EA8947E58D801EEF /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = B506E5C4CBEF47C41DA2C16C /* ReadiumNavigator */; };
 		1CF1D4560479C84E3C25C182 /* ReaderContentScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 565F03EB5065436F1F6102C6 /* ReaderContentScript.swift */; };
 		1D56555DEE337A88032FA0D4 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40096CF8E32B4120764C61B /* KeychainStore.swift */; };
@@ -18,6 +20,7 @@
 		7730855E6E9E83B802D7A504 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A5FE802A450ACD1A1D68E0 /* SettingsView.swift */; };
 		7BA92859F7378C40E9EDFF6B /* ReadingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */; };
 		807E0EEC5E3C536A52E50677 /* PencilSelectionScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6A765E6199FB0C961B8BA2 /* PencilSelectionScript.swift */; };
+		8EE5D6C51814123BFE65D9DC /* ReadingHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD37B260E84EBE958DA0DB67 /* ReadingHistoryView.swift */; };
 		9858B8B2073739176E7903C1 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 5F902CAB0A59F16BA1F97343 /* ReadiumStreamer */; };
 		9DE4E05AAED1001F33D7F9AC /* PencilMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562EF7D7B73340E52BEA68FF /* PencilMode.swift */; };
 		B19E77AC2A58176F0E13CF71 /* DawnSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C88684D2AE319DD0DA0EE50 /* DawnSyncClient.swift */; };
@@ -45,7 +48,9 @@
 		1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSession.swift; sourceTree = "<group>"; };
 		26ECC55FD4DD89055F2580DD /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		293F232FEE458BC2611CAE4C /* DawnReaderTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DawnReaderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		34002A99D5FE8F61F43AB8F4 /* ReadingEvidenceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingEvidenceStoreTests.swift; sourceTree = "<group>"; };
 		34CC3717FEFD369AED49819E /* AIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIClientTests.swift; sourceTree = "<group>"; };
+		3FDEE8E25E40427CEBA63E94 /* ReadingEvidenceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingEvidenceStore.swift; sourceTree = "<group>"; };
 		413D22ACE52133231A06F30D /* AIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIClient.swift; sourceTree = "<group>"; };
 		41E896FA8598DED0010E3AF6 /* DawnReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DawnReaderApp.swift; sourceTree = "<group>"; };
 		561F152819B978F598F80061 /* ReaderHostViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHostViewController.swift; sourceTree = "<group>"; };
@@ -61,6 +66,7 @@
 		ADFCDD1C5D7106DA773B3930 /* BookRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRecord.swift; sourceTree = "<group>"; };
 		B7025733A63D9EFE517EBFBC /* ReadiumService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumService.swift; sourceTree = "<group>"; };
 		BCA192341B450C2E0C190CB2 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		DD37B260E84EBE958DA0DB67 /* ReadingHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingHistoryView.swift; sourceTree = "<group>"; };
 		E10E081EB7CB2F4F929321B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F190CCD34CD0BC67DC990F0E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F4A5FE802A450ACD1A1D68E0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -98,6 +104,8 @@
 				565F03EB5065436F1F6102C6 /* ReaderContentScript.swift */,
 				561F152819B978F598F80061 /* ReaderHostViewController.swift */,
 				7CE8BA8241DFDE2FCEECA0C5 /* ReaderScreen.swift */,
+				3FDEE8E25E40427CEBA63E94 /* ReadingEvidenceStore.swift */,
+				DD37B260E84EBE958DA0DB67 /* ReadingHistoryView.swift */,
 				1C5EBF4B355C487FDDE60D0B /* ReadingSession.swift */,
 				B7025733A63D9EFE517EBFBC /* ReadiumService.swift */,
 				BCA192341B450C2E0C190CB2 /* SettingsStore.swift */,
@@ -119,6 +127,7 @@
 			isa = PBXGroup;
 			children = (
 				34CC3717FEFD369AED49819E /* AIClientTests.swift */,
+				34002A99D5FE8F61F43AB8F4 /* ReadingEvidenceStoreTests.swift */,
 			);
 			path = DawnReaderTests;
 			sourceTree = "<group>";
@@ -230,6 +239,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C1EB020DF35B889CDCB33002 /* AIClientTests.swift in Sources */,
+				13993BE576560F1F3F430DBA /* ReadingEvidenceStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -250,6 +260,8 @@
 				1CF1D4560479C84E3C25C182 /* ReaderContentScript.swift in Sources */,
 				C7E643253A3D49C11FF1932D /* ReaderHostViewController.swift in Sources */,
 				FD61C266E22DC20C8AE18988 /* ReaderScreen.swift in Sources */,
+				147D4C87D4B14701C2CED3A8 /* ReadingEvidenceStore.swift in Sources */,
+				8EE5D6C51814123BFE65D9DC /* ReadingHistoryView.swift in Sources */,
 				7BA92859F7378C40E9EDFF6B /* ReadingSession.swift in Sources */,
 				2115C590BAEFBA423F295E72 /* ReadiumService.swift in Sources */,
 				D7163310FCB4B8817366A9EA /* SettingsStore.swift in Sources */,

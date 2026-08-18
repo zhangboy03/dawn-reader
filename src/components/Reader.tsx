@@ -23,6 +23,15 @@ import {
   type SelectionBounds,
 } from "../lib/selectionAssistPosition";
 import { parseReadingPosition, saveReadingPosition } from "../lib/readingPosition";
+import {
+  ReadingActivityRecorder,
+  readingEvidenceKind,
+  saveReadingEvidence,
+  saveReadingTimeSlice,
+  sentenceAroundSelection,
+  type EvidenceAnchor,
+  type ReadingEvidenceDraft,
+} from "../lib/readingEvidence";
 import { restoredScrollTop, visualAnchorPoints } from "../lib/readingAnchor";
 import {
   epubFrameSize,
@@ -67,7 +76,14 @@ type AssistanceMode = "english" | "chinese";
 type ChatState = "idle" | "loading" | "error";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ChatSource = { title: string; url: string };
+type AutoSaveState = "idle" | "pending" | "saved" | "error";
 type SelectionAnchor = SelectionBounds;
+type SelectionEvidenceContext = {
+  id: string;
+  text: string;
+  context: RewriteContext;
+  anchor: EvidenceAnchor;
+};
 type GestureState = {
   kind: ReaderInputKind;
   mode: PencilMode;
@@ -271,6 +287,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const selectedCfiRef = useRef<string | null>(null);
   const selectedContentsRef = useRef<any>(null);
   const selectedContextRef = useRef<RewriteContext | null>(null);
+  const selectedEvidenceRef = useRef<SelectionEvidenceContext | null>(null);
+  const epubCfiConstructorRef = useRef<any>(null);
+  const referenceModeRef = useRef(Boolean(source.initialCfi));
+  const activityRecorderRef = useRef<ReadingActivityRecorder | null>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
   const reflowTimerRef = useRef<number | null>(null);
   const appearanceRevisionRef = useRef(0);
@@ -317,6 +337,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [chatError, setChatError] = useState("");
   const [chatSources, setChatSources] = useState<ChatSource[]>([]);
   const [searchAvailable, setSearchAvailable] = useState(false);
+  const [pendingEvidence, setPendingEvidence] = useState<ReadingEvidenceDraft | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
+  const [referenceMode, setReferenceMode] = useState(Boolean(source.initialCfi));
   const [pageProgress, setPageProgress] = useState(0);
   const [pageNumber, setPageNumber] = useState<EpubPageNumber | null>(null);
   const [locationsReady, setLocationsReady] = useState(false);
@@ -333,6 +356,89 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [embedView, setEmbedView] = useState<EpubEmbedView | null>(null);
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
+
+  if (!activityRecorderRef.current) {
+    activityRecorderRef.current = new ReadingActivityRecorder({
+      bookId: source.type === "epub" ? source.id ?? null : null,
+      bookTitle: source.title,
+      onSlice: saveReadingTimeSlice,
+    });
+  }
+
+  useEffect(() => {
+    const recorder = activityRecorderRef.current!;
+    const timer = window.setInterval(() => recorder.flush(), 15_000);
+    return () => {
+      window.clearInterval(timer);
+      recorder.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    referenceModeRef.current = referenceMode;
+    const recorder = activityRecorderRef.current!;
+    const updateEligibility = () => {
+      recorder.setEligible(
+        !referenceMode
+        && document.visibilityState === "visible"
+        && document.hasFocus(),
+      );
+    };
+    updateEligibility();
+    document.addEventListener("visibilitychange", updateEligibility);
+    window.addEventListener("focus", updateEligibility);
+    window.addEventListener("blur", updateEligibility);
+    return () => {
+      document.removeEventListener("visibilitychange", updateEligibility);
+      window.removeEventListener("focus", updateEligibility);
+      window.removeEventListener("blur", updateEligibility);
+    };
+  }, [referenceMode]);
+
+  useEffect(() => {
+    if (referenceMode) return;
+    const eventId = `reader-open:${crypto.randomUUID()}`;
+    activityRecorderRef.current?.signal(eventId);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingEvidence) return;
+    let timer: number | null = null;
+    let cancelled = false;
+    const stopTimer = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+    };
+    const schedule = () => {
+      stopTimer();
+      if (document.visibilityState !== "visible" || !document.hasFocus()) {
+        setAutoSaveState("pending");
+        return;
+      }
+      setAutoSaveState("pending");
+      timer = window.setTimeout(() => {
+        void saveReadingEvidence(pendingEvidence).then(() => {
+          if (cancelled) return;
+          setAutoSaveState("saved");
+          setPendingEvidence(null);
+        }).catch(() => {
+          if (!cancelled) setAutoSaveState("error");
+        });
+      }, 1_000);
+    };
+    const onVisibilityChange = () => schedule();
+    schedule();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onVisibilityChange);
+    window.addEventListener("blur", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      stopTimer();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onVisibilityChange);
+      window.removeEventListener("blur", onVisibilityChange);
+    };
+  }, [pendingEvidence]);
 
   useEffect(() => {
     if (source.assistantMode !== "ask") return;
@@ -577,6 +683,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   function persistProgress(progressKey: string, cfi: string, percentage: number) {
+    if (referenceModeRef.current) return;
     const position = saveReadingPosition(progressKey, { cfi, percentage });
     if (source.type !== "epub" || !source.id) return;
     pendingCloudProgressRef.current = position;
@@ -717,7 +824,54 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     rendition?.themes?.override("line-height", String(next.lineHeight), true);
   }
 
+  function signalReadingActivity(kind: string, eventId = crypto.randomUUID()) {
+    if (referenceModeRef.current) return;
+    activityRecorderRef.current?.signal(`${kind}:${eventId}`);
+  }
+
+  function collapseCfiRangeToStart(cfiRange: string) {
+    const EpubCFI = epubCfiConstructorRef.current;
+    if (!cfiRange || !EpubCFI) return cfiRange;
+    try {
+      const cfi = new EpubCFI(cfiRange);
+      cfi.collapse(true);
+      return cfi.toString();
+    } catch {
+      return cfiRange;
+    }
+  }
+
+  function queueEvidence(
+    evidence: SelectionEvidenceContext | null,
+    explanation: { mode: "english" | "chinese" | "chat"; text: string; question?: string; provider?: string },
+  ) {
+    if (!evidence || selectedEvidenceRef.current?.id !== evidence.id) return;
+    const presentedAt = new Date().toISOString();
+    setAutoSaveState("pending");
+    setPendingEvidence({
+      id: evidence.id,
+      bookId: source.type === "epub" ? source.id ?? null : null,
+      editionId: source.type === "epub" ? source.id ?? source.file.name : `text:${source.title}`,
+      bookTitle: displayTitle,
+      kind: readingEvidenceKind(evidence.text),
+      selectedText: evidence.text,
+      sentenceText: sentenceAroundSelection(evidence.context.before, evidence.text, evidence.context.after),
+      contextBefore: evidence.context.before,
+      contextAfter: evidence.context.after,
+      anchor: evidence.anchor,
+      explanation: {
+        id: crypto.randomUUID(),
+        mode: explanation.mode,
+        text: explanation.text,
+        question: explanation.question,
+        provider: explanation.provider,
+        presentedAt,
+      },
+    });
+  }
+
   async function requestRewrite(text: string, context: RewriteContext, mode: AssistanceMode = "english") {
+    const evidence = selectedEvidenceRef.current;
     rewriteAbortRef.current?.abort();
     const controller = new AbortController();
     rewriteAbortRef.current = controller;
@@ -742,8 +896,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       }
       const data = await response.json() as { rewrite?: string };
       if (!data.rewrite?.trim()) throw new Error("The provider returned no rewrite.");
-      setRewrite(data.rewrite.trim());
+      const completedRewrite = data.rewrite.trim();
+      setRewrite(completedRewrite);
       setRewriteState("complete");
+      queueEvidence(evidence, {
+        mode,
+        text: completedRewrite,
+        provider: response.headers.get("X-AI-Provider") ?? undefined,
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       setRewrite(error instanceof Error ? error.message : "Rewrite failed");
@@ -751,8 +911,16 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
   }
 
-  function beginSelection(text: string, anchor: SelectionAnchor, context: RewriteContext) {
+  function beginSelection(
+    text: string,
+    anchor: SelectionAnchor,
+    context: RewriteContext,
+    evidence: SelectionEvidenceContext,
+  ) {
     selectedContextRef.current = context;
+    selectedEvidenceRef.current = evidence;
+    setPendingEvidence(null);
+    setAutoSaveState("idle");
     setAssistPosition(null);
     setSelected(text);
     setSelectionAnchor(anchor);
@@ -780,6 +948,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   async function sendQuestion(question: string, history = chatMessages) {
     const context = selectedContextRef.current;
+    const evidence = selectedEvidenceRef.current;
     const trimmed = question.trim();
     if (!selected || !context || !trimmed || chatState === "loading") return;
     const outgoing = [...history, { role: "user" as const, content: trimmed }];
@@ -810,10 +979,17 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         searchAvailable?: boolean;
       } | null;
       if (!response.ok || !data?.answer?.trim()) throw new Error(data?.error ?? "没有收到回答。");
-      setChatMessages([...outgoing, { role: "assistant", content: data.answer.trim() }]);
+      const completedAnswer = data.answer.trim();
+      setChatMessages([...outgoing, { role: "assistant", content: completedAnswer }]);
       setChatSources(data.sources ?? []);
       setSearchAvailable(Boolean(data.searchAvailable));
       setChatState("idle");
+      queueEvidence(evidence, {
+        mode: "chat",
+        question: trimmed,
+        text: completedAnswer,
+        provider: response.headers.get("X-AI-Provider") ?? undefined,
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       setChatError(error instanceof Error ? error.message : "对话失败，请稍后重试。");
@@ -834,7 +1010,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       selection?.removeAllRanges();
       return;
     }
-    const text = selection?.toString().trim() ?? "";
+    const exactText = selection?.toString() ?? "";
+    const text = exactText.trim();
     if (!text || !selection?.rangeCount) return;
     const range = selection.getRangeAt(0);
     let cfiRange = suppliedCfi ?? "";
@@ -849,6 +1026,16 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
     selectedCfiRef.current = cfiRange || null;
     selectedContentsRef.current = contents;
+    const observationId = crypto.randomUUID();
+    if (cfiRange && source.type === "epub" && !referenceModeRef.current) {
+      const resumeCfi = collapseCfiRangeToStart(cfiRange);
+      persistProgress(
+        `dawn-reader-progress:${source.id ?? source.file.name}`,
+        resumeCfi,
+        pageProgress,
+      );
+      signalReadingActivity("selection", observationId);
+    }
     if (cfiRange) {
       try {
         renditionRef.current?.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
@@ -863,11 +1050,21 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const frameRect = iframe?.getBoundingClientRect();
     const top = (frameRect?.top ?? 0) + rect.top;
     const bottom = (frameRect?.top ?? 0) + rect.bottom;
+    const context = contextFromDomSelection(selection);
     beginSelection(text, {
       x: (frameRect?.left ?? 0) + rect.left + rect.width / 2,
       top,
       bottom,
-    }, contextFromDomSelection(selection));
+    }, context, {
+      id: observationId,
+      text,
+      context,
+      anchor: {
+        cfi: cfiRange || null,
+        href: (contents?.section?.href ?? currentHref) || null,
+        percentage: pageProgress,
+      },
+    });
   }
 
   function scheduleEpubSelection(contents: any, delay = 320) {
@@ -1115,7 +1312,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       const localPosition = parseReadingPosition(localStorage.getItem(progressKey));
       const savedPosition = localPosition;
       if (cancelled || !epubRef.current) return;
-      const { default: ePub } = await import("epubjs");
+      const epubModule = await import("epubjs");
+      const ePub = epubModule.default;
+      epubCfiConstructorRef.current = epubModule.EpubCFI;
       book = ePub(buffer);
       bookRef.current = book;
       const metadata = await book.loaded.metadata.catch(() => null) as {
@@ -1369,7 +1568,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         if (canPersistProgress && cfi) persistProgress(progressKey, cfi, percentage);
         finishEpubReflow();
       });
-      await rendition.display(savedPosition?.cfi ?? undefined);
+      await rendition.display(source.initialCfi ?? savedPosition?.cfi ?? undefined);
       await book.locations.generate(1200);
       if (cancelled) return;
       locationsGenerated = true;
@@ -1387,7 +1586,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       } else {
         canPersistProgress = true;
       }
-      if (source.id) {
+      if (source.id && !referenceModeRef.current) {
         const cloudPosition = await loadCloudProgress(source.id).catch(() => null);
         if (cancelled) return;
         const latestLocal = parseReadingPosition(localStorage.getItem(progressKey));
@@ -1445,11 +1644,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const paragraph = closestTextBlock(range.startContainer)?.closest<HTMLElement>(".reader-paragraph");
     const paragraphIndex = Number(paragraph?.dataset.paragraphIndex ?? -1);
     const rect = range.getBoundingClientRect();
+    const context = contextFromParagraphs(textParagraphs, paragraphIndex, text);
+    const observationId = crypto.randomUUID();
+    signalReadingActivity("selection", observationId);
     beginSelection(text, {
       x: rect.left + rect.width / 2,
       top: rect.top,
       bottom: rect.bottom,
-    }, contextFromParagraphs(textParagraphs, paragraphIndex, text));
+    }, context, {
+      id: observationId,
+      text,
+      context,
+      anchor: { cfi: null, href: `paragraph:${paragraphIndex}`, percentage: null },
+    });
   }
 
   function clearSelection() {
@@ -1467,6 +1674,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectedCfiRef.current = null;
     selectedContentsRef.current = null;
     selectedContextRef.current = null;
+    selectedEvidenceRef.current = null;
     selectedKeyRef.current = "";
     setSelected("");
     setSelectionAnchor(null);
@@ -1479,16 +1687,20 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setChatState("idle");
     setChatError("");
     setChatSources([]);
+    setPendingEvidence(null);
+    setAutoSaveState("idle");
   }
 
   function turnPage(direction: "prev" | "next") {
     clearSelection();
+    signalReadingActivity("page-turn");
     renditionRef.current?.[direction]();
   }
 
   function goToPercentage(value: number) {
     if (!locationsReady) return;
     clearSelection();
+    signalReadingActivity("manual-seek");
     setPageProgress(value);
     const cfi = bookRef.current?.locations?.cfiFromPercentage(value / 100);
     if (cfi) {
@@ -1501,8 +1713,39 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   function goToTocItem(item: EpubTocItem) {
     clearSelection();
+    signalReadingActivity("toc-jump");
     setTocOpen(false);
     void renditionRef.current?.display(item.href);
+  }
+
+  async function returnFromReference() {
+    const returnCfi = source.referenceReturnCfi;
+    if (!returnCfi) {
+      onClose();
+      return;
+    }
+    clearSelection();
+    try {
+      await renditionRef.current?.display(returnCfi);
+    } finally {
+      referenceModeRef.current = false;
+      setReferenceMode(false);
+    }
+  }
+
+  function continueFromReference() {
+    const location = renditionRef.current?.currentLocation?.()?.start;
+    const cfi = location?.cfi ?? source.initialCfi;
+    referenceModeRef.current = false;
+    setReferenceMode(false);
+    if (source.type === "epub" && cfi) {
+      persistProgress(
+        `dawn-reader-progress:${source.id ?? source.file.name}`,
+        cfi,
+        pageProgress,
+      );
+    }
+    signalReadingActivity("continue-from-reference");
   }
 
   function dismissSelectionOnly(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -1636,7 +1879,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
     <header className="reader-topbar">
-      <button className="back-button" onClick={onClose}>← <span>书架</span></button>
+      <button className="back-button" onClick={onClose}>← <span>{source.returnToHistory ? "记录" : "书架"}</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`}</small>}</div>
       <div className="reader-actions">
         {source.type === "epub" && !desktopReader && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">
@@ -1682,6 +1925,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         </div>
       </div>}
     </header>
+
+    {referenceMode && <div className="reference-reading-banner" role="status">
+      <span><strong>正在回看记录</strong><small>不会改动原来的阅读位置</small></span>
+      <div>
+        <button type="button" onClick={() => void returnFromReference()}>返回原阅读位置</button>
+        <button type="button" className="reference-continue" onClick={continueFromReference}>从这里继续阅读</button>
+      </div>
+    </div>}
 
     {source.type === "epub" && tocOpen && <div className="toc-layer">
       <button className="toc-backdrop" aria-label="关闭目录" onClick={() => setTocOpen(false)} />
@@ -1876,6 +2127,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             <button type="submit" disabled={!chatDraft.trim() || chatState === "loading"} aria-label="发送问题">↑</button>
           </form>
         </div>}
+      {autoSaveState !== "idle" && <footer className={`evidence-save-status ${autoSaveState}`} aria-live="polite">
+        <span aria-hidden="true">{autoSaveState === "saved" ? "✓" : autoSaveState === "error" ? "!" : "·"}</span>
+        {autoSaveState === "pending" ? "停留 1 秒后自动保存" : autoSaveState === "saved" ? "已自动保存到查阅记录" : "暂时无法保存到本机"}
+      </footer>}
     </aside>}
   </div>;
 }

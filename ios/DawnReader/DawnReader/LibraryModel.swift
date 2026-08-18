@@ -116,6 +116,33 @@ final class LibraryModel: ObservableObject {
         }
     }
 
+    func openEvidence(
+        _ evidence: ReadingEvidenceRecord,
+        settings: SettingsStore,
+        evidenceStore: ReadingEvidenceStore
+    ) async {
+        guard let record = books.first(where: { $0.id == evidence.bookID }),
+              let locatorJSON = evidence.locatorJSON else {
+            errorMessage = "这本书当前不在书架中，暂时无法回到原文。"
+            return
+        }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            let publication = try await readium.open(url: try booksDirectory().appendingPathComponent(record.fileName))
+            try open(
+                record,
+                publication: publication,
+                settings: settings,
+                initialLocatorJSON: locatorJSON,
+                referenceReturnLocatorJSON: record.lastLocatorJSON,
+                evidenceStore: evidenceStore
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func closeReader() {
         openedBook = nil
     }
@@ -161,14 +188,24 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    private func open(_ record: BookRecord, publication: Publication, settings: SettingsStore) throws {
-        let session = ReadingSession(book: record, settings: settings) { [weak self] locatorJSON, progress in
+    private func open(
+        _ record: BookRecord,
+        publication: Publication,
+        settings: SettingsStore,
+        initialLocatorJSON: String? = nil,
+        referenceReturnLocatorJSON: String? = nil,
+        evidenceStore: ReadingEvidenceStore? = nil
+    ) throws {
+        let referenceMode = initialLocatorJSON != nil
+        let session = ReadingSession(book: record, settings: settings, referenceMode: referenceMode) { [weak self] locatorJSON, progress in
             self?.persistProgress(bookID: record.id, locatorJSON: locatorJSON, progress: progress)
         }
+        if let evidenceStore { session.attachEvidenceStore(evidenceStore) }
         let controller = try ReaderHostViewController(
             publication: publication,
-            initialLocatorJSON: record.lastLocatorJSON,
-            initialProgression: record.lastLocatorJSON == nil ? record.progress : nil,
+            initialLocatorJSON: initialLocatorJSON ?? record.lastLocatorJSON,
+            initialProgression: initialLocatorJSON == nil && record.lastLocatorJSON == nil ? record.progress : nil,
+            referenceReturnLocatorJSON: referenceReturnLocatorJSON,
             session: session
         )
         openedBook = OpenedBook(record: record, session: session, controller: controller)

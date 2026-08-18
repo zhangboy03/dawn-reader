@@ -5,8 +5,10 @@ import UIKit
 struct LibraryView: View {
     @EnvironmentObject private var library: LibraryModel
     @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var evidenceStore: ReadingEvidenceStore
     @State private var importing = false
     @State private var showingSettings = false
+    @State private var showingHistory = false
     @State private var bookToDelete: BookRecord?
     @State private var isDropTarget = false
     @Environment(\.scenePhase) private var scenePhase
@@ -73,9 +75,18 @@ struct LibraryView: View {
             SettingsView()
                 .environmentObject(settings)
         }
+        .sheet(isPresented: $showingHistory) {
+            ReadingHistoryView { record in
+                Task {
+                    await library.openEvidence(record, settings: settings, evidenceStore: evidenceStore)
+                }
+            }
+            .environmentObject(evidenceStore)
+        }
         .fullScreenCover(item: $library.openedBook) { opened in
             ReaderScreen(openedBook: opened, onClose: library.closeReader)
                 .environmentObject(settings)
+                .environmentObject(evidenceStore)
         }
         .alert("无法完成", isPresented: Binding(
             get: { library.errorMessage != nil },
@@ -151,6 +162,18 @@ struct LibraryView: View {
             .accessibilityHint("从“文件”选择一本或多本电子书")
 
             Button {
+                showingHistory = true
+            } label: {
+                Image(systemName: "text.book.closed")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.ink)
+            .accessibilityLabel("查阅记录")
+
+            Button {
                 showingSettings = true
             } label: {
                 Image(systemName: "slider.horizontal.3")
@@ -172,6 +195,12 @@ struct LibraryView: View {
                 .foregroundStyle(Palette.ink)
             syncStatus
             Spacer()
+            Button("查阅记录") {
+                showingHistory = true
+            }
+            .buttonStyle(.bordered)
+            .tint(Palette.ink)
+            .frame(minHeight: 44)
             Button {
                 showingSettings = true
             } label: {

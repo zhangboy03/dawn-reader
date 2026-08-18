@@ -11,6 +11,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     private let navigator: EPUBNavigatorViewController
     private let session: ReadingSession
     private let initialProgression: Double?
+    private let referenceReturnLocatorJSON: String?
     private lazy var pencilGesture = UILongPressGestureRecognizer(target: self, action: #selector(handlePencilGesture(_:)))
     private lazy var fingerDismissTap = UITapGestureRecognizer(target: self, action: #selector(handleFingerDismissTap(_:)))
     private var gestureStart: CGPoint?
@@ -35,6 +36,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         publication: Publication,
         initialLocatorJSON: String?,
         initialProgression: Double? = nil,
+        referenceReturnLocatorJSON: String? = nil,
         session: ReadingSession
     ) throws {
         let locator = initialLocatorJSON.flatMap { try? Locator(jsonString: $0) }
@@ -61,6 +63,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         self.publication = publication
         self.session = session
         self.initialProgression = initialProgression
+        self.referenceReturnLocatorJSON = referenceReturnLocatorJSON
         super.init(nibName: nil, bundle: nil)
         navigator.delegate = self
     }
@@ -105,15 +108,18 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         fingerDismissTap.delegate = self
         navigator.view.addGestureRecognizer(fingerDismissTap)
 
-        session.goForward = { [weak navigator] in
+        session.goForward = { [weak navigator, weak session] in
+            session?.recordActivity()
             Task { await navigator?.goForward(options: .init(animated: true)) }
         }
-        session.goBackward = { [weak navigator] in
+        session.goBackward = { [weak navigator, weak session] in
+            session?.recordActivity()
             Task { await navigator?.goBackward(options: .init(animated: true)) }
         }
         session.seek = { [weak self] progression in
             guard let self else { return }
             self.session.clearSelection()
+            self.session.recordActivity()
             Task {
                 guard let locator = await self.publication.locate(progression: progression) else { return }
                 _ = await self.navigator.go(to: locator, options: .init(animated: false))
@@ -126,6 +132,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         session.goToChapter = { [weak self] link in
             guard let self else { return }
             self.session.clearSelection()
+            self.session.recordActivity()
             Task {
                 _ = await self.navigator.go(to: link, options: .init(animated: false))
             }
@@ -139,6 +146,16 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             Task { [weak self] in
                 guard let self else { return }
                 _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
+            }
+        }
+        if let referenceReturnLocatorJSON = self.referenceReturnLocatorJSON,
+           let returnLocator = try? Locator(jsonString: referenceReturnLocatorJSON)
+        {
+            session.returnFromReference = { [weak navigator, weak session] in
+                Task {
+                    _ = await navigator?.go(to: returnLocator, options: .init(animated: false))
+                    session?.completeReferenceReturn()
+                }
             }
         }
         if let initialProgression, initialProgression > 0 {
@@ -433,6 +450,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             session.clearSelection()
         }
         session.updateLocation(locator)
+        session.recordActivity()
         Task { [weak self] in
             guard let self else { return }
             _ = await self.navigator.evaluateJavaScript(

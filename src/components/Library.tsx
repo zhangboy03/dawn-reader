@@ -29,7 +29,12 @@ import { DeviceSync } from "./DeviceSync";
 export type BookSource = (
   { type: "text"; title: string; text: string }
   | { type: "epub"; id?: string; title: string; file: File }
-) & { assistantMode: BookAssistantMode };
+) & {
+  assistantMode: BookAssistantMode;
+  initialCfi?: string | null;
+  referenceReturnCfi?: string | null;
+  returnToHistory?: boolean;
+};
 
 type AiHealth = {
   provider: string;
@@ -178,11 +183,12 @@ function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
   return merged.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
 }
 
-export function Library({ profile, onOpen, onRetest, onProfileChange }: {
+export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHistory }: {
   profile: ReaderProfile;
   onOpen: (source: BookSource) => void;
   onRetest: () => void;
   onProfileChange: (profile: ReaderProfile) => void;
+  onOpenHistory?: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const coverJobsRef = useRef(new Set<string>());
@@ -456,6 +462,9 @@ export function Library({ profile, onOpen, onRetest, onProfileChange }: {
     <header className="topbar">
       <div className="brand-lockup"><div className="brand">Dawn Reader</div><span className={`sync-mark ${syncState}`}>{syncLabel}</span></div>
       <div className="topbar-actions">
+        {onOpenHistory && <button className="history-link" type="button" onClick={onOpenHistory}>
+          <span aria-hidden="true">↗</span> 查阅记录
+        </button>}
         <DeviceSync />
         <div className="profile-control">
         <button className="profile-chip" onClick={() => setProfileOpen((open) => !open)}><i /> {profile.band}</button>

@@ -4,6 +4,8 @@ import UIKit
 
 struct ReaderScreen: View {
     @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var evidenceStore: ReadingEvidenceStore
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var session: ReadingSession
     let openedBook: OpenedBook
     let onClose: () -> Void
@@ -34,6 +36,9 @@ struct ReaderScreen: View {
                 chromeBackground.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
+                    if session.isReferenceMode {
+                        referenceBanner
+                    }
                     ReaderControllerView(
                         controller: openedBook.controller,
                         mode: session.pencilMode,
@@ -64,7 +69,66 @@ struct ReaderScreen: View {
                   !selectedText.isEmpty else { return }
             assistantDetent = session.assistantMode == .ask ? .large : .medium
         }
+        .onAppear {
+            session.attachEvidenceStore(evidenceStore)
+            session.setReadingActive(scenePhase == .active)
+            session.recordActivity()
+        }
+        .onDisappear {
+            session.closeReadingSession()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            session.setReadingActive(phase == .active)
+        }
+        .task(id: evidenceTaskID) {
+            guard scenePhase == .active,
+                  let presentationID = session.evidencePresentationID else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled,
+                  scenePhase == .active,
+                  session.evidencePresentationID == presentationID else { return }
+            session.confirmPresentedEvidence(presentationID)
+        }
         .preferredColorScheme(settings.readerTheme == .night ? .dark : .light)
+    }
+
+    private var evidenceTaskID: String {
+        "\(session.evidencePresentationID?.uuidString ?? "none"):\(String(describing: scenePhase))"
+    }
+
+    private var referenceBanner: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("正在回看记录")
+                    .font(.caption.weight(.semibold))
+                Text("不会改动原来的阅读位置")
+                    .font(.caption2)
+                    .foregroundStyle(chromeForeground.opacity(0.58))
+            }
+            Spacer(minLength: 4)
+            Button("返回原位置") {
+                if let action = session.returnFromReference {
+                    action()
+                } else {
+                    onClose()
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            Button("从这里继续") {
+                session.continueFromReference()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.ember)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .foregroundStyle(chromeForeground)
+        .background(Palette.ember.opacity(0.08))
+        .overlay(alignment: .bottom) {
+            Divider().overlay(Palette.ember.opacity(0.25))
+        }
     }
 
     @ViewBuilder
@@ -349,6 +413,7 @@ struct ReaderScreen: View {
                     } else {
                         phoneRewriteContent
                     }
+                    autoSaveStatus
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
@@ -466,6 +531,23 @@ struct ReaderScreen: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("选中原文：\(session.selectedText)")
+    }
+
+    @ViewBuilder
+    private var autoSaveStatus: some View {
+        switch session.autoSaveState {
+        case .idle:
+            EmptyView()
+        case .pending:
+            Label("停留 1 秒后自动保存", systemImage: "circle.dotted")
+                .foregroundStyle(chromeForeground.opacity(0.58))
+        case .saved:
+            Label("已自动保存到查阅记录", systemImage: "checkmark.circle")
+                .foregroundStyle(Color(red: 0.31, green: 0.46, blue: 0.38))
+        case .failed:
+            Label("暂时无法保存到本机", systemImage: "exclamationmark.circle")
+                .foregroundStyle(Palette.ember)
+        }
     }
 
     @ViewBuilder
@@ -666,6 +748,8 @@ struct ReaderScreen: View {
                         .foregroundStyle(chromeForeground.opacity(0.68))
                 }
             }
+            autoSaveStatus
+                .font(.caption2.monospaced())
         }
         .padding(16)
         .frame(width: cardWidth, alignment: .leading)
