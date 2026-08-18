@@ -68,6 +68,9 @@ struct SettingsView: View {
                     TextField("模型", text: $settings.model)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    Text("解释和提问会把选中文本、附近上下文与书名发送到阿里云百炼 Qwen。API 密钥只保存在本机钥匙串，不进入 Dawn 设备同步。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 Section("设备同步") {
                     if settings.syncConnectionState == .connected {

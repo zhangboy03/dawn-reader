@@ -40,6 +40,17 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         session: ReadingSession
     ) throws {
         let locator = initialLocatorJSON.flatMap { try? Locator(jsonString: $0) }
+        let editingActions: [EditingAction]
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            editingActions = [
+                EditingAction(
+                    title: session.assistantMode.title,
+                    action: #selector(ReaderHostViewController.handlePhoneSelectionAction(_:))
+                ),
+            ] + EditingAction.defaultActions
+        } else {
+            editingActions = EditingAction.defaultActions
+        }
         let preferences = Self.preferences(
             for: session.settings.readerAppearance,
             language: publication.metadata.language
@@ -49,6 +60,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             initialLocation: locator,
             config: .init(
                 preferences: preferences,
+                editingActions: editingActions,
                 contentInset: [
                     .compact: (top: 0, bottom: 0),
                     .regular: (top: 0, bottom: 0),
@@ -126,8 +138,13 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             }
         }
         Task { [weak session, publication] in
-            guard case let .success(links) = await publication.tableOfContents() else { return }
-            session?.tableOfContents = links
+            switch await publication.tableOfContents() {
+            case let .success(links):
+                session?.tableOfContents = links
+                session?.tableOfContentsState = .loaded
+            case .failure:
+                session?.tableOfContentsState = .failed("无法读取这本书的目录。")
+            }
         }
         session.goToChapter = { [weak self] link in
             guard let self else { return }
@@ -167,6 +184,11 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             }
         }
         apply(mode: session.pencilMode, appearance: session.settings.readerAppearance)
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        resetPencilInteraction(clearNativeSelection: true)
+        super.viewWillTransition(to: size, with: coordinator)
     }
 
     func apply(mode: PencilMode, appearance: ReaderAppearance) {
@@ -225,6 +247,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 updatePencilSelection(
                     from: coordinates.point,
                     to: coordinates.point,
+                    webView: coordinates.webView,
                     nativeSize: coordinates.webView.bounds.size,
                     final: false
                 )
@@ -235,7 +258,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                let webView = selectionWebView
             {
                 let end = gesture.location(in: webView)
-                updatePencilSelection(from: start, to: end, nativeSize: webView.bounds.size, final: false)
+                updatePencilSelection(from: start, to: end, webView: webView, nativeSize: webView.bounds.size, final: false)
             }
         case .ended:
             defer {
@@ -255,7 +278,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 }
             } else if let start = selectionStart, let webView = selectionWebView {
                 let end = gesture.location(in: webView)
-                updatePencilSelection(from: start, to: end, nativeSize: webView.bounds.size, final: true)
+                updatePencilSelection(from: start, to: end, webView: webView, nativeSize: webView.bounds.size, final: true)
             }
         case .cancelled, .failed:
             gestureStart = nil
@@ -282,8 +305,10 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         )
         Task { [weak self] in
             guard let self else { return }
-            let result = await navigator.evaluateJavaScript(script)
-            guard case let .success(value) = result else {
+            let value: Any
+            do {
+                value = try await coordinates.webView.evaluateJavaScript(script)
+            } catch {
                 session.clearSelection()
                 return
             }
@@ -294,7 +319,13 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         }
     }
 
-    private func updatePencilSelection(from start: CGPoint, to end: CGPoint, nativeSize: CGSize, final: Bool) {
+    private func updatePencilSelection(
+        from start: CGPoint,
+        to end: CGPoint,
+        webView: WKWebView,
+        nativeSize: CGSize,
+        final: Bool
+    ) {
         if !final {
             let now = CACurrentMediaTime()
             guard now - lastSelectionUpdateTime >= 0.035 else { return }
@@ -309,38 +340,65 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             nativeSize: nativeSize,
             captureNative: final
         )
-        selectionUpdateTask = Task { [weak self] in
-            guard let self else { return }
+        selectionUpdateTask = Task { [weak self, weak webView] in
+            guard let self, let webView else { return }
             guard updateID == selectionUpdateID else { return }
-            _ = await navigator.evaluateJavaScript(script)
-            guard !Task.isCancelled, updateID == selectionUpdateID, final else { return }
-            defer { pencilSelectionInProgress = false }
-            try? await Task.sleep(for: .milliseconds(70))
-            guard !Task.isCancelled, updateID == selectionUpdateID else { return }
-            if let selection = navigator.currentSelection {
-                session.handle(selection: selection)
-                showFinalHighlight(for: selection)
-                try? await Task.sleep(for: .milliseconds(90))
-                guard !Task.isCancelled, updateID == selectionUpdateID else { return }
-                _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
+            do {
+                _ = try await webView.evaluateJavaScript(script)
+            } catch {
+                guard updateID == selectionUpdateID else { return }
+                pencilSelectionInProgress = false
+                return
             }
+            guard !Task.isCancelled, updateID == selectionUpdateID, final else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, updateID == selectionUpdateID else { return }
+            pencilSelectionInProgress = false
+            _ = try? await webView.evaluateJavaScript(ReaderContentScript.clearSelection)
         }
     }
 
-    private func captureFingerSelection(_ selection: Selection) {
+    @objc private func handlePhoneSelectionAction(_ sender: Any?) {
+        guard presentation.allowsFingerSelection,
+              let selection = navigator.currentSelection else { return }
         selectionUpdateTask?.cancel()
         selectionUpdateID += 1
-        let updateID = selectionUpdateID
-
         session.handle(selection: selection)
+        session.recordActivity()
         showFinalHighlight(for: selection)
+        navigator.clearSelection()
+        Task { [weak navigator] in
+            _ = await navigator?.evaluateJavaScript(ReaderContentScript.clearSelection)
+        }
+    }
 
-        selectionUpdateTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled, updateID == selectionUpdateID else { return }
-            navigator.clearSelection()
-            _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
+    private func completePencilSelection(_ selection: Selection) {
+        guard pencilSelectionInProgress else { return }
+        selectionUpdateTask?.cancel()
+        selectionUpdateTask = nil
+        selectionUpdateID += 1
+        pencilSelectionInProgress = false
+        session.handle(selection: selection)
+        session.recordActivity()
+        showFinalHighlight(for: selection)
+        navigator.clearSelection()
+        Task { [weak navigator] in
+            _ = await navigator?.evaluateJavaScript(ReaderContentScript.clearSelection)
+        }
+    }
+
+    private func resetPencilInteraction(clearNativeSelection: Bool) {
+        selectionUpdateTask?.cancel()
+        selectionUpdateTask = nil
+        selectionUpdateID += 1
+        gestureStart = nil
+        selectionStart = nil
+        selectionWebView = nil
+        pencilSelectionInProgress = false
+        guard clearNativeSelection else { return }
+        navigator.clearSelection()
+        Task { [weak navigator] in
+            _ = await navigator?.evaluateJavaScript(ReaderContentScript.clearSelection)
         }
     }
 
@@ -446,6 +504,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+        resetPencilInteraction(clearNativeSelection: true)
         if !session.selectedText.isEmpty {
             session.clearSelection()
         }
@@ -465,10 +524,10 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
         switch presentation.nativeSelectionRoute(pencilSelectionInProgress: pencilSelectionInProgress) {
         case .pencilManaged:
+            completePencilSelection(selection)
             return false
-        case .captureFingerSelection:
-            captureFingerSelection(selection)
-            return false
+        case .showFingerSelectionMenu:
+            return true
         case .discardFingerSelection:
             navigator.clearSelection()
             return false
@@ -476,7 +535,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
-        session.rewriteState = .failed("阅读器无法完成这个操作。")
+        session.readerErrorMessage = "阅读器无法完成这个操作。"
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {

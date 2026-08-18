@@ -4,7 +4,7 @@ Native universal reader built with SwiftUI and Readium Swift Toolkit for iOS and
 
 ## Reading interaction
 
-- iPhone uses a compact, one-handed library and reader chrome. Long-press selected text opens the configured assistant in a keyboard-safe bottom sheet.
+- iPhone uses a compact, one-handed library and reader chrome. Long-press, adjust the native selection handles, then choose the book's assistant action to open a keyboard-safe bottom sheet.
 - iPad keeps the adaptive library grid and selection-adjacent assistant.
 - Finger: Readium's normal page navigation on both devices; iPhone long-press also selects text.
 - Pencil · Page on iPad: horizontal stroke turns one page.

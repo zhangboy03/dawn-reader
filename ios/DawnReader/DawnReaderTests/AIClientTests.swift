@@ -66,6 +66,50 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(body.messages[0].content.contains("解释："))
     }
 
+    func testClassifiesWordsPhrasesAndPassages() {
+        XCTAssertEqual(AIClient.selectionKind("quality"), .word)
+        XCTAssertEqual(AIClient.selectionKind("self-reliance"), .word)
+        XCTAssertEqual(AIClient.selectionKind("in light of"), .phrase)
+        XCTAssertEqual(AIClient.selectionKind("the quality of mind needed to win"), .phrase)
+        XCTAssertEqual(AIClient.selectionKind("He left because it was late."), .passage)
+        XCTAssertEqual(
+            AIClient.selectionKind("This selected passage contains more than eight separate words"),
+            .passage
+        )
+    }
+
+    func testEnglishPhrasePromptExplainsTheCombinationInsteadOfRewriting() {
+        let body = AIClient.makeBody(
+            context: .init(before: "before", highlight: "in light of", after: "after"),
+            title: "Book",
+            model: "qwen3.7-flash"
+        )
+
+        XCTAssertEqual(body.maxTokens, 64)
+        XCTAssertTrue(body.messages[0].content.contains("one combined expression"))
+        XCTAssertTrue(body.messages[0].content.contains("selected phrase — contextual meaning"))
+        XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, translate, or quote the surrounding"))
+    }
+
+    func testChinesePhrasePromptExplainsTheCombinedAndContextualMeanings() {
+        let body = AIClient.makeChineseBody(
+            context: .init(before: "before", highlight: "quality of mind", after: "after"),
+            title: "Book",
+            model: "qwen3.7-flash"
+        )
+
+        XCTAssertEqual(body.maxTokens, 240)
+        XCTAssertTrue(body.messages[0].content.contains("one combined expression"))
+        XCTAssertTrue(body.messages[0].content.contains("组合义：…"))
+        XCTAssertTrue(body.messages[0].content.contains("此处：…"))
+        XCTAssertTrue(body.messages[0].content.contains("Never translate, paraphrase, summarize, or rewrite the surrounding"))
+    }
+
+    func testPhraseSelectionUsesPhraseSpecificReaderLabels() {
+        XCTAssertEqual(DawnSelectionLabels.title(for: .phrase), "短语含义")
+        XCTAssertEqual(DawnSelectionLabels.loadingTitle(for: .phrase), "正在解释短语…")
+    }
+
     func testChatPromptKeepsSelectionAndConversationHistory() {
         let body = AIClient.makeChatBody(
             context: .init(before: "before", highlight: "课程原文", after: "after"),
@@ -238,11 +282,23 @@ final class AIClientTests: XCTestCase {
         XCTAssertEqual(policy.readerBottomBarHeight, 52)
     }
 
-    func testTouchSelectionRoutingCapturesPhoneFingerAndPreservesPencilPath() {
+    func testNarrowPadUsesCompactLayoutWithoutLosingPencilCapability() {
+        let policy = DawnPresentationPolicy(deviceClass: .pad, compactLayout: true)
+
+        XCTAssertEqual(policy.libraryPresentation, .compactList)
+        XCTAssertEqual(policy.assistantPresentation, .bottomSheet)
+        XCTAssertTrue(policy.showsPencilControls)
+        XCTAssertFalse(policy.allowsFingerSelection)
+        XCTAssertEqual(policy.readerTopBarHeight, 50)
+        XCTAssertEqual(policy.readerBottomBarHeight, 54)
+        XCTAssertEqual(policy.libraryHorizontalPadding(for: 340), 12)
+    }
+
+    func testTouchSelectionRoutingShowsPhoneMenuAndPreservesPencilPath() {
         let phone = DawnPresentationPolicy(deviceClass: .phone)
         let pad = DawnPresentationPolicy(deviceClass: .pad)
 
-        XCTAssertEqual(phone.nativeSelectionRoute(pencilSelectionInProgress: false), .captureFingerSelection)
+        XCTAssertEqual(phone.nativeSelectionRoute(pencilSelectionInProgress: false), .showFingerSelectionMenu)
         XCTAssertEqual(phone.nativeSelectionRoute(pencilSelectionInProgress: true), .pencilManaged)
         XCTAssertEqual(pad.nativeSelectionRoute(pencilSelectionInProgress: false), .discardFingerSelection)
         XCTAssertEqual(pad.nativeSelectionRoute(pencilSelectionInProgress: true), .pencilManaged)
@@ -266,5 +322,55 @@ final class AIClientTests: XCTestCase {
         XCTAssertTrue(install.contains("html[data-dawn-finger-selection=\"disabled\"][data-dawn-pencil-mode=\"page\"]"))
         XCTAssertTrue(update.contains("const allowsFingerSelection = true"))
         XCTAssertTrue(update.contains("&& !allowsFingerSelection"))
+    }
+
+    func testReaderAccentAndSecondaryTextMeetNormalTextContrast() {
+        for theme in ReaderThemeOption.allCases {
+            let accent = Palette.readerAccentTextHex(for: theme)
+            let secondary = Palette.readerSecondaryTextHex(for: theme)
+            let background = Palette.readerBackgroundHex(for: theme)
+            let card = Palette.readerCardBackgroundHex(for: theme)
+
+            XCTAssertGreaterThanOrEqual(contrastRatio(accent, background), 4.5, "accent on \(theme)")
+            XCTAssertGreaterThanOrEqual(contrastRatio(accent, card), 4.5, "accent on card \(theme)")
+            XCTAssertGreaterThanOrEqual(contrastRatio(secondary, card), 4.5, "secondary on card \(theme)")
+        }
+    }
+
+    @MainActor
+    func testRemoteIdentityRequiresIDOrContentHashAndDeletionTombstoneBlocksAutoImport() {
+        let remote = CloudBook(
+            id: "remote-book",
+            title: "Same title",
+            fileName: "remote.epub",
+            fileSize: 1_024,
+            contentHash: nil,
+            addedAt: "2026-08-18T00:00:00Z",
+            updatedAt: "2026-08-18T00:00:00Z"
+        )
+
+        XCTAssertFalse(LibraryModel.matchesRemoteBook(remote, cloudID: nil, contentHash: "different-hash"))
+        XCTAssertTrue(LibraryModel.matchesRemoteBook(remote, cloudID: "remote-book", contentHash: "different-hash"))
+        XCTAssertFalse(LibraryModel.shouldAutoImport(contentHash: "deleted", deletedHashes: ["deleted"]))
+        XCTAssertTrue(LibraryModel.shouldAutoImport(contentHash: "new", deletedHashes: ["deleted"]))
+        XCTAssertNil(LibraryModel.validatedLocatorJSON("not valid locator JSON"))
+    }
+
+    private func contrastRatio(_ foreground: String, _ background: String) -> Double {
+        let first = relativeLuminance(foreground)
+        let second = relativeLuminance(background)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+
+    private func relativeLuminance(_ hex: String) -> Double {
+        let value = Int(hex.dropFirst(), radix: 16) ?? 0
+        let channels = [
+            Double((value >> 16) & 0xFF) / 255,
+            Double((value >> 8) & 0xFF) / 255,
+            Double(value & 0xFF) / 255,
+        ].map { channel in
+            channel <= 0.03928 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
     }
 }

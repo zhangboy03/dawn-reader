@@ -29,6 +29,12 @@ final class ReadingSession: ObservableObject {
         case failed(String)
     }
 
+    enum TableOfContentsState: Equatable {
+        case loading
+        case loaded
+        case failed(String)
+    }
+
     @Published var pencilMode: PencilMode
     @Published var selectedText = ""
     @Published var selectionFrame: CGRect?
@@ -36,6 +42,8 @@ final class ReadingSession: ObservableObject {
     @Published var assistanceMode: AssistanceMode = .english
     @Published var progress = 0.0
     @Published var tableOfContents: [Link] = []
+    @Published var tableOfContentsState: TableOfContentsState = .loading
+    @Published var readerErrorMessage: String?
     @Published var currentHref = ""
     @Published var chatMessages: [ReaderChatMessage] = []
     @Published var chatSources: [ReaderChatSource] = []
@@ -296,6 +304,7 @@ final class ReadingSession: ObservableObject {
     }
 
     func closeReadingSession() {
+        clearSelection()
         flushReadingTime()
         activityCheckpointTask?.cancel()
         activityCheckpointTask = nil

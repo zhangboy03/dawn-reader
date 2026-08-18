@@ -21,6 +21,7 @@ final class LibraryModel: ObservableObject {
     private let readium = ReadiumService()
     private let defaultsKey = "dawn-reader.books.v1"
     private let deletedCloudIDsKey = "dawn-reader.deleted-cloud-ids.v1"
+    private let deletedContentHashesKey = "dawn-reader.deleted-content-hashes.v1"
     private var syncToken = ""
     private var progressSyncTasks: [UUID: Task<Void, Never>] = [:]
 
@@ -50,6 +51,10 @@ final class LibraryModel: ObservableObject {
 
                 let data = try Data(contentsOf: sourceURL)
                 let hash = DawnSyncClient.contentHash(for: data)
+                var deletedHashes = deletedContentHashes()
+                if deletedHashes.remove(hash) != nil {
+                    saveDeletedContentHashes(deletedHashes)
+                }
                 if let existing = books.first(where: { $0.contentHash == hash || $0.cloudID == "sha256:\(hash)" }) {
                     existingCount += 1
                     if sourceURLs.count == 1 {
@@ -106,6 +111,7 @@ final class LibraryModel: ObservableObject {
     }
 
     func open(_ record: BookRecord, settings: SettingsStore) async {
+        guard !isWorking else { return }
         isWorking = true
         defer { isWorking = false }
         do {
@@ -121,6 +127,7 @@ final class LibraryModel: ObservableObject {
         settings: SettingsStore,
         evidenceStore: ReadingEvidenceStore
     ) async {
+        guard !isWorking else { return }
         guard let record = books.first(where: { $0.id == evidence.bookID }),
               let locatorJSON = evidence.locatorJSON else {
             errorMessage = "这本书当前不在书架中，暂时无法回到原文。"
@@ -168,6 +175,11 @@ final class LibraryModel: ObservableObject {
                     try await DawnSyncClient.deleteBook(token: token, id: cloudID)
                 }
             }
+            if let contentHash = record.contentHash {
+                var deletedHashes = deletedContentHashes()
+                deletedHashes.insert(contentHash)
+                saveDeletedContentHashes(deletedHashes)
+            }
             if openedBook?.record.id == record.id { openedBook = nil }
             let fileURL = try booksDirectory().appendingPathComponent(record.fileName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -196,15 +208,17 @@ final class LibraryModel: ObservableObject {
         referenceReturnLocatorJSON: String? = nil,
         evidenceStore: ReadingEvidenceStore? = nil
     ) throws {
-        let referenceMode = initialLocatorJSON != nil
+        let requestedLocatorJSON = initialLocatorJSON ?? record.lastLocatorJSON
+        let validLocatorJSON = Self.validatedLocatorJSON(requestedLocatorJSON)
+        let referenceMode = initialLocatorJSON != nil && validLocatorJSON != nil
         let session = ReadingSession(book: record, settings: settings, referenceMode: referenceMode) { [weak self] locatorJSON, progress in
             self?.persistProgress(bookID: record.id, locatorJSON: locatorJSON, progress: progress)
         }
         if let evidenceStore { session.attachEvidenceStore(evidenceStore) }
         let controller = try ReaderHostViewController(
             publication: publication,
-            initialLocatorJSON: initialLocatorJSON ?? record.lastLocatorJSON,
-            initialProgression: initialLocatorJSON == nil && record.lastLocatorJSON == nil ? record.progress : nil,
+            initialLocatorJSON: validLocatorJSON,
+            initialProgression: validLocatorJSON == nil ? record.progress : nil,
             referenceReturnLocatorJSON: referenceReturnLocatorJSON,
             session: session
         )
@@ -285,9 +299,7 @@ final class LibraryModel: ObservableObject {
                 }
 
                 let remote = remoteBooks.first { candidate in
-                    candidate.id == books[index].cloudID
-                        || candidate.contentHash == hash
-                        || (candidate.fileSize == data.count && candidate.title == books[index].title)
+                    Self.matchesRemoteBook(candidate, cloudID: books[index].cloudID, contentHash: hash)
                 }
                 if let remote {
                     books[index].cloudID = remote.id
@@ -341,7 +353,7 @@ final class LibraryModel: ObservableObject {
                 }
                 books.append(record)
             }
-            saveBooks()
+                saveBooks()
             syncState = .synced
         } catch {
             syncState = .failed(error.localizedDescription)
@@ -393,8 +405,12 @@ final class LibraryModel: ObservableObject {
                 at: documents,
                 includingPropertiesForKeys: nil
             ).filter { $0.pathExtension.lowercased() == "epub" }
+            let deletedHashes = deletedContentHashes()
 
             for source in sources where !books.contains(where: { $0.fileName == source.lastPathComponent }) {
+                let data = try Data(contentsOf: source)
+                let hash = DawnSyncClient.contentHash(for: data)
+                guard Self.shouldAutoImport(contentHash: hash, deletedHashes: deletedHashes) else { continue }
                 let destination = try booksDirectory().appendingPathComponent(source.lastPathComponent)
                 if !FileManager.default.fileExists(atPath: destination.path) {
                     try FileManager.default.copyItem(at: source, to: destination)
@@ -402,8 +418,6 @@ final class LibraryModel: ObservableObject {
                 let publication = try await readium.open(url: destination)
                 let title = publication.metadata.title?.trimmingCharacters(in: .whitespacesAndNewlines)
                     ?? source.deletingPathExtension().lastPathComponent
-                let data = try Data(contentsOf: destination)
-                let hash = DawnSyncClient.contentHash(for: data)
                 books.append(BookRecord(
                     title: title,
                     fileName: source.lastPathComponent,
@@ -414,7 +428,7 @@ final class LibraryModel: ObservableObject {
                     addedAt: ISO8601DateFormatter().string(from: Date())
                 ))
             }
-            saveBooks()
+                saveBooks()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -446,6 +460,27 @@ final class LibraryModel: ObservableObject {
 
     private func saveDeletedCloudIDs(_ ids: Set<String>) {
         UserDefaults.standard.set(Array(ids).sorted(), forKey: deletedCloudIDsKey)
+    }
+
+    private func deletedContentHashes() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: deletedContentHashesKey) ?? [])
+    }
+
+    private func saveDeletedContentHashes(_ hashes: Set<String>) {
+        UserDefaults.standard.set(Array(hashes).sorted(), forKey: deletedContentHashesKey)
+    }
+
+    static func matchesRemoteBook(_ candidate: CloudBook, cloudID: String?, contentHash: String) -> Bool {
+        candidate.id == cloudID || candidate.contentHash == contentHash
+    }
+
+    static func shouldAutoImport(contentHash: String, deletedHashes: Set<String>) -> Bool {
+        !deletedHashes.contains(contentHash)
+    }
+
+    static func validatedLocatorJSON(_ value: String?) -> String? {
+        guard let value, (try? Locator(jsonString: value)) != nil else { return nil }
+        return value
     }
 }
 

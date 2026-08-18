@@ -12,6 +12,7 @@ struct LibraryView: View {
     @State private var bookToDelete: BookRecord?
     @State private var isDropTarget = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private let epubType = UTType(filenameExtension: "epub")!
 
@@ -20,7 +21,11 @@ struct LibraryView: View {
     }
 
     private var presentation: DawnPresentationPolicy {
-        DawnPresentationPolicy(deviceClass: deviceClass)
+        DawnPresentationPolicy(deviceClass: deviceClass, compactLayout: compactLayout)
+    }
+
+    private var compactLayout: Bool {
+        deviceClass == .phone || horizontalSizeClass == .compact
     }
 
     var body: some View {
@@ -30,7 +35,7 @@ struct LibraryView: View {
                     Palette.fog.ignoresSafeArea()
                     VStack(alignment: .leading, spacing: 0) {
                         header
-                            .padding(.bottom, deviceClass == .phone ? 12 : 24)
+                            .padding(.bottom, compactLayout ? 12 : 24)
                         if let notice = library.importNotice {
                             Label(notice, systemImage: "checkmark.circle.fill")
                                 .font(.callout)
@@ -42,8 +47,8 @@ struct LibraryView: View {
                         libraryContent
                     }
                     .padding(.horizontal, presentation.libraryHorizontalPadding(for: geometry.size.width))
-                    .padding(.top, deviceClass == .phone ? 6 : 28)
-                    .padding(.bottom, deviceClass == .phone ? 8 : 28)
+                    .padding(.top, compactLayout ? 6 : 28)
+                    .padding(.bottom, compactLayout ? 8 : 28)
 
                     if isDropTarget {
                         RoundedRectangle(cornerRadius: 12)
@@ -127,7 +132,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var header: some View {
-        if deviceClass == .phone {
+        if compactLayout {
             phoneHeader
         } else {
             padHeader
@@ -191,7 +196,7 @@ struct LibraryView: View {
     private var padHeader: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text("Dawn Reader")
-                .font(.system(size: 31, weight: .semibold, design: .serif))
+                .font(.system(.largeTitle, design: .serif).weight(.semibold))
                 .foregroundStyle(Palette.ink)
             syncStatus
             Spacer()
@@ -277,7 +282,7 @@ struct LibraryView: View {
                 .foregroundStyle(Palette.mutedInk)
         }
         .padding(24)
-        .frame(maxWidth: deviceClass == .phone ? .infinity : 520, alignment: .leading)
+        .frame(maxWidth: compactLayout ? .infinity : 520, alignment: .leading)
         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 4))
         .accessibilityElement(children: .combine)
     }
@@ -298,8 +303,8 @@ struct LibraryView: View {
                 .tint(Palette.ember)
                 .frame(minHeight: 44)
         }
-        .padding(deviceClass == .phone ? 20 : 28)
-        .frame(maxWidth: deviceClass == .phone ? .infinity : 520, alignment: .leading)
+        .padding(compactLayout ? 20 : 28)
+        .frame(maxWidth: compactLayout ? .infinity : 520, alignment: .leading)
         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 4))
     }
 

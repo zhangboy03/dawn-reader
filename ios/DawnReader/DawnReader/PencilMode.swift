@@ -35,19 +35,25 @@ enum DawnAssistantPresentation: Equatable {
 
 enum DawnNativeSelectionRoute: Equatable {
     case pencilManaged
-    case captureFingerSelection
+    case showFingerSelectionMenu
     case discardFingerSelection
 }
 
 struct DawnPresentationPolicy: Equatable {
     let deviceClass: DawnDeviceClass
+    let compactLayout: Bool
+
+    init(deviceClass: DawnDeviceClass, compactLayout: Bool? = nil) {
+        self.deviceClass = deviceClass
+        self.compactLayout = compactLayout ?? (deviceClass == .phone)
+    }
 
     var libraryPresentation: DawnLibraryPresentation {
-        deviceClass == .phone ? .compactList : .adaptiveGrid
+        compactLayout ? .compactList : .adaptiveGrid
     }
 
     var assistantPresentation: DawnAssistantPresentation {
-        deviceClass == .phone ? .bottomSheet : .selectionAdjacent
+        compactLayout ? .bottomSheet : .selectionAdjacent
     }
 
     var showsPencilControls: Bool {
@@ -59,26 +65,24 @@ struct DawnPresentationPolicy: Equatable {
     }
 
     var readerTopBarHeight: CGFloat {
-        deviceClass == .phone ? 50 : 58
+        compactLayout ? 50 : 58
     }
 
     var readerBottomBarHeight: CGFloat {
-        deviceClass == .phone ? 54 : 52
+        compactLayout ? 54 : 52
     }
 
     func libraryHorizontalPadding(for availableWidth: CGFloat) -> CGFloat {
-        switch deviceClass {
-        case .phone:
+        if compactLayout {
             return availableWidth <= 350 ? 12 : 16
-        case .pad:
-            return 34
         }
+        return 34
     }
 
     func nativeSelectionRoute(pencilSelectionInProgress: Bool) -> DawnNativeSelectionRoute {
         if pencilSelectionInProgress {
             return .pencilManaged
         }
-        return allowsFingerSelection ? .captureFingerSelection : .discardFingerSelection
+        return allowsFingerSelection ? .showFingerSelectionMenu : .discardFingerSelection
     }
 }

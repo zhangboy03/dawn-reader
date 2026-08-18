@@ -33,10 +33,37 @@ enum Palette {
     }
 
     static func readerCardBackground(for theme: ReaderThemeOption) -> Color {
+        color(hex: readerCardBackgroundHex(for: theme))
+    }
+
+    static func readerCardBackgroundHex(for theme: ReaderThemeOption) -> String {
         switch theme {
-        case .paper: color(hex: "#FBFAF6")
-        case .sepia: color(hex: "#F2E7D3")
-        case .night: color(hex: "#252722")
+        case .paper: "#FBFAF6"
+        case .sepia: "#F2E7D3"
+        case .night: "#252722"
+        }
+    }
+
+    static func readerAccentText(for theme: ReaderThemeOption) -> Color {
+        color(hex: readerAccentTextHex(for: theme))
+    }
+
+    static func readerSecondaryText(for theme: ReaderThemeOption) -> Color {
+        color(hex: readerSecondaryTextHex(for: theme))
+    }
+
+    static func readerAccentTextHex(for theme: ReaderThemeOption) -> String {
+        switch theme {
+        case .paper, .sepia: "#934526"
+        case .night: "#D9875E"
+        }
+    }
+
+    static func readerSecondaryTextHex(for theme: ReaderThemeOption) -> String {
+        switch theme {
+        case .paper: "#5F5D56"
+        case .sepia: "#665E52"
+        case .night: "#A39D93"
         }
     }
 

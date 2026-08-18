@@ -6,6 +6,8 @@ struct ReaderScreen: View {
     @EnvironmentObject private var settings: SettingsStore
     @EnvironmentObject private var evidenceStore: ReadingEvidenceStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject private var session: ReadingSession
     let openedBook: OpenedBook
     let onClose: () -> Void
@@ -27,7 +29,11 @@ struct ReaderScreen: View {
     }
 
     private var presentation: DawnPresentationPolicy {
-        DawnPresentationPolicy(deviceClass: deviceClass)
+        DawnPresentationPolicy(deviceClass: deviceClass, compactLayout: compactLayout)
+    }
+
+    private var compactLayout: Bool {
+        deviceClass == .phone || horizontalSizeClass == .compact || verticalSizeClass == .compact
     }
 
     var body: some View {
@@ -64,7 +70,20 @@ struct ReaderScreen: View {
         .sheet(isPresented: phoneAssistantPresented) {
             phoneAssistantSheet
         }
+        .alert("阅读器错误", isPresented: Binding(
+            get: { session.readerErrorMessage != nil },
+            set: { if !$0 { session.readerErrorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(session.readerErrorMessage ?? "")
+        }
         .onChange(of: session.selectedText) { _, selectedText in
+            chatDraft = ""
+            if selectedText.isEmpty {
+                chatFocused = false
+                return
+            }
             guard presentation.assistantPresentation == .bottomSheet,
                   !selectedText.isEmpty else { return }
             assistantDetent = session.assistantMode == .ask ? .large : .medium
@@ -103,14 +122,14 @@ struct ReaderScreen: View {
                     .font(.caption.weight(.semibold))
                 Text("不会改动原来的阅读位置")
                     .font(.caption2)
-                    .foregroundStyle(chromeForeground.opacity(0.58))
+                    .foregroundStyle(assistantSecondary)
             }
             Spacer(minLength: 4)
             Button("返回原位置") {
                 if let action = session.returnFromReference {
                     action()
                 } else {
-                    onClose()
+                    closeReader()
                 }
             }
             .buttonStyle(.bordered)
@@ -133,7 +152,7 @@ struct ReaderScreen: View {
 
     @ViewBuilder
     private var topBar: some View {
-        if deviceClass == .phone {
+        if compactLayout {
             phoneTopBar
         } else {
             padTopBar
@@ -145,7 +164,7 @@ struct ReaderScreen: View {
             readerIconButton(
                 systemName: "chevron.left",
                 accessibilityLabel: "返回书架",
-                action: onClose
+                action: closeReader
             )
 
             Text(session.title)
@@ -163,6 +182,26 @@ struct ReaderScreen: View {
                 showingContents = true
             }
 
+            if presentation.showsPencilControls {
+                Menu {
+                    Picker("Apple Pencil 模式", selection: $session.pencilMode) {
+                        ForEach(PencilMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                } label: {
+                    Image(systemName: session.pencilMode == .select ? "pencil.and.scribble" : "arrow.left.and.right")
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Apple Pencil \(session.pencilMode.title)模式")
+                .onChange(of: session.pencilMode) { _, mode in
+                    settings.pencilMode = mode
+                    session.clearSelection()
+                }
+            }
+
             readerIconButton(
                 systemName: "slider.horizontal.3",
                 accessibilityLabel: "阅读设置"
@@ -172,13 +211,13 @@ struct ReaderScreen: View {
         }
         .foregroundStyle(chromeForeground)
         .padding(.horizontal, 2)
-        .frame(height: presentation.readerTopBarHeight)
+        .frame(minHeight: presentation.readerTopBarHeight)
         .background(chromeForeground.opacity(0.04))
     }
 
     private var padTopBar: some View {
         HStack(spacing: 14) {
-            Button(action: onClose) {
+            Button(action: closeReader) {
                 Label("书架", systemImage: "chevron.left")
                     .labelStyle(.titleAndIcon)
                     .frame(minHeight: 44)
@@ -188,7 +227,7 @@ struct ReaderScreen: View {
             .accessibilityLabel("返回书架")
 
             Text(session.title)
-                .font(.system(size: 16, weight: .medium, design: .serif))
+                .font(.system(.body, design: .serif).weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
@@ -220,7 +259,7 @@ struct ReaderScreen: View {
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
                         .background(session.pencilMode == mode ? Palette.ember : .clear)
-                        .foregroundStyle(session.pencilMode == mode ? Color.white.opacity(0.92) : chromeForeground.opacity(0.65))
+                        .foregroundStyle(session.pencilMode == mode ? Color.white.opacity(0.92) : assistantSecondary)
                         .accessibilityLabel("Apple Pencil \(mode.title)模式")
                         .accessibilityAddTraits(session.pencilMode == mode ? .isSelected : [])
                     }
@@ -238,7 +277,7 @@ struct ReaderScreen: View {
         }
         .foregroundStyle(chromeForeground)
         .padding(.horizontal, 20)
-        .frame(height: presentation.readerTopBarHeight)
+        .frame(minHeight: presentation.readerTopBarHeight)
         .background(chromeForeground.opacity(0.04))
     }
 
@@ -258,7 +297,7 @@ struct ReaderScreen: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: deviceClass == .phone ? 6 : 18) {
+        HStack(spacing: compactLayout ? 6 : 18) {
             Button { session.goBackward?() } label: {
                 Image(systemName: "arrow.left")
                     .frame(width: 44, height: 44)
@@ -279,15 +318,15 @@ struct ReaderScreen: View {
                 }
             )
             .tint(Palette.ember)
-            .frame(maxWidth: deviceClass == .phone ? .infinity : 360)
+            .frame(maxWidth: compactLayout ? .infinity : 360)
             .layoutPriority(1)
             .accessibilityLabel("阅读进度")
             .accessibilityValue("\(Int(effectiveProgress * 100))%")
 
             Text("\(Int(effectiveProgress * 100))%")
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(chromeForeground.opacity(0.65))
-                .frame(width: deviceClass == .phone ? 34 : 38, alignment: .trailing)
+                .foregroundStyle(assistantSecondary)
+                .frame(width: compactLayout ? 34 : 38, alignment: .trailing)
                 .accessibilityHidden(true)
 
             Button { session.goForward?() } label: {
@@ -299,8 +338,8 @@ struct ReaderScreen: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(chromeForeground)
-        .padding(.horizontal, deviceClass == .phone ? 2 : 16)
-        .frame(height: presentation.readerBottomBarHeight)
+        .padding(.horizontal, compactLayout ? 2 : 16)
+        .frame(minHeight: presentation.readerBottomBarHeight)
         .background(chromeForeground.opacity(0.025))
         .overlay(alignment: .top) {
             bottomReadingRail
@@ -328,26 +367,38 @@ struct ReaderScreen: View {
     private var contentsSheet: some View {
         NavigationStack {
             Group {
-                if session.tableOfContents.isEmpty {
-                    ContentUnavailableView("这本书没有目录", systemImage: "list.bullet.indent", description: Text("EPUB 没有提供可用的章节目录。"))
-                } else {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ContentsRows(
-                                    links: session.tableOfContents,
-                                    isCurrent: session.isCurrentChapter,
-                                    onSelect: { link in
-                                        session.goToChapter?(link)
-                                        showingContents = false
-                                    }
-                                )
+                switch session.tableOfContentsState {
+                case .loading:
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在读取目录…")
+                            .foregroundStyle(assistantSecondary)
+                    }
+                case let .failed(message):
+                    ContentUnavailableView("无法读取目录", systemImage: "exclamationmark.triangle", description: Text(message))
+                case .loaded:
+                    if session.tableOfContents.isEmpty {
+                        ContentUnavailableView("这本书没有目录", systemImage: "list.bullet.indent", description: Text("EPUB 没有提供可用的章节目录。"))
+                    } else {
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: 0) {
+                                    ContentsRows(
+                                        links: session.tableOfContents,
+                                        accent: assistantAccent,
+                                        isCurrent: session.isCurrentChapter,
+                                        onSelect: { link in
+                                            session.goToChapter?(link)
+                                            showingContents = false
+                                        }
+                                    )
+                                }
+                                .padding(.vertical, 10)
                             }
-                            .padding(.vertical, 10)
-                        }
-                        .onAppear {
-                            if let current = currentContentsHref(in: session.tableOfContents) {
-                                proxy.scrollTo(current, anchor: .center)
+                            .onAppear {
+                                if let current = currentContentsHref(in: session.tableOfContents) {
+                                    proxy.scrollTo(current, anchor: .center)
+                                }
                             }
                         }
                     }
@@ -380,6 +431,14 @@ struct ReaderScreen: View {
 
     private var chromeForeground: Color {
         Palette.readerText(for: settings.readerTheme)
+    }
+
+    private var assistantAccent: Color {
+        Palette.readerAccentText(for: settings.readerTheme)
+    }
+
+    private var assistantSecondary: Color {
+        Palette.readerSecondaryText(for: settings.readerTheme)
     }
 
     private var effectiveProgress: Double {
@@ -441,7 +500,7 @@ struct ReaderScreen: View {
         .presentationBackground(Palette.readerCardBackground(for: settings.readerTheme))
         .preferredColorScheme(settings.readerTheme == .night ? .dark : .light)
         .onAppear {
-            guard session.assistantMode == .ask else { return }
+            guard session.assistantMode == .ask, !assistiveFocusRunning else { return }
             assistantDetent = .large
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(250))
@@ -457,12 +516,12 @@ struct ReaderScreen: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cardTitle)
                         .font(.system(.headline, design: .serif).weight(.semibold))
-                        .foregroundStyle(Palette.ember)
+                        .foregroundStyle(assistantAccent)
                         .lineLimit(1)
                     if session.assistantMode == .ask {
-                        Text(DawnSyncClient.normalizePairingCode(settings.syncCode) == nil ? "局部上下文 · 本机模型" : "局部上下文 · 必要时搜索")
+                        Text("局部上下文 · 直接连接 Qwen")
                             .font(.caption2.monospaced())
-                            .foregroundStyle(chromeForeground.opacity(0.55))
+                            .foregroundStyle(assistantSecondary)
                             .lineLimit(1)
                     }
                 }
@@ -477,7 +536,7 @@ struct ReaderScreen: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("关闭解释")
+                .accessibilityLabel("关闭阅读助手")
             }
 
             if session.assistantMode == .rewrite,
@@ -489,7 +548,7 @@ struct ReaderScreen: View {
                     assistantDetent = .large
                 }
                 .font(.callout.weight(.medium))
-                .foregroundStyle(Palette.ember)
+                .foregroundStyle(assistantAccent)
                 .frame(minHeight: 44)
                 .padding(.horizontal, 12)
                 .background(Palette.ember.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
@@ -512,10 +571,10 @@ struct ReaderScreen: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("选中原文")
                 .font(.caption2.monospaced())
-                .foregroundStyle(chromeForeground.opacity(0.52))
+                .foregroundStyle(assistantSecondary)
             Text(session.selectedText)
                 .font(.system(.callout, design: .serif))
-                .foregroundStyle(chromeForeground.opacity(0.75))
+                .foregroundStyle(assistantSecondary)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -542,7 +601,7 @@ struct ReaderScreen: View {
                 ProgressView()
                 Text(loadingTitle)
                     .font(.callout)
-                    .foregroundStyle(chromeForeground.opacity(0.68))
+                    .foregroundStyle(assistantSecondary)
             }
             .frame(minHeight: 44)
             .accessibilityElement(children: .combine)
@@ -557,7 +616,7 @@ struct ReaderScreen: View {
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.callout)
-                .foregroundStyle(chromeForeground.opacity(0.72))
+                .foregroundStyle(assistantSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -567,14 +626,14 @@ struct ReaderScreen: View {
             if session.chatMessages.isEmpty {
                 Text("在下方输入你想弄懂的问题。回答会始终保留这段原文及其附近上下文。")
                     .font(.callout)
-                    .foregroundStyle(chromeForeground.opacity(0.62))
+                    .foregroundStyle(assistantSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 ForEach(Array(session.chatMessages.enumerated()), id: \.offset) { _, message in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(message.role == "user" ? "你" : "AI")
                             .font(.caption2.monospaced())
-                            .foregroundStyle(message.role == "user" ? chromeForeground.opacity(0.5) : Palette.ember)
+                            .foregroundStyle(message.role == "user" ? assistantSecondary : assistantAccent)
                         Text(message.content)
                             .font(.system(.body, design: .serif))
                             .foregroundStyle(chromeForeground.opacity(message.role == "user" ? 0.72 : 1))
@@ -593,7 +652,7 @@ struct ReaderScreen: View {
                     ProgressView().controlSize(.small)
                     Text(DawnSyncClient.normalizePairingCode(settings.syncCode) == nil ? "正在结合上下文思考…" : "正在阅读，必要时搜索…")
                         .font(.caption)
-                        .foregroundStyle(chromeForeground.opacity(0.62))
+                        .foregroundStyle(assistantSecondary)
                 }
                 .frame(minHeight: 44)
                 .accessibilityElement(children: .combine)
@@ -608,7 +667,7 @@ struct ReaderScreen: View {
                 Divider()
                 Text("来源")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(chromeForeground.opacity(0.52))
+                    .foregroundStyle(assistantSecondary)
                 ForEach(Array(session.chatSources.enumerated()), id: \.offset) { index, source in
                     Link(destination: source.url) {
                         HStack(alignment: .firstTextBaseline, spacing: 7) {
@@ -622,7 +681,7 @@ struct ReaderScreen: View {
                             Image(systemName: "arrow.up.right")
                                 .font(.caption2)
                         }
-                        .foregroundStyle(Palette.ember)
+                        .foregroundStyle(assistantAccent)
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
                     }
@@ -670,16 +729,17 @@ struct ReaderScreen: View {
         let minimumRoom = session.assistantMode == .ask ? 500.0 : 220.0
         let y = min(max(74, frame.minY + 62 - 130), max(74, size.height - minimumRoom))
 
-        VStack(alignment: .leading, spacing: 10) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(cardTitle)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Palette.ember)
+                    .foregroundStyle(assistantAccent)
                 Spacer()
                 if session.assistantMode == .ask {
-                    Text(DawnSyncClient.normalizePairingCode(settings.syncCode) == nil ? "局部上下文" : "局部上下文 · 可联网")
+                    Text("局部上下文 · 直接连接 Qwen")
                         .font(.caption2.monospaced())
-                        .foregroundStyle(chromeForeground.opacity(0.52))
+                        .foregroundStyle(assistantSecondary)
                 }
                 if session.assistantMode == .rewrite,
                    session.assistanceMode == .english,
@@ -688,7 +748,7 @@ struct ReaderScreen: View {
                         session.explainInChinese()
                     }
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(Palette.ember)
+                    .foregroundStyle(assistantAccent)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(Palette.ember.opacity(0.09), in: RoundedRectangle(cornerRadius: 6))
@@ -705,7 +765,7 @@ struct ReaderScreen: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .buttonStyle(.plain)
-                .accessibilityLabel("关闭解释")
+                .accessibilityLabel("关闭阅读助手")
             }
             if session.assistantMode == .ask {
                 chatContent
@@ -717,22 +777,29 @@ struct ReaderScreen: View {
                     HStack(spacing: 9) {
                         ProgressView().controlSize(.small)
                         Text(loadingTitle)
-                            .foregroundStyle(chromeForeground.opacity(0.68))
+                            .foregroundStyle(assistantSecondary)
                     }
                 case let .complete(text):
                     Text(text)
-                        .font(.system(size: 17, weight: .regular, design: .serif))
+                        .font(.system(.body, design: .serif))
                         .foregroundStyle(chromeForeground)
                         .fixedSize(horizontal: false, vertical: true)
                 case let .failed(message):
                     Text(message)
                         .font(.callout)
-                        .foregroundStyle(chromeForeground.opacity(0.68))
+                        .foregroundStyle(assistantSecondary)
                 }
             }
+            }
+            .padding(16)
         }
-        .padding(16)
-        .frame(width: cardWidth, alignment: .leading)
+        .scrollDismissesKeyboard(.interactively)
+        .frame(
+            minWidth: cardWidth,
+            maxWidth: cardWidth,
+            maxHeight: max(180, size.height - 120),
+            alignment: .topLeading
+        )
         .background(Palette.readerCardBackground(for: settings.readerTheme), in: RoundedRectangle(cornerRadius: 10))
         .overlay(alignment: .top) {
             Rectangle().fill(Palette.ember).frame(height: 2)
@@ -752,9 +819,9 @@ struct ReaderScreen: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(message.role == "user" ? "你" : "AI")
                                     .font(.caption2.monospaced())
-                                    .foregroundStyle(message.role == "user" ? chromeForeground.opacity(0.5) : Palette.ember)
+                                    .foregroundStyle(message.role == "user" ? assistantSecondary : assistantAccent)
                                 Text(message.content)
-                                    .font(.system(size: 15, design: .serif))
+                                    .font(.system(.callout, design: .serif))
                                     .foregroundStyle(chromeForeground.opacity(message.role == "user" ? 0.68 : 1))
                                     .textSelection(.enabled)
                             }
@@ -764,12 +831,14 @@ struct ReaderScreen: View {
                             Divider()
                             Text("来源")
                                 .font(.caption2.monospaced())
-                                .foregroundStyle(chromeForeground.opacity(0.5))
+                                .foregroundStyle(assistantSecondary)
                             ForEach(Array(session.chatSources.enumerated()), id: \.offset) { index, source in
                                 Link("[\(index + 1)] \(source.title)", destination: source.url)
                                     .font(.caption)
-                                    .foregroundStyle(Palette.ember)
-                                    .lineLimit(1)
+                                    .foregroundStyle(assistantAccent)
+                                    .lineLimit(2)
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                    .contentShape(Rectangle())
                             }
                         }
                     }
@@ -783,9 +852,9 @@ struct ReaderScreen: View {
             case .loading:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(DawnSyncClient.normalizePairingCode(settings.syncCode) == nil ? "正在结合上下文思考…" : "正在阅读，必要时搜索…")
+                    Text("正在结合上下文思考…")
                         .font(.caption)
-                        .foregroundStyle(chromeForeground.opacity(0.62))
+                        .foregroundStyle(assistantSecondary)
                 }
             case let .failed(message):
                 Text(message)
@@ -805,7 +874,7 @@ struct ReaderScreen: View {
                 Button(action: sendChatQuestion) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 14, weight: .bold))
-                        .frame(width: 38, height: 38)
+                        .frame(width: 44, height: 44)
                         .foregroundStyle(Color.white)
                         .background(Palette.ember, in: Circle())
                 }
@@ -815,7 +884,9 @@ struct ReaderScreen: View {
                 .accessibilityLabel("发送问题")
             }
         }
-        .onAppear { chatFocused = true }
+        .onAppear {
+            if !assistiveFocusRunning { chatFocused = true }
+        }
     }
 
     private func sendChatQuestion() {
@@ -825,20 +896,50 @@ struct ReaderScreen: View {
         session.ask(question)
     }
 
+    private var assistiveFocusRunning: Bool {
+        UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning
+    }
+
+    private func closeReader() {
+        chatFocused = false
+        chatDraft = ""
+        session.clearSelection()
+        onClose()
+    }
+
     private var cardTitle: String {
         if session.assistantMode == .ask { return "问这段内容" }
         if session.assistanceMode == .chinese { return "中文详解" }
-        return AIClient.isSingleWord(session.selectedText) ? "读音与词义" : "简明英文"
+        return DawnSelectionLabels.title(for: AIClient.selectionKind(session.selectedText))
     }
 
     private var loadingTitle: String {
         if session.assistanceMode == .chinese { return "正在生成中文解释…" }
-        return AIClient.isSingleWord(session.selectedText) ? "正在查询读音与词义…" : "正在改写…"
+        return DawnSelectionLabels.loadingTitle(for: AIClient.selectionKind(session.selectedText))
+    }
+}
+
+enum DawnSelectionLabels {
+    static func title(for kind: AIClient.SelectionKind) -> String {
+        switch kind {
+        case .word: "读音与词义"
+        case .phrase: "短语含义"
+        case .passage: "简明英文"
+        }
+    }
+
+    static func loadingTitle(for kind: AIClient.SelectionKind) -> String {
+        switch kind {
+        case .word: "正在查询读音与词义…"
+        case .phrase: "正在解释短语…"
+        case .passage: "正在改写…"
+        }
     }
 }
 
 private struct ContentsRows: View {
     let links: [ReadiumShared.Link]
+    let accent: Color
     let isCurrent: (ReadiumShared.Link) -> Bool
     let onSelect: (ReadiumShared.Link) -> Void
     var depth = 0
@@ -854,13 +955,13 @@ private struct ContentsRows: View {
                         .fill(current ? Palette.ember : .clear)
                         .frame(width: 2)
                     Text(link.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未命名章节")
-                        .font(.system(size: 16, weight: current ? .medium : .regular, design: .serif))
+                        .font(.system(.body, design: .serif).weight(current ? .medium : .regular))
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: 8)
                     if current {
                         Text("正在阅读")
                             .font(.caption2.monospaced())
-                            .foregroundStyle(Palette.ember)
+                            .foregroundStyle(accent)
                     }
                 }
                 .padding(.leading, CGFloat(min(depth, 4) * 18 + 18))
@@ -875,6 +976,7 @@ private struct ContentsRows: View {
             if !link.children.isEmpty {
                 ContentsRows(
                     links: link.children,
+                    accent: accent,
                     isCurrent: isCurrent,
                     onSelect: onSelect,
                     depth: depth + 1
