@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 struct LibraryView: View {
     @EnvironmentObject private var library: LibraryModel
@@ -12,32 +13,42 @@ struct LibraryView: View {
 
     private let epubType = UTType(filenameExtension: "epub")!
 
+    private var deviceClass: DawnDeviceClass {
+        UIDevice.current.userInterfaceIdiom == .phone ? .phone : .pad
+    }
+
+    private var presentation: DawnPresentationPolicy {
+        DawnPresentationPolicy(deviceClass: deviceClass)
+    }
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Palette.fog.ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                    if let notice = library.importNotice {
-                        Label(notice, systemImage: "checkmark.circle.fill")
-                            .font(.callout)
-                            .foregroundStyle(Palette.ember)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+            GeometryReader { geometry in
+                ZStack {
+                    Palette.fog.ignoresSafeArea()
+                    VStack(alignment: .leading, spacing: 0) {
+                        header
+                            .padding(.bottom, deviceClass == .phone ? 12 : 24)
+                        if let notice = library.importNotice {
+                            Label(notice, systemImage: "checkmark.circle.fill")
+                                .font(.callout)
+                                .foregroundStyle(Palette.ember)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.bottom, 12)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                        libraryContent
                     }
-                    if library.books.isEmpty {
-                        emptyLibrary
-                    } else {
-                        bookList
+                    .padding(.horizontal, presentation.libraryHorizontalPadding(for: geometry.size.width))
+                    .padding(.top, deviceClass == .phone ? 6 : 28)
+                    .padding(.bottom, deviceClass == .phone ? 8 : 28)
+
+                    if isDropTarget {
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Palette.ember, style: StrokeStyle(lineWidth: 3, dash: [10, 8]))
+                            .padding(12)
+                            .allowsHitTesting(false)
                     }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 34)
-                .padding(.vertical, 28)
-                if isDropTarget {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Palette.ember, style: StrokeStyle(lineWidth: 3, dash: [10, 8]))
-                        .padding(12)
-                        .allowsHitTesting(false)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -103,31 +114,97 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        if deviceClass == .phone {
+            phoneHeader
+        } else {
+            padHeader
+        }
+    }
+
+    private var phoneHeader: some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Dawn Reader")
+                    .font(.system(.title2, design: .serif).weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                syncStatus
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            Button {
+                importing = true
+            } label: {
+                Image(systemName: "doc.badge.plus")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.ink)
+            .disabled(library.isWorking)
+            .accessibilityLabel("导入 EPUB")
+            .accessibilityHint("从“文件”选择一本或多本电子书")
+
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.ink)
+            .accessibilityLabel("设置")
+        }
+        .frame(minHeight: 52)
+    }
+
+    private var padHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text("Dawn Reader")
                 .font(.system(size: 31, weight: .semibold, design: .serif))
                 .foregroundStyle(Palette.ink)
-            Text(syncLabel)
-                .font(.caption2)
-                .foregroundStyle(syncColor)
+            syncStatus
             Spacer()
             Button {
                 showingSettings = true
             } label: {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 17, weight: .medium))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(Palette.ink)
+            .accessibilityLabel("设置")
             Button("导入 EPUB") {
                 importing = true
             }
             .buttonStyle(.borderedProminent)
             .tint(Palette.ink)
+            .frame(minHeight: 44)
             .disabled(library.isWorking)
         }
+    }
+
+    private var syncStatus: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(syncColor)
+                .frame(width: 6, height: 6)
+            Text(syncLabel)
+                .font(.caption2)
+                .foregroundStyle(syncColor)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("同步状态：\(syncLabel)")
     }
 
     private var syncLabel: String {
@@ -147,38 +224,152 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
+    private var libraryContent: some View {
+        if library.books.isEmpty {
+            Group {
+                if library.isWorking {
+                    loadingLibrary
+                } else {
+                    emptyLibrary
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            bookList
+        }
+    }
+
+    private var loadingLibrary: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+            Text("正在整理书架…")
+                .font(.callout)
+                .foregroundStyle(Palette.mutedInk)
+        }
+        .padding(24)
+        .frame(maxWidth: deviceClass == .phone ? .infinity : 520, alignment: .leading)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 4))
+        .accessibilityElement(children: .combine)
+    }
+
     private var emptyLibrary: some View {
         VStack(alignment: .leading, spacing: 13) {
+            Image(systemName: "books.vertical")
+                .font(.system(size: 26, weight: .regular))
+                .foregroundStyle(Palette.ember)
+                .accessibilityHidden(true)
             Text("书架是空的")
-                .font(.system(size: 22, weight: .medium, design: .serif))
+                .font(.system(.title3, design: .serif).weight(.medium))
             Text("从“文件”中选择一本或多本 EPUB，也可以直接拖到这里。")
                 .foregroundStyle(Palette.mutedInk)
+                .fixedSize(horizontal: false, vertical: true)
             Button("选择 EPUB") { importing = true }
                 .buttonStyle(.bordered)
                 .tint(Palette.ember)
+                .frame(minHeight: 44)
         }
-        .padding(28)
-        .frame(maxWidth: 520, alignment: .leading)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
+        .padding(deviceClass == .phone ? 20 : 28)
+        .frame(maxWidth: deviceClass == .phone ? .infinity : 520, alignment: .leading)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 4))
     }
 
+    @ViewBuilder
     private var bookList: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 18)], spacing: 18) {
-                ForEach(library.books) { book in
-                    bookCard(for: book)
+            if presentation.libraryPresentation == .compactList {
+                LazyVStack(spacing: 12) {
+                    ForEach(library.books) { book in
+                        phoneBookCard(for: book)
+                    }
                 }
+                .padding(.bottom, 8)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 18)], spacing: 18) {
+                    ForEach(library.books) { book in
+                        padBookCard(for: book)
+                    }
+                }
+                .padding(.bottom, 8)
             }
         }
         .overlay {
             if library.isWorking {
                 ProgressView()
                     .controlSize(.large)
+                    .padding(18)
+                    .background(.regularMaterial, in: Circle())
             }
         }
     }
 
-    private func bookCard(for book: BookRecord) -> some View {
+    private func phoneBookCard(for book: BookRecord) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                Task { await library.open(book, settings: settings) }
+            } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Text("EPUB")
+                            .font(.caption2.weight(.semibold))
+                            .tracking(1.2)
+                        Spacer(minLength: 8)
+                        Text("\(Int(book.progress * 100))%")
+                            .font(.caption.monospacedDigit())
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .foregroundStyle(Palette.mutedInk)
+
+                    Text(book.title)
+                        .font(.system(.title3, design: .serif).weight(.medium))
+                        .foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    readingRail(progress: book.progress)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 14)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("打开《\(book.title)》")
+            .accessibilityValue("阅读进度 \(Int(book.progress * 100))%")
+
+            Divider()
+                .overlay(Palette.line)
+
+            HStack(spacing: 0) {
+                assistantModeControl(for: book)
+                    .padding(.horizontal, 4)
+                Divider()
+                    .overlay(Palette.line)
+                    .frame(height: 30)
+                Button(role: .destructive) {
+                    bookToDelete = book
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Palette.mutedInk)
+                .accessibilityLabel("从书架删除《\(book.title)》")
+                .disabled(library.isWorking)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 4))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func padBookCard(for book: BookRecord) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 0) {
                 Button {
@@ -201,8 +392,7 @@ struct LibraryView: View {
                             .multilineTextAlignment(.leading)
                             .lineLimit(3)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        ProgressView(value: book.progress)
-                            .tint(Palette.ember)
+                        readingRail(progress: book.progress)
                     }
                     .padding(.leading, 22)
                     .padding(.trailing, 12)
@@ -241,9 +431,26 @@ struct LibraryView: View {
                 .padding(.vertical, 7)
         }
         .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 3))
-        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 4))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
         .accessibilityElement(children: .contain)
+    }
+
+    private func readingRail(progress: Double) -> some View {
+        GeometryReader { geometry in
+            let fraction = min(max(progress, 0), 1)
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Palette.line.opacity(0.75))
+                    .frame(height: 1)
+                Rectangle()
+                    .fill(Palette.ember)
+                    .frame(width: geometry.size.width * fraction, height: 2)
+            }
+            .frame(maxHeight: .infinity, alignment: .center)
+        }
+        .frame(height: 4)
+        .accessibilityHidden(true)
     }
 
     private func assistantModeControl(for book: BookRecord) -> some View {

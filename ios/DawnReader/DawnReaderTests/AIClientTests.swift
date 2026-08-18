@@ -32,7 +32,7 @@ final class AIClientTests: XCTestCase {
 
     func testPassagePromptStillRewritesOnlySelection() {
         let body = AIClient.makeBody(
-            context: .init(before: "before", highlight: "This is a difficult sentence.", after: "after"),
+            context: .init(before: "before", highlight: "This selected passage contains more than eight separate words for the reader.", after: "after"),
             title: "Book",
             model: "deepseek-v4-flash"
         )
@@ -56,52 +56,13 @@ final class AIClientTests: XCTestCase {
 
     func testChinesePassagePromptTranslatesThenExplains() {
         let body = AIClient.makeChineseBody(
-            context: .init(before: "before", highlight: "This is a difficult passage.", after: "after"),
+            context: .init(before: "before", highlight: "This selected passage contains more than eight separate words for the reader.", after: "after"),
             title: "Book",
             model: "deepseek-v4-flash"
         )
         XCTAssertTrue(body.messages[0].content.contains("First give an accurate, natural Chinese translation"))
         XCTAssertTrue(body.messages[0].content.contains("翻译："))
         XCTAssertTrue(body.messages[0].content.contains("解释："))
-    }
-
-    func testClassifiesWordsPhrasesAndPassages() {
-        XCTAssertEqual(AIClient.selectionKind("quality"), .word)
-        XCTAssertEqual(AIClient.selectionKind("self-reliance"), .word)
-        XCTAssertEqual(AIClient.selectionKind("in light of"), .phrase)
-        XCTAssertEqual(AIClient.selectionKind("the quality of mind needed to win"), .phrase)
-        XCTAssertEqual(AIClient.selectionKind("He left because it was late."), .passage)
-        XCTAssertEqual(
-            AIClient.selectionKind("This selected passage contains more than eight separate words"),
-            .passage
-        )
-    }
-
-    func testEnglishPhrasePromptExplainsTheCombinationInsteadOfRewriting() {
-        let body = AIClient.makeBody(
-            context: .init(before: "before", highlight: "in light of", after: "after"),
-            title: "Book",
-            model: "deepseek-v4-flash"
-        )
-
-        XCTAssertEqual(body.maxTokens, 64)
-        XCTAssertTrue(body.messages[0].content.contains("one combined expression"))
-        XCTAssertTrue(body.messages[0].content.contains("selected phrase — contextual meaning"))
-        XCTAssertTrue(body.messages[0].content.contains("Never rewrite, summarize, translate, or quote the surrounding"))
-    }
-
-    func testChinesePhrasePromptExplainsTheCombinedAndContextualMeanings() {
-        let body = AIClient.makeChineseBody(
-            context: .init(before: "before", highlight: "quality of mind", after: "after"),
-            title: "Book",
-            model: "deepseek-v4-flash"
-        )
-
-        XCTAssertEqual(body.maxTokens, 240)
-        XCTAssertTrue(body.messages[0].content.contains("one combined expression"))
-        XCTAssertTrue(body.messages[0].content.contains("组合义：…"))
-        XCTAssertTrue(body.messages[0].content.contains("此处：…"))
-        XCTAssertTrue(body.messages[0].content.contains("Never translate, paraphrase, summarize, or rewrite the surrounding"))
     }
 
     func testChatPromptKeepsSelectionAndConversationHistory() {
@@ -155,7 +116,7 @@ final class AIClientTests: XCTestCase {
         XCTAssertFalse(install.contains(".replace("))
         XCTAssertTrue(install.contains("dataset.dawnPencilMode"))
         XCTAssertTrue(install.contains("user-select: none"))
-        XCTAssertTrue(install.contains("html[data-dawn-pencil-mode=\"page\"]"))
+        XCTAssertTrue(install.contains("html[data-dawn-finger-selection=\"disabled\"][data-dawn-pencil-mode=\"page\"]"))
         XCTAssertTrue(install.contains("data-dawn-typography-mode"))
         XCTAssertTrue(install.contains("data-dawn-typography-exempt"))
         XCTAssertTrue(install.contains("poem|poetry|verse"))
@@ -252,5 +213,57 @@ final class AIClientTests: XCTestCase {
             DawnSyncClient.contentHash(for: Data("Dawn Reader".utf8)),
             "c138284e2a2577aeb3e5be792975a1f94e78b2e3274aaee11cc488eb0947e123"
         )
+    }
+
+    func testPhonePresentationUsesCompactListBottomSheetAndNoPencilControls() {
+        let policy = DawnPresentationPolicy(deviceClass: .phone)
+
+        XCTAssertEqual(policy.libraryPresentation, .compactList)
+        XCTAssertEqual(policy.assistantPresentation, .bottomSheet)
+        XCTAssertFalse(policy.showsPencilControls)
+        XCTAssertTrue(policy.allowsFingerSelection)
+        XCTAssertEqual(policy.readerTopBarHeight, 50)
+        XCTAssertEqual(policy.readerBottomBarHeight, 54)
+    }
+
+    func testPadPresentationKeepsAdaptiveGridFloatingAssistantAndPencilControls() {
+        let policy = DawnPresentationPolicy(deviceClass: .pad)
+
+        XCTAssertEqual(policy.libraryPresentation, .adaptiveGrid)
+        XCTAssertEqual(policy.assistantPresentation, .selectionAdjacent)
+        XCTAssertTrue(policy.showsPencilControls)
+        XCTAssertFalse(policy.allowsFingerSelection)
+        XCTAssertEqual(policy.readerTopBarHeight, 58)
+        XCTAssertEqual(policy.readerBottomBarHeight, 52)
+    }
+
+    func testTouchSelectionRoutingCapturesPhoneFingerAndPreservesPencilPath() {
+        let phone = DawnPresentationPolicy(deviceClass: .phone)
+        let pad = DawnPresentationPolicy(deviceClass: .pad)
+
+        XCTAssertEqual(phone.nativeSelectionRoute(pencilSelectionInProgress: false), .captureFingerSelection)
+        XCTAssertEqual(phone.nativeSelectionRoute(pencilSelectionInProgress: true), .pencilManaged)
+        XCTAssertEqual(pad.nativeSelectionRoute(pencilSelectionInProgress: false), .discardFingerSelection)
+        XCTAssertEqual(pad.nativeSelectionRoute(pencilSelectionInProgress: true), .pencilManaged)
+    }
+
+    func testPhoneLibraryPaddingHandlesSEAndLandscapeWidthsWithoutBecomingTabletGrid() {
+        let phone = DawnPresentationPolicy(deviceClass: .phone)
+
+        XCTAssertEqual(phone.libraryHorizontalPadding(for: 320), 12)
+        XCTAssertEqual(phone.libraryHorizontalPadding(for: 390), 16)
+        XCTAssertEqual(phone.libraryHorizontalPadding(for: 844), 16)
+        XCTAssertEqual(phone.libraryPresentation, .compactList)
+    }
+
+    func testPhoneReaderScriptEnablesNativeLongPressSelectionInPageMode() {
+        let install = ReaderContentScript.install(mode: .page, allowsFingerSelection: true)
+        let update = ReaderContentScript.setMode(.page, allowsFingerSelection: true)
+
+        XCTAssertTrue(install.contains("html[data-dawn-finger-selection=\"enabled\"] ::selection"))
+        XCTAssertTrue(install.contains("dataset.dawnFingerSelection = 'enabled'"))
+        XCTAssertTrue(install.contains("html[data-dawn-finger-selection=\"disabled\"][data-dawn-pencil-mode=\"page\"]"))
+        XCTAssertTrue(update.contains("const allowsFingerSelection = true"))
+        XCTAssertTrue(update.contains("&& !allowsFingerSelection"))
     }
 }

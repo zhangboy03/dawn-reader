@@ -4,7 +4,8 @@ enum ReaderContentScript {
     static func install(
         mode: PencilMode,
         appearance: ReaderAppearance? = nil,
-        isEnglish: Bool = false
+        isEnglish: Bool = false,
+        allowsFingerSelection: Bool = false
     ) -> String {
         let effectiveAppearance = appearance ?? ReaderAppearance(
             fontSize: 1,
@@ -23,7 +24,11 @@ enum ReaderContentScript {
           const style = document.createElement('style');
           style.id = 'dawn-reader-input-style';
           style.textContent = `
-            ::selection {
+            html[data-dawn-finger-selection="enabled"] ::selection {
+              background: rgba(196, 117, 70, 0.34) !important;
+              color: inherit !important;
+            }
+            html[data-dawn-finger-selection="disabled"] ::selection {
               background: transparent !important;
               color: inherit !important;
             }
@@ -31,8 +36,8 @@ enum ReaderContentScript {
               background-color: rgba(196, 117, 70, 0.34);
               color: inherit;
             }
-            html[data-dawn-pencil-mode="page"],
-            html[data-dawn-pencil-mode="page"] * {
+            html[data-dawn-finger-selection="disabled"][data-dawn-pencil-mode="page"],
+            html[data-dawn-finger-selection="disabled"][data-dawn-pencil-mode="page"] * {
               -webkit-user-select: none !important;
               user-select: none !important;
               -webkit-touch-callout: none !important;
@@ -188,16 +193,19 @@ enum ReaderContentScript {
             textAlign: '\(effectiveAppearance.textAlign.rawValue)',
             paragraphStyle: '\(effectiveAppearance.paragraphStyle.rawValue)'
           });
+          document.documentElement.dataset.dawnFingerSelection = '\(allowsFingerSelection ? "enabled" : "disabled")';
           document.documentElement.dataset.dawnPencilMode = '\(mode.rawValue)';
         })()
         """
     }
 
-    static func setMode(_ mode: PencilMode) -> String {
+    static func setMode(_ mode: PencilMode, allowsFingerSelection: Bool = false) -> String {
         """
         (() => {
+          const allowsFingerSelection = \(allowsFingerSelection ? "true" : "false");
+          document.documentElement.dataset.dawnFingerSelection = allowsFingerSelection ? 'enabled' : 'disabled';
           document.documentElement.dataset.dawnPencilMode = '\(mode.rawValue)';
-          if ('\(mode.rawValue)' === 'page') {
+          if ('\(mode.rawValue)' === 'page' && !allowsFingerSelection) {
             window.getSelection()?.removeAllRanges();
             globalThis.CSS?.highlights?.delete('dawn-reader-live-selection');
           }

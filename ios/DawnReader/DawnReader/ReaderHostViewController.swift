@@ -23,6 +23,14 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     private var appliedMode: PencilMode?
     private var appliedAppearance: ReaderAppearance?
 
+    private var deviceClass: DawnDeviceClass {
+        UIDevice.current.userInterfaceIdiom == .phone ? .phone : .pad
+    }
+
+    private var presentation: DawnPresentationPolicy {
+        DawnPresentationPolicy(deviceClass: deviceClass)
+    }
+
     init(
         publication: Publication,
         initialLocatorJSON: String?,
@@ -77,23 +85,25 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
         ])
         navigator.didMove(toParent: self)
 
-        pencilGesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
-        pencilGesture.delegate = self
-        pencilGesture.minimumPressDuration = 0
-        pencilGesture.allowableMovement = .greatestFiniteMagnitude
-        pencilGesture.numberOfTouchesRequired = 1
-        pencilGesture.cancelsTouchesInView = true
-        pencilGesture.delaysTouchesBegan = true
-        navigator.view.addGestureRecognizer(pencilGesture)
+        if presentation.showsPencilControls {
+            pencilGesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+            pencilGesture.delegate = self
+            pencilGesture.minimumPressDuration = 0
+            pencilGesture.allowableMovement = .greatestFiniteMagnitude
+            pencilGesture.numberOfTouchesRequired = 1
+            pencilGesture.cancelsTouchesInView = true
+            pencilGesture.delaysTouchesBegan = true
+            navigator.view.addGestureRecognizer(pencilGesture)
+
+            let pencilInteraction = UIPencilInteraction()
+            pencilInteraction.delegate = self
+            view.addInteraction(pencilInteraction)
+        }
 
         fingerDismissTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         fingerDismissTap.cancelsTouchesInView = false
         fingerDismissTap.delegate = self
         navigator.view.addGestureRecognizer(fingerDismissTap)
-
-        let pencilInteraction = UIPencilInteraction()
-        pencilInteraction.delegate = self
-        view.addInteraction(pencilInteraction)
 
         session.goForward = { [weak navigator] in
             Task { await navigator?.goForward(options: .init(animated: true)) }
@@ -151,11 +161,16 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             selectionStart = nil
             selectionWebView = nil
             pencilSelectionInProgress = false
-            if mode == .page {
+            if mode == .page, !presentation.allowsFingerSelection {
                 navigator.clearSelection()
             }
             Task { [weak navigator] in
-                _ = await navigator?.evaluateJavaScript(ReaderContentScript.setMode(mode))
+                _ = await navigator?.evaluateJavaScript(
+                    ReaderContentScript.setMode(
+                        mode,
+                        allowsFingerSelection: self.presentation.allowsFingerSelection
+                    )
+                )
             }
         }
         if appliedAppearance != appearance {
@@ -238,7 +253,7 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     }
 
     @objc private func handleFingerDismissTap(_ gesture: UITapGestureRecognizer) {
-        guard gesture.state == .ended, session.rewriteState != .idle else { return }
+        guard gesture.state == .ended, !session.selectedText.isEmpty else { return }
         let location = gesture.location(in: navigator.view)
         guard let coordinates = contentCoordinates(at: location) else {
             session.clearSelection()
@@ -282,9 +297,9 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
             guard updateID == selectionUpdateID else { return }
             _ = await navigator.evaluateJavaScript(script)
             guard !Task.isCancelled, updateID == selectionUpdateID, final else { return }
+            defer { pencilSelectionInProgress = false }
             try? await Task.sleep(for: .milliseconds(70))
             guard !Task.isCancelled, updateID == selectionUpdateID else { return }
-            pencilSelectionInProgress = false
             if let selection = navigator.currentSelection {
                 session.handle(selection: selection)
                 showFinalHighlight(for: selection)
@@ -292,6 +307,23 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 guard !Task.isCancelled, updateID == selectionUpdateID else { return }
                 _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
             }
+        }
+    }
+
+    private func captureFingerSelection(_ selection: Selection) {
+        selectionUpdateTask?.cancel()
+        selectionUpdateID += 1
+        let updateID = selectionUpdateID
+
+        session.handle(selection: selection)
+        showFinalHighlight(for: selection)
+
+        selectionUpdateTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, updateID == selectionUpdateID else { return }
+            navigator.clearSelection()
+            _ = await navigator.evaluateJavaScript(ReaderContentScript.clearSelection)
         }
     }
 
@@ -382,7 +414,8 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
                 source: ReaderContentScript.install(
                     mode: session.pencilMode,
                     appearance: session.settings.readerAppearance,
-                    isEnglish: Self.isEnglish(publication.metadata.language)
+                    isEnglish: Self.isEnglish(publication.metadata.language),
+                    allowsFingerSelection: presentation.allowsFingerSelection
                 ),
                 injectionTime: .atDocumentEnd,
                 forMainFrameOnly: false
@@ -391,25 +424,37 @@ final class ReaderHostViewController: UIViewController, EPUBNavigatorDelegate, U
     }
 
     func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
+        guard presentation.showsPencilControls else { return }
         session.togglePencilMode()
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
-        if session.rewriteState != .idle {
+        if !session.selectedText.isEmpty {
             session.clearSelection()
         }
         session.updateLocation(locator)
         Task { [weak self] in
             guard let self else { return }
-            _ = await self.navigator.evaluateJavaScript(ReaderContentScript.setMode(session.pencilMode))
+            _ = await self.navigator.evaluateJavaScript(
+                ReaderContentScript.setMode(
+                    session.pencilMode,
+                    allowsFingerSelection: presentation.allowsFingerSelection
+                )
+            )
         }
     }
 
     func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
-        if !pencilSelectionInProgress {
+        switch presentation.nativeSelectionRoute(pencilSelectionInProgress: pencilSelectionInProgress) {
+        case .pencilManaged:
+            return false
+        case .captureFingerSelection:
+            captureFingerSelection(selection)
+            return false
+        case .discardFingerSelection:
             navigator.clearSelection()
+            return false
         }
-        return false
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {

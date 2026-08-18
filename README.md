@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://dawn-reader-keeplearning.zhangboy.chatgpt.site">Web</a>&nbsp;&nbsp;&nbsp;
-  <a href="ios/README.md">iPad</a>&nbsp;&nbsp;&nbsp;
+  <a href="ios/README.md">iPhone + iPad</a>&nbsp;&nbsp;&nbsp;
   <a href="docs/english-book-typography-standard.md">Typography</a>&nbsp;&nbsp;&nbsp;
   <a href="docs/product-roadmap.md">Roadmap</a>&nbsp;&nbsp;&nbsp;
   <a href="CONTRIBUTING.md">Contribute</a>
@@ -35,7 +35,7 @@ npm run build
 
 - [Product](docs/product-roadmap.md)
 - [English book typography standard](docs/english-book-typography-standard.md)
-- [iPad](ios/README.md)
+- [iPhone and iPad](ios/README.md)
 - [Security](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 
