@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   epubLocationCacheKey,
-  epubRestoreDirection,
   pageNumberFromLocation,
   parseCachedEpubLocations,
   publisherPageNumber,
@@ -37,13 +36,5 @@ describe("EPUB location cache", () => {
     expect(parseCachedEpubLocations(JSON.stringify(locations))).toEqual(locations);
     expect(parseCachedEpubLocations('["not-a-cfi"]')).toBeNull();
     expect(parseCachedEpubLocations("not-json")).toBeNull();
-  });
-});
-
-describe("EPUB restore direction", () => {
-  it("moves until the visible location matches the saved location", () => {
-    expect(epubRestoreDirection(26, 19)).toBe("next");
-    expect(epubRestoreDirection(26, 31)).toBe("prev");
-    expect(epubRestoreDirection(26, 26)).toBeNull();
   });
 });

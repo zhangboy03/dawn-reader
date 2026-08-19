@@ -338,6 +338,22 @@ body:has(.onboarding), body:has(.test-screen) {
 .book-open > div > strong span { color: var(--accent-strong); transition: transform .2s ease; }
 .stored-book:hover .book-open > div > strong span { transform: translateX(3px); }
 
+.stored-spine.pdf {
+  color: #35464b;
+  background: linear-gradient(145deg, #f6f3e8 0%, #e8ece8 68%, #d7dfdc 100%);
+  box-shadow: 6px 9px 20px rgba(39, 54, 59, .16), inset 0 0 0 1px rgba(92, 108, 111, .18);
+}
+.stored-spine.pdf::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(95, 110, 112, .22); border-radius: 2px 5px 5px 2px; }
+.stored-spine.pdf::after { right: -23px; bottom: 18px; border-top-color: #dd7d45; opacity: .78; }
+.stored-spine.pdf > span { position: relative; z-index: 1; color: #748185; }
+.stored-spine.pdf > strong { position: relative; z-index: 1; color: #25353a; font: 600 23px/1 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.03em; }
+.stored-spine.pdf i { position: relative; z-index: 1; border-top-color: #9aa8aa; }
+.pdf-assistance-summary { position: absolute; right: 8px; bottom: 24px; min-height: 44px; display: grid; grid-template-columns: 30px auto; align-items: center; gap: 9px; color: #42535a; }
+.pdf-assistance-summary > span { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #c79078; border-radius: 50% 50% 50% 4px; color: var(--accent-strong); font: 600 10px/1 "Iowan Old Style", serif; }
+.pdf-assistance-summary > div { display: grid; gap: 2px; }
+.pdf-assistance-summary small { color: #849195; font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .08em; }
+.pdf-assistance-summary strong { font-size: 10px; font-weight: 650; white-space: nowrap; }
+
 /* Reader */
 .reader-shell {
   --reader-chrome: #e7e6df;
@@ -475,11 +491,16 @@ body:has(.onboarding), body:has(.test-screen) {
 .paper[data-dawn-typography-mode="publisher"] p { margin: 0 0 1.28em; }
 .paper ::selection { color: #172027; background: rgba(232, 131, 73, .36); }
 .paper-night .reading-columns { column-rule-color: rgba(163, 180, 183, .2); }
-.epub-frame { width: 100%; height: 100%; min-height: 0; margin: auto; overflow: hidden; border-radius: 2px; background: #f4f2ea; box-shadow: 0 24px 70px rgba(47, 66, 70, .18); touch-action: pan-y pinch-zoom; overscroll-behavior: none; transition: background-color .18s ease; }
-.epub-frame.is-restoring > * { visibility: hidden; }
-.epub-resume-status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #68777b; font: 500 10px/1.4 "SFMono-Regular", monospace; letter-spacing: .04em; pointer-events: none; }
+.epub-frame { width: 100%; height: 100%; min-height: 0; position: relative; isolation: isolate; margin: auto; overflow: hidden; border-radius: 2px; background: #f4f2ea; box-shadow: 0 24px 70px rgba(47, 66, 70, .18); touch-action: pan-y pinch-zoom; overscroll-behavior: none; transition: background-color .18s ease; }
+.epub-renderer-slot { position: absolute; top: 0; left: 50%; transform: translateX(-50%) scale(var(--epub-slot-scale, 1)); transform-origin: top center; overflow: hidden; visibility: hidden; pointer-events: none; z-index: 0; }
+.epub-renderer-slot[data-epub-slot-state="staging"] { visibility: hidden; pointer-events: none; z-index: 1; }
+.epub-renderer-slot[data-epub-slot-state="ready"] { visibility: visible; pointer-events: none; z-index: 1; }
+.epub-renderer-slot[data-epub-slot-state="active"] { visibility: visible; pointer-events: auto; z-index: 2; }
+.epub-renderer-slot[data-epub-slot-state="inactive"] { visibility: hidden; pointer-events: none; z-index: 0; }
+.epub-renderer-slot > .epub-container { width: 100% !important; height: 100% !important; }
+.epub-resume-status { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 24px; color: #68777b; font: 500 10px/1.4 "SFMono-Regular", monospace; letter-spacing: .04em; pointer-events: none; }
 .reader-theme-night .epub-resume-status { color: #83969d; }
-.epub-frame iframe { touch-action: pan-y pinch-zoom; overscroll-behavior: none; }
+.epub-renderer-slot iframe { touch-action: pan-y pinch-zoom; overscroll-behavior: none; }
 .epub-sepia { background: #e9dfc8; }
 .epub-night { background: #1b1d1a; box-shadow: 0 24px 70px rgba(0, 0, 0, .34); }
 .reader-bottombar {
@@ -700,6 +721,7 @@ body:has(.onboarding), body:has(.test-screen) {
   .book-open { min-height: 196px; grid-template-columns: 70px 1fr; gap: 18px; padding: 24px 48px 76px 0; }
   .stored-cover, .stored-spine { width: 61px; height: 94px; }
   .book-assistant-menu { right: auto; bottom: 15px; left: -5px; }
+  .pdf-assistance-summary { right: auto; bottom: 16px; left: 0; }
   .book-assistant-popover { right: auto; left: 0; }
   .book-assistant-popover::after { right: auto; left: 19px; }
 

@@ -50,6 +50,37 @@ describe("Reader chrome", () => {
     expect(markup).toContain('aria-label="查看目录"');
     expect(markup).toContain('aria-busy="true"');
     expect(markup).toContain("正在恢复阅读位置…");
+    expect(markup.match(/class="epub-renderer-slot"/g)).toHaveLength(2);
+    expect(markup).not.toContain("data-epub-slot-state");
+  });
+
+  it("keeps the committed EPUB layer visible while a replacement is staged", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const readerSource = readFileSync("src/components/Reader.tsx", "utf8");
+
+    expect(css).toMatch(/\.epub-renderer-slot\s*\{[^}]*position:\s*absolute;[^}]*visibility:\s*hidden;/s);
+    expect(css).toMatch(/\.epub-renderer-slot\s*\{[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\) scale\(var\(--epub-slot-scale, 1\)\);/s);
+    expect(css).toMatch(/\.epub-renderer-slot\s*\{[^}]*transform-origin:\s*top center;/s);
+    expect(css).toMatch(/\[data-epub-slot-state="ready"\]\s*\{[^}]*visibility:\s*visible;[^}]*pointer-events:\s*none;/s);
+    expect(css).toMatch(/\[data-epub-slot-state="active"\]\s*\{[^}]*visibility:\s*visible;/s);
+    expect(css).not.toMatch(/\.epub-frame\.is-restoring\s*>\s*\*\s*\{[^}]*visibility:\s*hidden/);
+    expect(readerSource).toContain('manager: "default"');
+    expect(readerSource).not.toContain('manager: "continuous"');
+    expect(readerSource).not.toContain("manager.scrollBy");
+    expect(readerSource).not.toContain("epubRestoreDirection");
+    expect(readerSource).not.toContain("currentLocation(");
+    expect(readerSource).toContain("rendition.getRange");
+    expect(readerSource).toContain("rendition.reportLocation");
+    expect(readerSource).toContain("new EpubLayoutSignatureTracker");
+    expect(readerSource).toContain("prepareSlotForCommit");
+    expect(readerSource).toContain('host.style.width = `${config.size.width}px`');
+    expect(readerSource).toContain('host.style.height = `${config.size.height}px`');
+    expect(readerSource).toContain("epubRendererFitScale");
+    expect(readerSource).toContain("epubNavigationTargetFromLink");
+    expect(readerSource).toContain('cause: "link"');
+    expect(readerSource).toContain('image.loading = "eager"');
+    expect(readerSource).toContain("hasFocus()");
+    expect(readerSource).toContain("iframe?.focus({ preventScroll: true })");
   });
 
   it("uses a dynamic viewport shell without fixing the document body", () => {

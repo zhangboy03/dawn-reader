@@ -51,11 +51,6 @@ export function deleteCachedEpubLocations(
   storage.removeItem(epubLocationCacheKey(bookId));
 }
 
-export function epubRestoreDirection(target: number, visible: number): "next" | "prev" | null {
-  if (!Number.isFinite(target) || !Number.isFinite(visible) || target === visible) return null;
-  return visible < target ? "next" : "prev";
-}
-
 export function pageNumberFromLocation(location: number, totalIndex: number): EpubPageNumber | null {
   if (!Number.isFinite(location) || !Number.isFinite(totalIndex) || location < 0 || totalIndex < 0) return null;
   const lastIndex = Math.floor(totalIndex);
