@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { deleteBookRemoteFirst, deletedBookIds } from "./bookDeletion";
+import { epubLocationCacheKey } from "./epubPagination";
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -15,6 +16,7 @@ describe("safe book deletion", () => {
     const order: string[] = [];
     const storage = memoryStorage();
     storage.setItem("dawn-reader-progress:book-1", "saved");
+    storage.setItem(epubLocationCacheKey("book-1"), '["epubcfi(/6/2)","epubcfi(/6/4)"]');
 
     await deleteBookRemoteFirst({
       bookId: "book-1",
@@ -27,6 +29,7 @@ describe("safe book deletion", () => {
     expect(order).toEqual(["remote", "local"]);
     expect(deletedBookIds(storage)).toEqual(new Set(["book-1"]));
     expect(storage.getItem("dawn-reader-progress:book-1")).toBeNull();
+    expect(storage.getItem(epubLocationCacheKey("book-1"))).toBeNull();
   });
 
   it("does not hide a local book when cloud deletion fails", async () => {

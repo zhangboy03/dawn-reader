@@ -1,3 +1,5 @@
+import { deleteCachedEpubLocations } from "./epubPagination";
+
 const TOMBSTONES_KEY = "dawn-reader-deleted-books";
 
 export function deletedBookIds(storage: Pick<Storage, "getItem"> = localStorage) {
@@ -38,4 +40,5 @@ export async function deleteBookRemoteFirst({
   rememberDeletedBook(bookId, storage);
   await deleteLocal();
   storage.removeItem(`dawn-reader-progress:${bookId}`);
+  deleteCachedEpubLocations(bookId, storage);
 }

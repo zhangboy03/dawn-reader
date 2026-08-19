@@ -27,6 +27,7 @@ import {
   parseReadingPosition,
   positionAfterPagination,
   saveReadingPosition,
+  shouldPersistRelocatedPosition,
 } from "../lib/readingPosition";
 import {
   ReadingActivityRecorder,
@@ -47,8 +48,12 @@ import {
 } from "../lib/epubReflow";
 import { loadCloudProgress, saveCloudProgress, saveCloudState } from "../lib/cloudSync";
 import {
+  EPUB_LOCATION_BREAK,
+  loadCachedEpubLocations,
+  epubRestoreDirection,
   pageNumberFromLocation,
   publisherPageNumber,
+  saveCachedEpubLocations,
   type EpubPageNumber,
 } from "../lib/epubPagination";
 import {
@@ -305,12 +310,17 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const pendingEpubAppearanceAnchorRef = useRef<EpubAppearanceAnchor | null>(null);
   const pendingEpubReflowRef = useRef<EpubReflowRequest | null>(null);
   const activeEpubReflowRef = useRef<EpubReflowRequest | null>(null);
+  const epubReflowSettleAttemptsRef = useRef<Map<number, number>>(new Map());
   const epubFrameSizeRef = useRef<EpubFrameSize | null>(null);
   const epubLanguageRef = useRef<string | null>(null);
   const epubReadyRef = useRef(false);
   const pendingTextAppearanceAnchorRef = useRef<TextAppearanceAnchor | null>(null);
   const cloudProgressTimerRef = useRef<number | null>(null);
   const pendingCloudProgressRef = useRef<ReturnType<typeof saveReadingPosition> | null>(null);
+  const progressInteractionPendingRef = useRef(false);
+  const progressSessionDirtyRef = useRef(false);
+  const pageProgressRef = useRef(0);
+  const latestRelocatedPositionRef = useRef<{ cfi: string; percentage: number } | null>(null);
   const pencilModeRef = useRef(loadReaderSettings().pencilMode);
   const gestureRef = useRef<GestureState | null>(null);
   const stageGestureRef = useRef<StageGesture | null>(null);
@@ -512,7 +522,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         }
       }
     }
-    return rendition.currentLocation?.()?.start?.cfi ?? null;
+    return latestRelocatedPositionRef.current?.cfi
+      ?? rendition.currentLocation?.()?.start?.cfi
+      ?? null;
   }
 
   function captureTextAppearanceAnchor() {
@@ -552,12 +564,40 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     activeEpubReflowRef.current = null;
     const frame = epubRef.current?.getBoundingClientRect();
     if (frame) epubFrameSizeRef.current = epubFrameSize(frame);
+    const targetLocation = completed.anchor
+      ? bookRef.current?.locations?.locationFromCfi?.(completed.anchor)
+      : -1;
+    const visibleLocation = latestRelocatedPositionRef.current?.cfi
+      ? bookRef.current?.locations?.locationFromCfi?.(latestRelocatedPositionRef.current.cfi)
+      : -1;
+    const settleAttempts = epubReflowSettleAttemptsRef.current.get(completed.revision) ?? 0;
+    if (
+      completed.anchor
+      && Number.isFinite(targetLocation)
+      && Number.isFinite(visibleLocation)
+      && targetLocation >= 0
+      && visibleLocation >= 0
+      && targetLocation !== visibleLocation
+      && settleAttempts < 32
+    ) {
+      epubReflowSettleAttemptsRef.current.set(completed.revision, settleAttempts + 1);
+      activeEpubReflowRef.current = completed;
+      const direction = epubRestoreDirection(targetLocation, visibleLocation);
+      if (!direction) return;
+      Promise.resolve(renditionRef.current?.[direction]?.()).catch(finishEpubReflow);
+      return;
+    }
+    epubReflowSettleAttemptsRef.current.delete(completed.revision);
     if (pendingEpubReflowRef.current) {
       if (reflowTimerRef.current) window.clearTimeout(reflowTimerRef.current);
       reflowTimerRef.current = window.setTimeout(flushEpubReflow, 0);
       return;
     }
     clearSettledAppearanceAnchor(completed);
+    if (progressInteractionPendingRef.current) {
+      progressInteractionPendingRef.current = false;
+      window.requestAnimationFrame(() => persistLatestEpubPosition());
+    }
   }
 
   function flushEpubReflow() {
@@ -598,6 +638,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       ?? activeEpubReflowRef.current?.anchor;
     const anchor = appearanceAnchor?.cfi
       ?? queuedAnchor
+      ?? latestRelocatedPositionRef.current?.cfi
       ?? captureEpubAppearanceAnchor()
       ?? renditionRef.current.currentLocation?.()?.start?.cfi
       ?? null;
@@ -618,7 +659,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   function preserveAppearanceAnchor() {
     if (source.type === "epub") {
-      const cfi = pendingEpubAppearanceAnchorRef.current?.cfi ?? captureEpubAppearanceAnchor();
+      const cfi = pendingEpubAppearanceAnchorRef.current?.cfi
+        ?? latestRelocatedPositionRef.current?.cfi
+        ?? captureEpubAppearanceAnchor();
       if (!cfi) return;
       pendingEpubAppearanceAnchorRef.current = {
         cfi,
@@ -638,7 +681,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       || patch.textAlign
       || patch.paragraphStyle
       || patch.typographyMode
-    ) preserveAppearanceAnchor();
+    ) {
+      progressInteractionPendingRef.current = true;
+      progressSessionDirtyRef.current = true;
+      preserveAppearanceAnchor();
+    }
     setSettings((current) => {
       const next = { ...current, ...patch };
       pencilModeRef.current = next.pencilMode;
@@ -688,16 +735,50 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     clearSelection();
   }
 
-  function persistProgress(progressKey: string, cfi: string, percentage: number) {
+  function persistProgress(
+    progressKey: string,
+    cfi: string,
+    percentage: number,
+    options: { immediate?: boolean; keepalive?: boolean } = {},
+  ) {
     if (referenceModeRef.current) return;
     const position = saveReadingPosition(progressKey, { cfi, percentage });
     if (source.type !== "epub" || !source.id) return;
     pendingCloudProgressRef.current = position;
     if (cloudProgressTimerRef.current) window.clearTimeout(cloudProgressTimerRef.current);
+    if (options.immediate) {
+      cloudProgressTimerRef.current = null;
+      pendingCloudProgressRef.current = null;
+      void saveCloudProgress(source.id, position, { keepalive: options.keepalive }).catch(() => undefined);
+      return;
+    }
     cloudProgressTimerRef.current = window.setTimeout(() => {
+      cloudProgressTimerRef.current = null;
       pendingCloudProgressRef.current = null;
       void saveCloudProgress(source.id!, position).catch(() => undefined);
     }, 800);
+  }
+
+  function persistLatestEpubPosition(options: { immediate?: boolean; keepalive?: boolean } = {}) {
+    if (source.type !== "epub" || referenceModeRef.current) return;
+    if (options.immediate && !progressSessionDirtyRef.current) return;
+    const latest = latestRelocatedPositionRef.current;
+    const cfi = latest?.cfi ?? renditionRef.current?.currentLocation?.()?.start?.cfi ?? null;
+    if (!cfi) return;
+    const generatedPercentage = latest ? null : bookRef.current?.locations?.total >= 0
+      ? bookRef.current.locations.percentageFromCfi?.(cfi)
+      : null;
+    const percentage = latest?.percentage ?? (typeof generatedPercentage === "number" && Number.isFinite(generatedPercentage)
+      ? Math.round(generatedPercentage * 100)
+      : pageProgressRef.current);
+    pageProgressRef.current = percentage;
+    persistProgress(
+      `dawn-reader-progress:${source.id ?? source.file.name}`,
+      cfi,
+      percentage,
+      options,
+    );
+    if (options.immediate) progressSessionDirtyRef.current = false;
   }
 
   function applyEpubTheme(rendition: any, next = settings) {
@@ -1035,6 +1116,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const observationId = crypto.randomUUID();
     if (cfiRange && source.type === "epub" && !referenceModeRef.current) {
       const resumeCfi = collapseCfiRangeToStart(cfiRange);
+      latestRelocatedPositionRef.current = {
+        cfi: resumeCfi,
+        percentage: pageProgressRef.current,
+      };
+      progressSessionDirtyRef.current = true;
       persistProgress(
         `dawn-reader-progress:${source.id ?? source.file.name}`,
         resumeCfi,
@@ -1236,6 +1322,24 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }, [source]);
 
   useEffect(() => {
+    if (source.type !== "epub") return;
+    const flushFinalPosition = () => {
+      persistLatestEpubPosition({ immediate: true, keepalive: true });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushFinalPosition();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", flushFinalPosition);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", flushFinalPosition);
+    };
+    // The final checkpoint reads the live rendition through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
+
+  useEffect(() => {
     if (!selected) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") clearSelection();
@@ -1302,6 +1406,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   useEffect(() => {
     if (source.type !== "epub" || !epubRef.current) return;
+    progressInteractionPendingRef.current = false;
+    progressSessionDirtyRef.current = false;
+    pageProgressRef.current = 0;
+    latestRelocatedPositionRef.current = null;
     setLocationsReady(false);
     setEpubContentReady(false);
     setPageNumber(null);
@@ -1326,6 +1434,12 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       epubCfiConstructorRef.current = epubModule.EpubCFI;
       book = ePub(buffer);
       bookRef.current = book;
+      const locationCacheBookId = source.id ?? source.file.name;
+      const cachedLocations = loadCachedEpubLocations(locationCacheBookId);
+      if (cachedLocations) {
+        book.locations.load(cachedLocations);
+        locationsGenerated = true;
+      }
       const metadata = await book.loaded.metadata.catch(() => null) as {
         title?: string;
         language?: unknown;
@@ -1357,6 +1471,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       epubFrameSizeRef.current = epubFrameSize(initialFrame);
       pendingEpubReflowRef.current = null;
       activeEpubReflowRef.current = null;
+      epubReflowSettleAttemptsRef.current.clear();
       epubContentLayoutSignaturesRef.current.clear();
       applyEpubTheme(rendition);
       rendition.hooks.content.register((contents: any) => {
@@ -1462,6 +1577,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         }
 
         const onPointerDown = (event: PointerEvent) => {
+          progressInteractionPendingRef.current = true;
+          progressSessionDirtyRef.current = true;
           const kind = pointerInputKind(event.pointerType);
           selectionInputRef.current = kind;
           if (gestureRef.current && gestureRef.current.pointerId === undefined) {
@@ -1501,6 +1618,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           }
         };
         const onTouchStart = (event: TouchEvent) => {
+          progressInteractionPendingRef.current = true;
+          progressSessionDirtyRef.current = true;
           const touch = event.changedTouches[0];
           if (!touch) return;
           const reportedKind = touchInputKind((touch as Touch & { touchType?: string }).touchType);
@@ -1540,6 +1659,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         const onSelectionChange = () => {
           scheduleEpubSelection(contents);
         };
+        const onWheel = () => {
+          progressInteractionPendingRef.current = true;
+          progressSessionDirtyRef.current = true;
+        };
         const onKeyDown = (event: KeyboardEvent) => handlePageKey(event);
 
         document.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
@@ -1551,6 +1674,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         document.addEventListener("touchend", onTouchEnd, { capture: true, passive: false });
         document.addEventListener("touchcancel", () => { gestureRef.current = null; }, { capture: true, passive: false });
         document.addEventListener("selectionchange", onSelectionChange, { passive: true });
+        document.addEventListener("wheel", onWheel, { capture: true, passive: true });
         document.addEventListener("keydown", onKeyDown);
       });
       rendition.on("selected", (cfiRange: string, contents: any) => {
@@ -1573,13 +1697,45 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           if (pendingEpubAppearanceAnchorRef.current) requestEpubReflow("appearance", 0);
         }
         setPageProgress(percentage);
+        pageProgressRef.current = percentage;
+        if (cfi) latestRelocatedPositionRef.current = { cfi, percentage };
         if (locationsGenerated) updatePageNumber(cfi);
-        if (canPersistProgress && cfi) {
+        if (canPersistProgress && cfi && shouldPersistRelocatedPosition(
+          progressInteractionPendingRef.current,
+          Boolean(activeEpubReflowRef.current),
+        )) {
           if (!locationsGenerated) navigatedWhilePaginating = true;
+          progressInteractionPendingRef.current = false;
           persistProgress(progressKey, cfi, percentage);
         }
         finishEpubReflow();
       });
+
+      const waitForRenderedPosition = () => new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+      });
+      const settleRestoredCfi = async (targetCfi: string) => {
+        const targetLocation = book.locations.locationFromCfi(targetCfi);
+        let visibleCfi = latestRelocatedPositionRef.current?.cfi
+          ?? rendition.currentLocation?.()?.start?.cfi
+          ?? targetCfi;
+        for (let attempt = 0; attempt < 32; attempt += 1) {
+          const visibleLocation = book.locations.locationFromCfi(visibleCfi);
+          if (
+            targetLocation < 0
+            || visibleLocation < 0
+            || targetLocation === visibleLocation
+          ) break;
+          const direction = epubRestoreDirection(targetLocation, visibleLocation);
+          if (!direction) break;
+          await rendition[direction]();
+          await waitForRenderedPosition();
+          visibleCfi = latestRelocatedPositionRef.current?.cfi
+            ?? rendition.currentLocation?.()?.start?.cfi
+            ?? visibleCfi;
+        }
+        return visibleCfi;
+      };
       const cloudPosition = await cloudPositionPromise;
       if (cancelled || !epubRef.current) return;
       const savedPosition = referenceModeRef.current
@@ -1591,9 +1747,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
       let initialCfi = source.initialCfi ?? savedPosition?.cfi ?? null;
       if (!initialCfi && savedPosition && savedPosition.percentage > 0) {
-        await book.locations.generate(1200);
+        await book.locations.generate(EPUB_LOCATION_BREAK);
         if (cancelled) return;
         locationsGenerated = true;
+        saveCachedEpubLocations(locationCacheBookId, JSON.parse(book.locations.save()));
         initialCfi = book.locations.cfiFromPercentage(savedPosition.percentage / 100) ?? null;
       }
 
@@ -1603,16 +1760,30 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       // Once the restored page is visible, every later relocation is user-visible
       // and must be saved even while a large EPUB is still generating locations.
       canPersistProgress = true;
-      if (!locationsGenerated) await book.locations.generate(1200);
+      if (!locationsGenerated) {
+        await book.locations.generate(EPUB_LOCATION_BREAK);
+        if (!cancelled) saveCachedEpubLocations(locationCacheBookId, JSON.parse(book.locations.save()));
+      }
       if (cancelled) return;
       locationsGenerated = true;
       setLocationsReady(true);
-      const currentCfi = rendition.currentLocation?.()?.start?.cfi ?? initialCfi;
+      let currentCfi = latestRelocatedPositionRef.current?.cfi
+        ?? rendition.currentLocation?.()?.start?.cfi
+        ?? initialCfi;
+      if (initialCfi && !navigatedWhilePaginating) {
+        currentCfi = await settleRestoredCfi(initialCfi);
+        if (cancelled) return;
+      }
       updatePageNumber(currentCfi);
       if (source.initialCfi) {
-        setPageProgress(Math.round(book.locations.percentageFromCfi(currentCfi) * 100));
+        const percentage = Math.round(book.locations.percentageFromCfi(currentCfi) * 100);
+        pageProgressRef.current = percentage;
+        if (currentCfi) latestRelocatedPositionRef.current = { cfi: currentCfi, percentage };
+        setPageProgress(percentage);
       } else if (savedPosition?.cfi && currentCfi) {
         const percentage = Math.round(book.locations.percentageFromCfi(currentCfi) * 100);
+        pageProgressRef.current = percentage;
+        latestRelocatedPositionRef.current = { cfi: currentCfi, percentage };
         setPageProgress(percentage);
         const normalizedPosition = positionAfterPagination(
           savedPosition,
@@ -1626,6 +1797,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           saveReadingPosition(progressKey, normalizedPosition);
         }
       } else if (savedPosition && savedPosition.percentage > 0) {
+        pageProgressRef.current = savedPosition.percentage;
         setPageProgress(savedPosition.percentage);
       }
       if (source.id && !referenceModeRef.current && savedPosition === localPosition && localPosition) {
@@ -1637,6 +1809,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       epubReadyRef.current = false;
       pendingEpubReflowRef.current = null;
       activeEpubReflowRef.current = null;
+      epubReflowSettleAttemptsRef.current.clear();
       epubFrameSizeRef.current = null;
       epubLanguageRef.current = null;
       epubContentLayoutSignaturesRef.current.clear();
@@ -1717,16 +1890,26 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setAutoSaveState("idle");
   }
 
+  function closeReader() {
+    persistLatestEpubPosition({ immediate: true, keepalive: true });
+    onClose();
+  }
+
   function turnPage(direction: "prev" | "next") {
     clearSelection();
     signalReadingActivity("page-turn");
-    renditionRef.current?.[direction]();
+    progressInteractionPendingRef.current = true;
+    progressSessionDirtyRef.current = true;
+    void renditionRef.current?.[direction]();
   }
 
   function goToPercentage(value: number) {
     if (!locationsReady) return;
     clearSelection();
     signalReadingActivity("manual-seek");
+    progressInteractionPendingRef.current = true;
+    progressSessionDirtyRef.current = true;
+    pageProgressRef.current = value;
     setPageProgress(value);
     const cfi = bookRef.current?.locations?.cfiFromPercentage(value / 100);
     if (cfi) {
@@ -1740,6 +1923,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   function goToTocItem(item: EpubTocItem) {
     clearSelection();
     signalReadingActivity("toc-jump");
+    progressInteractionPendingRef.current = true;
+    progressSessionDirtyRef.current = true;
     setTocOpen(false);
     void renditionRef.current?.display(item.href);
   }
@@ -1905,7 +2090,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
     <header className="reader-topbar">
-      <button className="back-button" onClick={onClose}>← <span>{source.returnToHistory ? "记录" : "书架"}</span></button>
+      <button className="back-button" onClick={closeReader}>← <span>{source.returnToHistory ? "记录" : "书架"}</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`}</small>}</div>
       <div className="reader-actions">
         {source.type === "epub" && !desktopReader && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">

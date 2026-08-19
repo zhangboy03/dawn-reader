@@ -3,6 +3,7 @@ import {
   latestReadingPosition,
   parseReadingPosition,
   positionAfterPagination,
+  shouldPersistRelocatedPosition,
 } from "./readingPosition";
 
 describe("latestReadingPosition", () => {
@@ -71,5 +72,19 @@ describe("positionAfterPagination", () => {
       cfi: "epubcfi(/6/25)",
       percentage: 25,
     });
+  });
+});
+
+describe("shouldPersistRelocatedPosition", () => {
+  it("does not turn startup layout into a new reading position", () => {
+    expect(shouldPersistRelocatedPosition(false, false)).toBe(false);
+  });
+
+  it("persists a relocation caused by a reading interaction", () => {
+    expect(shouldPersistRelocatedPosition(true, false)).toBe(true);
+  });
+
+  it("waits for an appearance reflow to settle before checkpointing", () => {
+    expect(shouldPersistRelocatedPosition(true, true)).toBe(false);
   });
 });

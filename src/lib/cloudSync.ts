@@ -79,12 +79,17 @@ export async function loadCloudProgress(bookId: string) {
   return result.position;
 }
 
-export async function saveCloudProgress(bookId: string, position: ReadingPosition) {
+export async function saveCloudProgress(
+  bookId: string,
+  position: ReadingPosition,
+  options: { keepalive?: boolean } = {},
+) {
   const result = await jsonResponse<{ position: ReadingPosition }>(await fetch(
     `/api/books/${encodeURIComponent(bookId)}/progress`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      keepalive: options.keepalive,
       body: JSON.stringify({
         cfi: position.cfi,
         percentage: position.percentage,

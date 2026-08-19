@@ -30,6 +30,13 @@ export function positionAfterPagination(
   };
 }
 
+export function shouldPersistRelocatedPosition(
+  interactionPending: boolean,
+  reflowActive: boolean,
+) {
+  return interactionPending && !reflowActive;
+}
+
 export function parseReadingPosition(raw: string | null): ReadingPosition | null {
   if (!raw) return null;
 
