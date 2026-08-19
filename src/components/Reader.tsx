@@ -1756,9 +1756,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
       await rendition.display(initialCfi ?? undefined);
       if (cancelled) return;
-      setEpubContentReady(true);
-      // Once the restored page is visible, every later relocation is user-visible
-      // and must be saved even while a large EPUB is still generating locations.
+      // Arm interaction-driven persistence after the initial display. Startup
+      // relocations remain gated until an actual reader action occurs.
       canPersistProgress = true;
       if (!locationsGenerated) {
         await book.locations.generate(EPUB_LOCATION_BREAK);
@@ -1774,6 +1773,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         currentCfi = await settleRestoredCfi(initialCfi);
         if (cancelled) return;
       }
+      setEpubContentReady(true);
       updatePageNumber(currentCfi);
       if (source.initialCfi) {
         const percentage = Math.round(book.locations.percentageFromCfi(currentCfi) * 100);
