@@ -582,6 +582,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     ) {
       epubReflowSettleAttemptsRef.current.set(completed.revision, settleAttempts + 1);
       activeEpubReflowRef.current = completed;
+      if (
+        settleAttempts === 0
+        && jumpEpubByLocationDelta(targetLocation - visibleLocation)
+      ) return;
       const direction = epubRestoreDirection(targetLocation, visibleLocation);
       if (!direction) return;
       Promise.resolve(renditionRef.current?.[direction]?.()).catch(finishEpubReflow);
@@ -598,6 +602,23 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       progressInteractionPendingRef.current = false;
       window.requestAnimationFrame(() => persistLatestEpubPosition());
     }
+  }
+
+  function jumpEpubByLocationDelta(locationDelta: number) {
+    const rendition = renditionRef.current;
+    const manager = rendition?.manager;
+    const pageDelta = manager?.layout?.delta;
+    if (
+      !Number.isFinite(locationDelta)
+      || !Number.isFinite(pageDelta)
+      || locationDelta === 0
+      || Math.abs(locationDelta) > 64
+      || typeof manager?.scrollBy !== "function"
+      || typeof rendition?.reportLocation !== "function"
+    ) return false;
+    manager.scrollBy(locationDelta * pageDelta, 0, true);
+    rendition.reportLocation();
+    return true;
   }
 
   function flushEpubReflow() {
@@ -1711,8 +1732,17 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         finishEpubReflow();
       });
 
-      const waitForRenderedPosition = () => new Promise<void>((resolve) => {
-        window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+      const waitForRenderedPosition = (previousCfi: string) => new Promise<void>((resolve) => {
+        let frames = 0;
+        const check = () => {
+          frames += 1;
+          if (latestRelocatedPositionRef.current?.cfi !== previousCfi || frames >= 12) {
+            resolve();
+            return;
+          }
+          window.requestAnimationFrame(check);
+        };
+        window.requestAnimationFrame(check);
       });
       const settleRestoredCfi = async (targetCfi: string) => {
         const targetLocation = book.locations.locationFromCfi(targetCfi);
@@ -1726,10 +1756,17 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             || visibleLocation < 0
             || targetLocation === visibleLocation
           ) break;
+          if (attempt === 0 && jumpEpubByLocationDelta(targetLocation - visibleLocation)) {
+            await waitForRenderedPosition(visibleCfi);
+            visibleCfi = latestRelocatedPositionRef.current?.cfi
+              ?? rendition.currentLocation?.()?.start?.cfi
+              ?? visibleCfi;
+            continue;
+          }
           const direction = epubRestoreDirection(targetLocation, visibleLocation);
           if (!direction) break;
           await rendition[direction]();
-          await waitForRenderedPosition();
+          await waitForRenderedPosition(visibleCfi);
           visibleCfi = latestRelocatedPositionRef.current?.cfi
             ?? rendition.currentLocation?.()?.start?.cfi
             ?? visibleCfi;
@@ -2091,7 +2128,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
     <header className="reader-topbar">
       <button className="back-button" onClick={closeReader}>← <span>{source.returnToHistory ? "记录" : "书架"}</span></button>
-      <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`}</small>}</div>
+      <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{epubContentReady ? (pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`) : ""}</small>}</div>
       <div className="reader-actions">
         {source.type === "epub" && !desktopReader && <div className="pencil-switch" role="group" aria-label="Apple Pencil 模式">
           <span>Pencil</span>
@@ -2210,8 +2247,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             className="page-position"
             title={pageNumber?.source === "publisher" ? "电子书内置页码" : "按阅读位置计算的页码"}
           >
-            <b>{pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : "…"}</b>
-            <small>{locationsReady ? `${pageProgress}%` : ""}</small>
+            <b>{epubContentReady && pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : "…"}</b>
+            <small>{epubContentReady && locationsReady ? `${pageProgress}%` : ""}</small>
           </span>
         </label>
         <button onClick={() => turnPage("next")} aria-label="下一页">→</button>
