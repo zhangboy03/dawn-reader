@@ -25,6 +25,7 @@ import {
 import {
   latestReadingPosition,
   parseReadingPosition,
+  positionAfterPagination,
   saveReadingPosition,
 } from "../lib/readingPosition";
 import {
@@ -1317,6 +1318,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       : Promise.resolve(null);
     let canPersistProgress = false;
     let locationsGenerated = false;
+    let navigatedWhilePaginating = false;
     source.file.arrayBuffer().then(async (buffer) => {
       if (cancelled || !epubRef.current) return;
       const epubModule = await import("epubjs");
@@ -1572,7 +1574,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         }
         setPageProgress(percentage);
         if (locationsGenerated) updatePageNumber(cfi);
-        if (canPersistProgress && cfi) persistProgress(progressKey, cfi, percentage);
+        if (canPersistProgress && cfi) {
+          if (!locationsGenerated) navigatedWhilePaginating = true;
+          persistProgress(progressKey, cfi, percentage);
+        }
         finishEpubReflow();
       });
       const cloudPosition = await cloudPositionPromise;
@@ -1595,25 +1600,33 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       await rendition.display(initialCfi ?? undefined);
       if (cancelled) return;
       setEpubContentReady(true);
+      // Once the restored page is visible, every later relocation is user-visible
+      // and must be saved even while a large EPUB is still generating locations.
+      canPersistProgress = true;
       if (!locationsGenerated) await book.locations.generate(1200);
       if (cancelled) return;
       locationsGenerated = true;
       setLocationsReady(true);
-      updatePageNumber(rendition.currentLocation?.()?.start?.cfi);
+      const currentCfi = rendition.currentLocation?.()?.start?.cfi ?? initialCfi;
+      updatePageNumber(currentCfi);
       if (source.initialCfi) {
-        const cfi = rendition.currentLocation?.()?.start?.cfi ?? source.initialCfi;
-        setPageProgress(Math.round(book.locations.percentageFromCfi(cfi) * 100));
-        canPersistProgress = true;
-      } else if (savedPosition?.cfi) {
-        const percentage = Math.round(book.locations.percentageFromCfi(savedPosition.cfi) * 100);
+        setPageProgress(Math.round(book.locations.percentageFromCfi(currentCfi) * 100));
+      } else if (savedPosition?.cfi && currentCfi) {
+        const percentage = Math.round(book.locations.percentageFromCfi(currentCfi) * 100);
         setPageProgress(percentage);
-        saveReadingPosition(progressKey, { cfi: savedPosition.cfi, percentage, updatedAt: savedPosition.updatedAt });
-        canPersistProgress = true;
+        const normalizedPosition = positionAfterPagination(
+          savedPosition,
+          currentCfi,
+          percentage,
+          navigatedWhilePaginating,
+        );
+        if (navigatedWhilePaginating) {
+          persistProgress(progressKey, normalizedPosition.cfi!, normalizedPosition.percentage);
+        } else {
+          saveReadingPosition(progressKey, normalizedPosition);
+        }
       } else if (savedPosition && savedPosition.percentage > 0) {
         setPageProgress(savedPosition.percentage);
-        canPersistProgress = true;
-      } else {
-        canPersistProgress = true;
       }
       if (source.id && !referenceModeRef.current && savedPosition === localPosition && localPosition) {
         void saveCloudProgress(source.id, localPosition).catch(() => undefined);

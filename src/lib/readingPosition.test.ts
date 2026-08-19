@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { latestReadingPosition, parseReadingPosition } from "./readingPosition";
+import {
+  latestReadingPosition,
+  parseReadingPosition,
+  positionAfterPagination,
+} from "./readingPosition";
 
 describe("latestReadingPosition", () => {
   const local = { cfi: "epubcfi(/6/4)", percentage: 40, updatedAt: "2026-08-18T08:00:00.000Z" };
@@ -44,5 +48,28 @@ describe("reading position", () => {
   it("rejects invalid stored values", () => {
     expect(parseReadingPosition("not-json")).toBeNull();
     expect(parseReadingPosition('{"percentage":120}')).toBeNull();
+  });
+});
+
+describe("positionAfterPagination", () => {
+  const restored = {
+    cfi: "epubcfi(/6/20)",
+    percentage: 20,
+    updatedAt: "2026-08-19T00:00:00.000Z",
+  };
+
+  it("keeps the restored timestamp when pagination only normalizes the current page", () => {
+    expect(positionAfterPagination(restored, "epubcfi(/6/20!/4/2)", 20, false)).toEqual({
+      cfi: "epubcfi(/6/20!/4/2)",
+      percentage: 20,
+      updatedAt: restored.updatedAt,
+    });
+  });
+
+  it("treats navigation during pagination as a new reading position", () => {
+    expect(positionAfterPagination(restored, "epubcfi(/6/25)", 25, true)).toEqual({
+      cfi: "epubcfi(/6/25)",
+      percentage: 25,
+    });
   });
 });

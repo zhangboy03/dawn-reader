@@ -15,6 +15,21 @@ export function latestReadingPosition(
   return cloud.updatedAt > local.updatedAt ? cloud : local;
 }
 
+export function positionAfterPagination(
+  restored: ReadingPosition | null,
+  currentCfi: string,
+  percentage: number,
+  navigatedWhilePaginating: boolean,
+): ReadingPosition {
+  return {
+    cfi: currentCfi,
+    percentage,
+    ...(!navigatedWhilePaginating && restored?.updatedAt
+      ? { updatedAt: restored.updatedAt }
+      : {}),
+  };
+}
+
 export function parseReadingPosition(raw: string | null): ReadingPosition | null {
   if (!raw) return null;
 
