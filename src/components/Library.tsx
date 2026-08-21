@@ -33,6 +33,7 @@ import {
   type BookAssistantMode,
 } from "../lib/bookAssistantMode";
 import { DeviceSync } from "./DeviceSync";
+import { AccountDataControls } from "./AccountDataControls";
 
 export type BookSource = (
   { type: "text"; title: string; text: string }
@@ -534,6 +535,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         {onOpenHistory && <button className="history-link" type="button" onClick={onOpenHistory}>
           <span aria-hidden="true">↗</span> 查阅记录
         </button>}
+        <AccountDataControls />
         <DeviceSync />
         <div className="profile-control">
         <button className="profile-chip" onClick={() => setProfileOpen((open) => !open)}><i /> {profile.band}</button>
