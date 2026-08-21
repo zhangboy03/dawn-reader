@@ -4,7 +4,7 @@ import {
   handleImageOptimization,
 } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { withSecurityHeaders } from "../src/server/securityHeaders";
+import { rejectCrossOriginMutation, withSecurityHeaders } from "../src/server/securityHeaders";
 
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -33,6 +33,8 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     globalThis.__DAWN_READER_ENV__ = env as unknown as DawnReaderRuntimeEnv;
     const url = new URL(request.url);
+    const rejectedMutation = rejectCrossOriginMutation(request);
+    if (rejectedMutation) return withSecurityHeaders(rejectedMutation);
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return withSecurityHeaders(await handleImageOptimization(request, {
