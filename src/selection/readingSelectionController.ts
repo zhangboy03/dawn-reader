@@ -6,12 +6,7 @@ import {
 import { getWordBoundaries } from './wordBoundary';
 
 const STYLE_ID = 'dawn-word-selection-style';
-const HIGHLIGHT_NAME = 'dawn-pointer-selection';
 const POINTER_MOVE_THRESHOLD = 2;
-// Renderer/AI capture handlers run in the same pointerup event. Handoff on the
-// next task so the visible selection never lingers as a stacked second color.
-const CAPTURE_GRACE_MS = 0;
-const TRANSIENT_HIGHLIGHT_MS = 12_000;
 
 const NON_READING_TARGETS = [
   'a', 'button', 'input', 'textarea', 'select', 'option', 'label',
@@ -20,13 +15,6 @@ const NON_READING_TARGETS = [
   '.annotationLayer', '.linkAnnotation', '.dawn-selection-card',
   '[data-dawn-selection-control]', '[data-no-text-selection]',
 ].join(',');
-
-type HighlightRegistryLike = {
-  set(name: string, highlight: unknown): void;
-  delete(name: string): boolean;
-};
-
-type HighlightConstructor = new (...ranges: AbstractRange[]) => unknown;
 
 type PointerSession = {
   pointerId: number;
@@ -41,8 +29,6 @@ type PointerSession = {
 
 export interface ReadingSelectionControllerOptions {
   locale?: string;
-  captureGraceMs?: number;
-  transientHighlightMs?: number;
 }
 
 export interface ReadingSelectionController {
@@ -124,52 +110,6 @@ function pointHitsWordGlyph(point: DomPoint, x: number, y: number, locale?: stri
   return false;
 }
 
-function rangeStillConnected(range: Range): boolean {
-  const start = range.startContainer;
-  const end = range.endContainer;
-  const startConnected = 'isConnected' in start ? start.isConnected : Boolean(start.ownerDocument);
-  const endConnected = 'isConnected' in end ? end.isConnected : Boolean(end.ownerDocument);
-  return startConnected && endConnected;
-}
-
-function sameRange(selection: Selection, range: Range): boolean {
-  if (selection.rangeCount !== 1 || selection.isCollapsed) return false;
-  const current = selection.getRangeAt(0);
-  return current.startContainer === range.startContainer
-    && current.startOffset === range.startOffset
-    && current.endContainer === range.endContainer
-    && current.endOffset === range.endOffset;
-}
-
-function highlightApi(document: Document): {
-  registry: HighlightRegistryLike;
-  Highlight: HighlightConstructor;
-} | null {
-  const view = document.defaultView as unknown as {
-    CSS?: { highlights?: HighlightRegistryLike };
-    Highlight?: HighlightConstructor;
-  } | null;
-  const registry = view?.CSS?.highlights;
-  const Highlight = view?.Highlight;
-  return registry && Highlight ? { registry, Highlight } : null;
-}
-
-export function clearNativeSelectionAfterCustomCapture(
-  selection: Selection | null,
-  customReplacementAvailable: boolean,
-): boolean {
-  if (!selection || !customReplacementAvailable || selection.rangeCount === 0) return false;
-  selection.removeAllRanges();
-  return true;
-}
-
-function hasRendererReplacement(root: Element): boolean {
-  return Boolean(root.querySelector([
-    '.dawn-selection', '.dawn-live-selection', '.dawn-pencil-selection',
-    '[data-dawn-selection]', '[data-highlight-id]', '.pdf-highlight-overlay',
-  ].join(',')));
-}
-
 export function ensureWarmSelectionStyle(document: Document): HTMLStyleElement {
   const existing = document.getElementById(STYLE_ID);
   if (existing?.tagName === 'STYLE') return existing as HTMLStyleElement;
@@ -188,19 +128,12 @@ export function ensureWarmSelectionStyle(document: Document): HTMLStyleElement {
   color: inherit !important;
   text-shadow: none !important;
 }
-::highlight(${HIGHLIGHT_NAME}) {
-  background-color: rgba(215, 166, 82, 0.46);
-  color: inherit;
-}
 @media (prefers-color-scheme: dark) {
   .dawn-word-selection-surface::selection,
   .dawn-word-selection-surface *::selection,
   .dawn-word-selection-surface::-moz-selection,
   .dawn-word-selection-surface *::-moz-selection {
     background: rgba(231, 181, 94, 0.38) !important;
-  }
-  ::highlight(${HIGHLIGHT_NAME}) {
-    background-color: rgba(231, 181, 94, 0.38);
   }
 }`;
   (document.head ?? document.documentElement).appendChild(style);
@@ -220,8 +153,6 @@ export function installReadingSelectionController(
 
   let session: PointerSession | null = null;
   let animationFrame: number | null = null;
-  let cleanupTimer: number | null = null;
-  let transientTimer: number | null = null;
   let suppressSelectStartUntil = 0;
   let destroyed = false;
   const requestFrame = view.requestAnimationFrame
@@ -231,18 +162,9 @@ export function installReadingSelectionController(
     ? view.cancelAnimationFrame.bind(view)
     : (handle: number) => view.clearTimeout(handle);
 
-  const grace = options.captureGraceMs ?? CAPTURE_GRACE_MS;
-  const transientDuration = options.transientHighlightMs ?? TRANSIENT_HIGHLIGHT_MS;
-
   const clearScheduledFrame = () => {
     if (animationFrame !== null) cancelFrame(animationFrame);
     animationFrame = null;
-  };
-
-  const clearTransient = () => {
-    if (transientTimer !== null) view.clearTimeout(transientTimer);
-    transientTimer = null;
-    highlightApi(document)?.registry.delete(HIGHLIGHT_NAME);
   };
 
   const snapNow = (): boolean => {
@@ -283,40 +205,9 @@ export function installReadingSelectionController(
     });
   };
 
-  const schedulePostCaptureCleanup = (selection: Selection) => {
-    if (cleanupTimer !== null) view.clearTimeout(cleanupTimer);
-    if (!selection.rangeCount || selection.isCollapsed) return;
-    const captured = selection.getRangeAt(0).cloneRange();
-    cleanupTimer = view.setTimeout(() => {
-      cleanupTimer = null;
-      const current = selectionForRoot(root);
-      if (!current || !rangeStillConnected(captured) || !sameRange(current, captured)) return;
-
-      if (hasRendererReplacement(root)) {
-        clearNativeSelectionAfterCustomCapture(current, true);
-        return;
-      }
-
-      const api = highlightApi(document);
-      if (!api) return; // Keep the warm native range when a replacement cannot be created.
-      try {
-        clearTransient();
-        api.registry.set(HIGHLIGHT_NAME, new api.Highlight(captured));
-        if (clearNativeSelectionAfterCustomCapture(current, true)) {
-          transientTimer = view.setTimeout(clearTransient, transientDuration);
-        } else {
-          api.registry.delete(HIGHLIGHT_NAME);
-        }
-      } catch {
-        api.registry.delete(HIGHLIGHT_NAME);
-      }
-    }, grace);
-  };
-
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0 || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
     if (!isReadingTextTarget(root, event.target) || !allowsPointingSelection(root, event.target)) return;
-    clearTransient();
     const point = caretPoint(document, event.clientX, event.clientY);
     if (!event.altKey && (!point || !pointHitsWordGlyph(point, event.clientX, event.clientY, options.locale))) return;
     const selection = selectionForRoot(root);
@@ -361,8 +252,6 @@ export function installReadingSelectionController(
     ) session.focus = point;
     clearScheduledFrame();
     if (!session.precisionBypass) snapNow();
-    const selection = selectionForRoot(root);
-    if (selection && !selection.isCollapsed) schedulePostCaptureCleanup(selection);
     session = null;
   };
 
@@ -387,12 +276,6 @@ export function installReadingSelectionController(
     }
   };
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    // Keyboard/assistive selection stays character-precise. A new keyboard action
-    // also releases any transient pointing-selection overlay.
-    if (event.key === 'Escape' || !event.altKey) clearTransient();
-  };
-
   root.addEventListener('pointerdown', onPointerDown as EventListener, true);
   document.addEventListener('pointermove', onPointerMove as EventListener, true);
   document.addEventListener('pointerup', finishPointer as EventListener, true);
@@ -401,7 +284,6 @@ export function installReadingSelectionController(
   root.addEventListener('mousedown', onMouseDown as EventListener, true);
   root.addEventListener('click', onClick as EventListener, true);
   root.addEventListener('selectstart', onSelectStart, true);
-  document.addEventListener('keydown', onKeyDown, true);
 
   return {
     snapNow,
@@ -409,8 +291,6 @@ export function installReadingSelectionController(
       if (destroyed) return;
       destroyed = true;
       clearScheduledFrame();
-      if (cleanupTimer !== null) view.clearTimeout(cleanupTimer);
-      clearTransient();
       root.removeEventListener('pointerdown', onPointerDown as EventListener, true);
       document.removeEventListener('pointermove', onPointerMove as EventListener, true);
       document.removeEventListener('pointerup', finishPointer as EventListener, true);
@@ -419,7 +299,6 @@ export function installReadingSelectionController(
       root.removeEventListener('mousedown', onMouseDown as EventListener, true);
       root.removeEventListener('click', onClick as EventListener, true);
       root.removeEventListener('selectstart', onSelectStart, true);
-      document.removeEventListener('keydown', onKeyDown, true);
       root.classList.remove('dawn-word-selection-surface');
     },
   };

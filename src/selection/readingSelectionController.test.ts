@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  clearNativeSelectionAfterCustomCapture,
   ensureWarmSelectionStyle,
   installReadingSelectionController,
 } from './readingSelectionController';
@@ -17,14 +16,6 @@ class TestPointerEvent extends MouseEvent {
   }
 }
 
-
-const originalCSSDescriptor = Object.getOwnPropertyDescriptor(window, 'CSS');
-const originalHighlightDescriptor = Object.getOwnPropertyDescriptor(window, 'Highlight');
-
-function restoreWindowProperty(name: 'CSS' | 'Highlight', descriptor: PropertyDescriptor | undefined) {
-  if (descriptor) Object.defineProperty(window, name, descriptor);
-  else delete (window as unknown as Record<string, unknown>)[name];
-}
 
 function node(): Text {
   const value = document.querySelector('#text')?.firstChild;
@@ -81,8 +72,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  restoreWindowProperty('CSS', originalCSSDescriptor);
-  restoreWindowProperty('Highlight', originalHighlightDescriptor);
 });
 
 describe('triple-click suppression', () => {
@@ -174,54 +163,22 @@ describe('pointer-only live snapping', () => {
   });
 });
 
-describe('warm visual and native-range cleanup', () => {
-  it('injects warm native and Custom Highlight styles', () => {
+describe('single-layer warm selection', () => {
+  it('styles the native selection without adding a replacement layer', () => {
     const style = ensureWarmSelectionStyle(document);
     expect(style.textContent).toContain('rgba(215, 166, 82, 0.46)');
-    expect(style.textContent).toContain('::highlight(dawn-pointer-selection)');
     expect(style.textContent).toContain('::-moz-selection');
+    expect(style.textContent).not.toContain('::highlight');
   });
 
-  it('clears a native range only when a custom replacement exists', () => {
-    const selection = setPartialSelection();
-    expect(clearNativeSelectionAfterCustomCapture(selection, false)).toBe(false);
-    expect(selection.rangeCount).toBe(1);
-    expect(clearNativeSelectionAfterCustomCapture(selection, true)).toBe(true);
-    expect(selection.rangeCount).toBe(0);
-  });
-
-  it('creates a transient Custom Highlight before clearing the native range', () => {
-    const registered = new Map<string, unknown>();
-    Object.defineProperty(window, 'CSS', { configurable: true, value: {
-      highlights: {
-        set: (name: string, value: unknown) => registered.set(name, value),
-        delete: (name: string) => registered.delete(name),
-      },
-    } });
-    Object.defineProperty(window, 'Highlight', { configurable: true, value: class {
-      constructor(readonly range: Range) {}
-    } });
-
+  it('keeps the exact live native range after pointerup', () => {
     const root = document.querySelector('#root')!;
     const controller = installReadingSelectionController(root);
     root.dispatchEvent(pointer('pointerdown', 10));
     document.dispatchEvent(pointer('pointermove', 100));
     document.dispatchEvent(pointer('pointerup', 100));
-    expect(window.getSelection()?.rangeCount).toBe(1);
-    vi.advanceTimersByTime(0);
-    expect(registered.has('dawn-pointer-selection')).toBe(true);
-    expect(window.getSelection()?.rangeCount).toBe(0);
-    controller.destroy();
-  });
-
-  it('retains the warm native range when Custom Highlight is unavailable', () => {
-    const root = document.querySelector('#root')!;
-    const controller = installReadingSelectionController(root, { captureGraceMs: 20 });
-    root.dispatchEvent(pointer('pointerdown', 10));
-    document.dispatchEvent(pointer('pointermove', 100));
-    document.dispatchEvent(pointer('pointerup', 100));
-    vi.advanceTimersByTime(21);
     expect(window.getSelection()?.toString()).toBe('alpha beta');
+    expect(window.getSelection()?.rangeCount).toBe(1);
     controller.destroy();
   });
 });
