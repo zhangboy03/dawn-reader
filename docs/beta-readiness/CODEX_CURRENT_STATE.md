@@ -19,6 +19,7 @@ Updated: 2026-08-21
 - EPUB download responses use `private, no-store` to prevent cross-account browser-cache reuse.
 - Device token generation uses an explicit unbiased five-bit mapping.
 - Search snippet sanitization no longer performs tag stripping before entity replacement.
+- Search titles and snippets now share a character-level markup stripper that also drops incomplete tags before text reaches the model context.
 - Baseline browser security headers and a central cross-origin mutation guard added.
 - GitHub Actions upgraded to checkout/setup-node v5 and CodeQL v4.
 - Plain-language `/privacy` page added and linked before sign-in.

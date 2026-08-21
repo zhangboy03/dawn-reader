@@ -56,12 +56,19 @@ export async function searchWeb(query: string, topic?: string) {
   if (!response.ok) throw new Error(`Search returned ${response.status}.`);
 
   const data = await response.json() as { web?: { results?: BraveResult[] } };
-  const results = (data.web?.results ?? []).map((result) => ({ ...result, url: safeHttpUrl(result.url) ?? undefined }))
+  const results = (data.web?.results ?? []).map((result) => ({
+    ...result,
+    title: plainTextFromSearchSnippet(result.title),
+    url: safeHttpUrl(result.url) ?? undefined,
+  }))
     .filter((result) => result.title && result.url)
     .slice(0, 5);
   const sources = results.map((result) => ({ title: result.title!, url: result.url! }));
   const context = results.map((result, index) => {
-    const snippets = [result.description, ...(result.extra_snippets ?? [])].filter(Boolean).join(" ");
+    const snippets = [result.description, ...(result.extra_snippets ?? [])]
+      .map(plainTextFromSearchSnippet)
+      .filter(Boolean)
+      .join(" ");
     return `[${index + 1}] ${result.title}\nURL: ${result.url}\n${snippets}`;
   }).join("\n\n");
   return { context: context || "No relevant web results were found.", sources };
