@@ -10,6 +10,8 @@
 
 ## 开发流程
 
+仓库维护者当前采用[云端优先探索流程](docs/development-workflow.md)。外部贡献者仍建议在提交 PR 前运行下面的本机检查；GitHub Actions 会再次验证提交。
+
 ```bash
 npm install
 npm test

@@ -34,6 +34,7 @@ npm run build
 ## Docs
 
 - [Product](docs/product-roadmap.md)
+- [Development workflow](docs/development-workflow.md)
 - [English book typography standard](docs/english-book-typography-standard.md)
 - [iPhone and iPad](ios/README.md)
 - [Security](SECURITY.md)
