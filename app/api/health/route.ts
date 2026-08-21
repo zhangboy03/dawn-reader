@@ -1,5 +1,5 @@
 import { aiConfig } from "../../../src/server/ai";
-import { webSearchConfigured } from "../../../src/server/webSearch";
+import { webSearchProvider } from "../../../src/server/webSearch";
 import { isAuthorizedReaderRequest } from "../../chatgpt-auth";
 
 export async function GET() {
@@ -7,11 +7,13 @@ export async function GET() {
     return Response.json({ error: "Sign in required." }, { status: 401 });
   }
   const config = aiConfig();
+  const searchProvider = webSearchProvider();
   return Response.json({
     provider: config?.provider ?? "offline-demo",
     model: config?.model ?? null,
     configured: Boolean(config),
-    searchConfigured: webSearchConfigured(),
+    searchConfigured: searchProvider === "brave",
+    searchProvider,
     pendingProvider: config ? null : "deepseek",
   });
 }

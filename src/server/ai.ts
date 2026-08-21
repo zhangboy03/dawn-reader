@@ -7,7 +7,7 @@ import {
   safeBookChatMessages,
   type BookChatInput,
 } from "./chatPrompt";
-import { searchWeb, webSearchConfigured, type WebSource } from "./webSearch";
+import { searchWeb, webSearchAvailable, type WebSource } from "./webSearch";
 import { providerRequestOptions, providerSamplingOptions } from "./aiProvider";
 
 type AiConfig = {
@@ -191,7 +191,7 @@ export async function chatAboutSelection(input: ChatInput) {
     return { status: 503, body: { error: "对话服务暂不可用。" }, provider: "offline-demo" };
   }
 
-  const canSearch = webSearchConfigured();
+  const canSearch = webSearchAvailable();
   const messages: ProviderMessage[] = [
     { role: "system", content: bookChatSystemPrompt(canSearch) },
     {
