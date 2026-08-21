@@ -16,7 +16,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     headers: {
       "Content-Type": "application/epub+zip",
       "Content-Length": String(object.size),
-      "Cache-Control": "private, max-age=300",
+      // The URL is stable across account switches in the same browser. Never
+      // reuse one reader's copyrighted file response for another signed-in user.
+      "Cache-Control": "private, no-store",
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(book.fileName)}`,
     },
   });
