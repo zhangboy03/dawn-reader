@@ -1,4 +1,7 @@
 import { env } from "cloudflare:workers";
+import { plainTextFromSearchSnippet } from "./searchText";
+
+export { plainTextFromSearchSnippet } from "./searchText";
 
 type SearchEnv = { BRAVE_SEARCH_API_KEY?: string };
 
@@ -66,18 +69,6 @@ export async function searchWeb(query: string, topic?: string) {
 
 function containsCjk(text: string) {
   return /[\u3400-\u9fff]/u.test(text);
-}
-
-export function plainTextFromSearchSnippet(text: string | null | undefined) {
-  return (text ?? "")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    // Decode only the entities above, then remove markup last so an entity
-    // replacement cannot create a new tag after sanitization.
-    .replace(/<[^>]+>/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 async function searchWikipedia(query: string) {

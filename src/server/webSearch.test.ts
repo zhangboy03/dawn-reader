@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plainTextFromSearchSnippet } from "./webSearch";
+import { plainTextFromSearchSnippet } from "./searchText";
 
 describe("search result plain text", () => {
   it("decodes supported entities before removing markup", () => {
