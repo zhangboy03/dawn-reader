@@ -387,7 +387,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [currentHref, setCurrentHref] = useState("");
   const [desktopReader, setDesktopReader] = useState(false);
   const [imageView, setImageView] = useState<EpubImageView | null>(null);
-  const [imageZoomed, setImageZoomed] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [embedView, setEmbedView] = useState<EpubEmbedView | null>(null);
   const textParagraphs = source.type === "text" ? source.text.split(/\n\s*\n/).filter(Boolean) : [];
@@ -789,18 +788,18 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       },
       "button[data-dawn-image-action]": {
         position: "absolute !important",
-        top: "8px !important",
-        right: "8px !important",
-        "min-width": "44px !important",
-        "min-height": "44px !important",
-        padding: "0 11px !important",
+        top: "6px !important",
+        right: "6px !important",
+        "min-width": "32px !important",
+        "min-height": "30px !important",
+        padding: "0 8px !important",
         border: `1px solid ${next.theme === "night" ? "#59666a" : "#a9b1ae"} !important`,
-        "border-radius": "6px !important",
+        "border-radius": "5px !important",
         color: `${next.theme === "night" ? "#eee9df" : "#334044"} !important`,
         background: `${next.theme === "night" ? "rgba(28,34,34,.92)" : "rgba(250,249,244,.93)"} !important`,
         "box-shadow": "0 3px 12px rgba(20,28,30,.16) !important",
         "font-family": "-apple-system, BlinkMacSystemFont, sans-serif !important",
-        "font-size": ".65em !important",
+        "font-size": ".56em !important",
         "touch-action": "manipulation !important",
       },
       "button[data-dawn-image-action]:focus-visible": {
@@ -1527,7 +1526,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         const preparedMedia = prepareEpubMediaDocument(document, {
           onImageActivate: (target) => {
             imageReturnFocusRef.current = target.element;
-            setImageZoomed(false);
             setImageLoadFailed(false);
             setImageView({
               source: target.source,
@@ -2308,7 +2306,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   function closeImageView() {
     imageDialogRef.current?.close();
     setImageView(null);
-    setImageZoomed(false);
     setImageLoadFailed(false);
     window.setTimeout(() => imageReturnFocusRef.current?.focus(), 0);
   }
@@ -2519,7 +2516,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
     {imageView && <dialog
       ref={imageDialogRef}
-      className={`image-viewer ${imageZoomed ? "zoomed" : "fitted"}`}
+      className={`image-viewer${imageView.caption ? " has-caption" : ""}`}
       aria-labelledby="image-viewer-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -2535,11 +2532,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           <h2 id="image-viewer-title">{imageView.label}</h2>
         </div>
         <div className="image-viewer-actions">
-          {!imageLoadFailed && <button
-            type="button"
-            aria-pressed={imageZoomed}
-            onClick={() => setImageZoomed((zoomed) => !zoomed)}
-          >{imageZoomed ? "适应窗口" : "查看原始尺寸"}</button>}
           {imageView.sourceHref && <a href={imageView.sourceHref} target="_blank" rel="noopener noreferrer">打开原图</a>}
           <button className="image-viewer-close" type="button" aria-label="关闭大图" onClick={closeImageView}>×</button>
         </div>
@@ -2550,7 +2542,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           : <img src={imageView.source} alt="" onError={() => setImageLoadFailed(true)} />}
       </div>
       {imageView.caption && <p className="image-viewer-caption">{imageView.caption}</p>}
-      <p className="image-viewer-hint">Esc 关闭 · 点击留白关闭 · 可拖动或双指缩放</p>
     </dialog>}
 
     {embedView && <dialog
