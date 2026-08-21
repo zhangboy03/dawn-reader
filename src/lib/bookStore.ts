@@ -1,4 +1,5 @@
 import { hasPdfSignature, publicationFormatFromFile } from "./publication";
+import type { PdfPresentation } from "./pdfPresentation";
 
 const DB_NAME = "dawn-reader-library";
 const STORE_NAME = "books";
@@ -16,6 +17,9 @@ export type StoredBook = {
   format?: "epub" | "pdf";
   mimeType?: string;
   fileSize?: number;
+  paperAuthor?: string | null;
+  paperYear?: string | null;
+  pageCount?: number | null;
 };
 
 type EpubPresentation = {
@@ -138,18 +142,28 @@ export async function savePublication(file: File) {
 
   const id = `sha256:${await publicationContentHash(file)}`;
   const existing = await storedBookById(id);
+  let presentation: PdfPresentation | null = null;
+  try {
+    const { extractPdfPresentation } = await import("./pdfPresentation");
+    presentation = await extractPdfPresentation(file);
+  } catch {
+    // Keep the source PDF usable when its first page or metadata cannot be rendered.
+  }
   return putStoredBook({
     id,
-    title: existing?.title ?? cleanBookTitle(file.name),
+    title: presentation?.title ?? existing?.title ?? cleanBookTitle(file.name),
     fileName: file.name,
     blob: file,
-    cover: null,
-    coverChecked: true,
+    cover: presentation?.cover ?? existing?.cover ?? null,
+    coverChecked: Boolean(presentation) || existing?.coverChecked,
     addedAt: existing?.addedAt ?? new Date().toISOString(),
     lastOpenedAt: existing?.lastOpenedAt,
     format: "pdf",
     mimeType: "application/pdf",
     fileSize: file.size,
+    paperAuthor: presentation?.author ?? existing?.paperAuthor ?? null,
+    paperYear: presentation?.year ?? existing?.paperYear ?? null,
+    pageCount: presentation?.pageCount ?? existing?.pageCount ?? null,
   });
 }
 
@@ -176,8 +190,8 @@ export function migrateStoredBookRecord(book: StoredBook): StoredBook {
     format,
     mimeType: book.mimeType ?? (format === "pdf" ? "application/pdf" : "application/epub+zip"),
     fileSize: book.fileSize ?? book.blob?.size,
-    cover: format === "pdf" ? null : book.cover ?? null,
-    coverChecked: format === "pdf" ? true : book.coverChecked,
+    cover: book.cover ?? null,
+    coverChecked: format === "pdf" ? Boolean(book.cover) : book.coverChecked,
   };
 }
 
@@ -226,5 +240,24 @@ export async function hydrateStoredBookPresentation(book: StoredBook, blob = boo
     format: "epub",
     mimeType: "application/epub+zip",
     fileSize: blob.size,
+  });
+}
+
+export async function hydrateStoredPdfPresentation(book: StoredBook, blob = book.blob) {
+  if (!blob) throw new Error("The paper is not cached on this device.");
+  const { extractPdfPresentation } = await import("./pdfPresentation");
+  const presentation = await extractPdfPresentation(blob);
+  return putStoredBook({
+    ...book,
+    title: presentation.title ?? book.title,
+    blob,
+    cover: presentation.cover,
+    coverChecked: true,
+    format: "pdf",
+    mimeType: "application/pdf",
+    fileSize: blob.size,
+    paperAuthor: presentation.author,
+    paperYear: presentation.year,
+    pageCount: presentation.pageCount,
   });
 }

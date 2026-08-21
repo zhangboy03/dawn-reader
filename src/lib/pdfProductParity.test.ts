@@ -73,4 +73,13 @@ describe("Dawn PDF product regression contracts", () => {
     expect(reader).toContain('standardFontDataUrl: "/pdfjs/standard_fonts/"');
     expect(reader).toContain('wasmUrl: "/pdfjs/wasm/"');
   });
+
+  it("QA-UI-006 renders a local first-page identity for papers without entering cloud sync", () => {
+    const library = source("src/components/Library.tsx");
+    const store = source("src/lib/bookStore.ts");
+    expect(library).toContain('className="stored-cover pdf-paper"');
+    expect(library).toContain("paperAuthorLabel");
+    expect(store).toContain('import("./pdfPresentation")');
+    expect(store).toContain('format: "pdf"');
+  });
 });

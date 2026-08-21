@@ -19,7 +19,7 @@ describe("stored publication migration", () => {
   it("migrates legacy records by extension while preserving EPUB defaults", () => {
     const common = { id: "sha256:a", title: "Title", blob: null, cover: null, addedAt: "2026-08-19T00:00:00.000Z" };
     expect(migrateStoredBookRecord({ ...common, fileName: "paper.pdf" })).toMatchObject({
-      format: "pdf", mimeType: "application/pdf", cover: null, coverChecked: true,
+      format: "pdf", mimeType: "application/pdf", cover: null, coverChecked: false,
     });
     expect(migrateStoredBookRecord({ ...common, fileName: "legacy.epub" })).toMatchObject({
       format: "epub", mimeType: "application/epub+zip",

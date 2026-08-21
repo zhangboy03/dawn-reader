@@ -5,6 +5,7 @@ import {
   deleteStoredBook,
   filterBooksByQuery,
   hydrateStoredBookPresentation,
+  hydrateStoredPdfPresentation,
   listStoredBooks,
   markStoredBookOpened,
   savePublication,
@@ -12,6 +13,7 @@ import {
   storedBookFile,
   type StoredBook,
 } from "../lib/bookStore";
+import { paperAuthorLabel } from "../lib/paperMetadata";
 import { deleteBookRemoteFirst, deletedBookIds, forgetDeletedBook, rememberDeletedBook } from "../lib/bookDeletion";
 import {
   deleteCloudBook,
@@ -91,11 +93,18 @@ function fallbackCoverStyle(id: string) {
   } as CSSProperties;
 }
 
+function paperCoverStyle(id: string) {
+  const accents = ["#c96f43", "#3f7281", "#718061", "#8a5f71", "#9a7a3e"];
+  let hash = 0;
+  for (const character of id) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+  return { "--paper-accent": accents[Math.abs(hash) % accents.length] } as CSSProperties;
+}
+
 function BookCover({ book }: { book: ShelfBook }) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const format = publicationFormat(book);
   useEffect(() => {
-    if (format === "pdf" || !book.cover) {
+    if (!book.cover) {
       setCoverUrl(null);
       return;
     }
@@ -105,6 +114,18 @@ function BookCover({ book }: { book: ShelfBook }) {
   }, [book.cover, format]);
 
   if (coverUrl) {
+    if (format === "pdf") {
+      const author = paperAuthorLabel(book.paperAuthor);
+      return <div className="stored-cover pdf-paper" style={paperCoverStyle(book.id)} aria-hidden="true">
+        <img src={coverUrl} alt="" />
+        <span className="paper-catalog-tab" />
+        <span className="paper-format-mark">PDF</span>
+        <span className="paper-identity">
+          <b>{author ?? "FIRST PAGE"}</b>
+          {book.paperYear && <i>{book.paperYear}</i>}
+        </span>
+      </div>;
+    }
     return <div className="stored-cover" aria-hidden="true"><img src={coverUrl} alt="" /></div>;
   }
   if (format === "pdf") {
@@ -282,13 +303,16 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
   useEffect(() => {
     if (syncState === "loading" || syncState === "syncing") return;
     for (const book of storedBooks) {
-      if (publicationFormat(book) !== "epub" || book.cover || book.coverChecked || coverJobsRef.current.has(book.id)) continue;
+      const format = publicationFormat(book);
+      if (book.cover || book.coverChecked || coverJobsRef.current.has(book.id)) continue;
       coverJobsRef.current.add(book.id);
       void (async () => {
         try {
           const blob = book.blob ?? (book.cloud ? await downloadCloudBook(book.cloud) : null);
           if (!blob) return;
-          const hydrated = await hydrateStoredBookPresentation(book, blob);
+          const hydrated = format === "pdf"
+            ? await hydrateStoredPdfPresentation(book, blob)
+            : await hydrateStoredBookPresentation(book, blob);
           if (!libraryMountedRef.current) return;
           setStoredBooks((books) => books.map((candidate) => candidate.id === book.id ? {
             ...candidate,
