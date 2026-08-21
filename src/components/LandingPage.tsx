@@ -7,9 +7,10 @@ export function LandingPage() {
           <span>Dawn Reader</span>
         </a>
 
-        <a className="landing-github" href="https://github.com/zhangboy03/dawn-reader">
-          GitHub
-        </a>
+        <div className="landing-links">
+          <a href="/privacy">隐私</a>
+          <a className="landing-github" href="https://github.com/zhangboy03/dawn-reader">GitHub</a>
+        </div>
       </nav>
 
       <section className="landing-hero">
