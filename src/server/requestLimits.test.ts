@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertContentLength, readJsonBody, RequestLimitError } from "./requestLimits";
+import { assertContentLength, readJsonBody, RequestLimitError } from "./requestBody";
 
 describe("request body limits", () => {
   it("rejects an oversized declared body before parsing", () => {
