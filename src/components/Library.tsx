@@ -7,7 +7,7 @@ import {
   hydrateStoredBookPresentation,
   listStoredBooks,
   markStoredBookOpened,
-  saveEpub,
+  savePublication,
   sortBooksByRecency,
   storedBookFile,
   type StoredBook,
@@ -21,6 +21,9 @@ import {
   uploadCloudBook,
   type CloudBook,
 } from "../lib/cloudSync";
+import { deletePdfHighlightSidecar } from "../lib/pdfHighlights";
+import { deletePdfLocator } from "../lib/pdfLocator";
+import { isCloudEligiblePublication, publicationFormat, shelfFormatLabel, type PdfBookSource } from "../lib/publication";
 import { parseReadingPosition } from "../lib/readingPosition";
 import {
   loadBookAssistantModes,
@@ -38,6 +41,8 @@ export type BookSource = (
   referenceReturnCfi?: string | null;
   returnToHistory?: boolean;
 };
+
+export type PublicationSource = BookSource | PdfBookSource;
 
 type AiHealth = {
   provider: string;
@@ -88,18 +93,24 @@ function fallbackCoverStyle(id: string) {
 
 function BookCover({ book }: { book: ShelfBook }) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const format = publicationFormat(book);
   useEffect(() => {
-    if (!book.cover) {
+    if (format === "pdf" || !book.cover) {
       setCoverUrl(null);
       return;
     }
     const url = URL.createObjectURL(book.cover);
     setCoverUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [book.cover]);
+  }, [book.cover, format]);
 
   if (coverUrl) {
     return <div className="stored-cover" aria-hidden="true"><img src={coverUrl} alt="" /></div>;
+  }
+  if (format === "pdf") {
+    return <div className="stored-spine pdf" aria-hidden="true">
+      <span>LOCAL PAPER</span><strong>PDF</strong><i />
+    </div>;
   }
   return <div className="stored-spine" style={fallbackCoverStyle(book.id)} aria-hidden="true">
     <span>{book.synced ? "CLOUD EPUB" : "LOCAL EPUB"}</span>
@@ -161,7 +172,7 @@ function AiStatus() {
 }
 
 function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
-  const localById = new Map(local.map((book) => [book.id, book]));
+  const localById = new Map(local.filter(isCloudEligiblePublication).map((book) => [book.id, book]));
   const merged: ShelfBook[] = cloud.map((book) => {
     const localBook = localById.get(book.id);
     return {
@@ -172,8 +183,10 @@ function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
         blob: null,
         cover: null,
         coverChecked: false,
+        format: "epub" as const,
         addedAt: book.addedAt,
       }),
+      format: "epub",
       title: localBook?.title ?? book.title,
       fileName: book.fileName,
       synced: true,
@@ -181,14 +194,16 @@ function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
     };
   });
   for (const book of local) {
-    if (!cloud.some((remote) => remote.id === book.id)) merged.push({ ...book, synced: false });
+    if (publicationFormat(book) === "pdf" || !cloud.some((remote) => remote.id === book.id)) {
+      merged.push({ ...book, synced: false });
+    }
   }
   return sortBooksByRecency(merged);
 }
 
 export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHistory }: {
   profile: ReaderProfile;
-  onOpen: (source: BookSource) => void;
+  onOpen: (source: PublicationSource) => void;
   onRetest: () => void;
   onProfileChange: (profile: ReaderProfile) => void;
   onOpenHistory?: () => void;
@@ -219,14 +234,14 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     async function syncLibrary() {
       const tombstones = deletedBookIds();
       const allLocal = await listStoredBooks().catch(() => []);
-      const local = allLocal.filter((book) => !tombstones.has(book.id));
+      const local = allLocal.filter((book) => publicationFormat(book) === "pdf" || !tombstones.has(book.id));
       if (cancelled) return;
       setStoredBooks(local.map((book) => ({ ...book, synced: false })));
       try {
         const cloudLibrary = await loadCloudLibrary();
-        const allCloud = cloudLibrary.books;
         const deletionDates = new Map((cloudLibrary.deletedBooks ?? []).map((item) => [item.id, item.deletedAt]));
         const staleServerDeletedIds = new Set(allLocal.filter((book) => {
+          if (publicationFormat(book) !== "epub") return false;
           const deletedAt = deletionDates.get(book.id);
           return deletedAt ? book.addedAt <= deletedAt : false;
         }).map((book) => book.id));
@@ -235,18 +250,19 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
           rememberDeletedBook(book.id);
           await deleteStoredBook(book.id).catch(() => undefined);
         }
-        const visibleLocal = local.filter((book) => !deletedEverywhere.has(book.id));
-        const cloud = allCloud.filter((book) => !deletedEverywhere.has(book.id));
-        for (const book of allCloud.filter((candidate) => tombstones.has(candidate.id))) {
-          await deleteCloudBook(book.id);
-          await deleteStoredBook(book.id).catch(() => undefined);
+        for (const cloudBook of cloudLibrary.books.filter((book) => tombstones.has(book.id))) {
+          await deleteCloudBook(cloudBook.id).catch(() => undefined);
         }
+        const visibleLocal = local.filter((book) => publicationFormat(book) === "pdf" || !deletedEverywhere.has(book.id));
+        const visibleCloud = cloudLibrary.books.filter((book) => !deletedEverywhere.has(book.id));
         if (cancelled) return;
-        setStoredBooks(mergeShelf(visibleLocal, cloud));
-        const unsynced = visibleLocal.filter((book) => !cloud.some((remote) => remote.id === book.id));
-        if (unsynced.length) {
+        setStoredBooks(mergeShelf(visibleLocal, visibleCloud));
+        const unsyncedEpubs = visibleLocal.filter((book) => (
+          isCloudEligiblePublication(book) && !visibleCloud.some((remote) => remote.id === book.id)
+        ));
+        if (unsyncedEpubs.length) {
           setSyncState("syncing");
-          for (const book of unsynced) {
+          for (const book of unsyncedEpubs) {
             await uploadCloudBook(book);
             const localPosition = parseReadingPosition(localStorage.getItem(`dawn-reader-progress:${book.id}`));
             if (localPosition) await saveCloudProgress(book.id, localPosition);
@@ -266,7 +282,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
   useEffect(() => {
     if (syncState === "loading" || syncState === "syncing") return;
     for (const book of storedBooks) {
-      if (book.cover || book.coverChecked || coverJobsRef.current.has(book.id)) continue;
+      if (publicationFormat(book) !== "epub" || book.cover || book.coverChecked || coverJobsRef.current.has(book.id)) continue;
       coverJobsRef.current.add(book.id);
       void (async () => {
         try {
@@ -300,45 +316,44 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
 
   async function importFiles(files: File[]) {
     if (!files.length || isImporting) return;
-    const accepted = files.filter((file) => ["epub", "txt", "md", "markdown"].includes(file.name.split(".").pop()?.toLowerCase() ?? ""));
+    const accepted = files.filter((file) => ["epub", "pdf", "txt", "md", "markdown"].includes(file.name.split(".").pop()?.toLowerCase() ?? ""));
     const supported = files.length === 1
       ? accepted
-      : accepted.filter((file) => file.name.split(".").pop()?.toLowerCase() === "epub");
+      : accepted.filter((file) => ["epub", "pdf"].includes(file.name.split(".").pop()?.toLowerCase() ?? ""));
     const unsupportedCount = files.length - supported.length;
     if (!supported.length) {
-      setLibraryMessage("请选择 EPUB、TXT、MD 或 Markdown 文件。");
+      setLibraryMessage("请选择 EPUB、PDF、TXT、MD 或 Markdown 文件。");
       return;
     }
 
     setIsImporting(true);
-    setLibraryMessage(supported.length > 1 ? `正在把 ${supported.length} 本书放上书架…` : `正在导入《${supported[0].name}》…`);
+    setLibraryMessage(supported.length > 1 ? `正在把 ${supported.length} 个文件放上书架…` : `正在导入《${supported[0].name}》…`);
     let importedCount = 0;
     let existingCount = 0;
     let failedCount = 0;
-    let singleBookToOpen: BookSource | null = null;
+    let importedPdf = false;
+    let lastFailure = "";
+    let singleBookToOpen: PublicationSource | null = null;
     const knownBookIds = new Set(storedBooks.map((book) => book.id));
 
     for (const file of supported) {
       const extension = file.name.split(".").pop()?.toLowerCase();
       try {
-        if (extension === "epub") {
-          const stored = await saveEpub(file);
+        if (extension === "epub" || extension === "pdf") {
+          const stored = await savePublication(file);
+          const format = publicationFormat(stored);
           const existing = storedBooks.find((book) => book.id === stored.id);
           const alreadyKnown = knownBookIds.has(stored.id);
           knownBookIds.add(stored.id);
-          forgetDeletedBook(stored.id);
-          if (!alreadyKnown || existing) {
-            setStoredBooks((books) => sortBooksByRecency([
-              { ...stored, addedAt: existing?.addedAt ?? stored.addedAt, synced: existing?.synced ?? false, cloud: existing?.cloud },
-              ...books.filter((book) => book.id !== stored.id),
-            ]));
-          }
-          if (alreadyKnown) {
-            existingCount += 1;
-          } else {
-            importedCount += 1;
-          }
-          if (!existing?.synced && (!alreadyKnown || Boolean(existing))) {
+          if (format === "epub") forgetDeletedBook(stored.id);
+          setStoredBooks((books) => sortBooksByRecency([
+            { ...stored, addedAt: existing?.addedAt ?? stored.addedAt, synced: format === "epub" ? existing?.synced ?? false : false, cloud: format === "epub" ? existing?.cloud : undefined },
+            ...books.filter((book) => book.id !== stored.id),
+          ]));
+          if (alreadyKnown) existingCount += 1;
+          else importedCount += 1;
+
+          if (format === "epub" && !existing?.synced && (!alreadyKnown || Boolean(existing))) {
             setSyncState("syncing");
             try {
               await uploadCloudBook(stored);
@@ -348,13 +363,12 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
               setSyncState("local");
             }
           }
-          if (supported.length === 1 && !alreadyKnown) singleBookToOpen = {
-            type: "epub",
-            id: stored.id,
-            title: stored.title,
-            file,
-            assistantMode: bookAssistantModes[stored.id] ?? "rewrite",
-          };
+          if (format === "pdf") importedPdf = true;
+          if (supported.length === 1 && !alreadyKnown) {
+            singleBookToOpen = format === "pdf"
+              ? { type: "pdf", id: stored.id, title: stored.title, file }
+              : { type: "epub", id: stored.id, title: stored.title, file, assistantMode: bookAssistantModes[stored.id] ?? "rewrite" };
+          }
         } else {
           importedCount += 1;
           if (supported.length === 1) {
@@ -366,16 +380,18 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
             };
           }
         }
-      } catch {
+      } catch (error) {
         failedCount += 1;
+        lastFailure = error instanceof Error ? error.message : "导入失败";
       }
     }
 
     const messages = [
-      importedCount ? `已导入 ${importedCount} 本` : "",
-      existingCount ? `${existingCount} 本已在书架中` : "",
-      unsupportedCount ? `跳过 ${unsupportedCount} 个${files.length > 1 ? "非 EPUB" : "不支持的"}文件` : "",
-      failedCount ? `${failedCount} 本导入失败` : "",
+      importedCount ? `已导入 ${importedCount} 个文件` : "",
+      existingCount ? `${existingCount} 个已在书架中` : "",
+      importedPdf ? "PDF 已保存在此浏览器，Dawn 不会自动上传" : "",
+      unsupportedCount ? `跳过 ${unsupportedCount} 个不支持的文件` : "",
+      failedCount ? `${failedCount} 个导入失败${lastFailure ? `：${lastFailure}` : ""}` : "",
     ].filter(Boolean);
     setLibraryMessage(messages.join(" · "));
     setIsImporting(false);
@@ -386,30 +402,35 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     if (openingId) return;
     setOpeningId(book.id);
     try {
+      const format = publicationFormat(book);
       let file: File;
       let localBook: StoredBook = book;
       if (book.blob) {
         file = storedBookFile(book);
-      } else if (book.cloud) {
+      } else if (format === "epub" && book.cloud) {
         file = await downloadCloudBook(book.cloud);
         localBook = await cacheStoredBook(book, file);
       } else {
-        throw new Error("这本书尚未同步到当前设备。");
+        throw new Error(format === "pdf" ? "这份 PDF 的本机副本不可用，请重新导入。" : "这本书尚未同步到当前设备。");
       }
       const openedAt = new Date().toISOString();
       await markStoredBookOpened(localBook, openedAt).catch(() => undefined);
       setStoredBooks((books) => sortBooksByRecency(books.map((candidate) => (
         candidate.id === book.id ? { ...candidate, lastOpenedAt: openedAt } : candidate
       ))));
-      onOpen({
-        type: "epub",
-        id: book.id,
-        title: book.title,
-        file,
-        assistantMode: bookAssistantModes[book.id] ?? "rewrite",
-      });
+      if (format === "pdf") {
+        onOpen({ type: "pdf", id: book.id, title: book.title, file });
+      } else {
+        onOpen({
+          type: "epub",
+          id: book.id,
+          title: book.title,
+          file,
+          assistantMode: bookAssistantModes[book.id] ?? "rewrite",
+        });
+      }
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "打开失败");
+      setLibraryMessage(error instanceof Error ? error.message : "打开失败");
       setOpeningId(null);
     }
   }
@@ -418,21 +439,28 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     if (deletingId) return;
     setDeletingId(book.id);
     setBookToDelete(null);
+    const format = publicationFormat(book);
     try {
-      await deleteBookRemoteFirst({
-        bookId: book.id,
-        synced: book.synced,
-        deleteRemote: () => deleteCloudBook(book.id),
-        deleteLocal: () => deleteStoredBook(book.id),
-      });
+      if (format === "pdf") {
+        await deleteStoredBook(book.id);
+        deletePdfLocator(book.id);
+        deletePdfHighlightSidecar(book.id);
+      } else {
+        await deleteBookRemoteFirst({
+          bookId: book.id,
+          synced: book.synced,
+          deleteRemote: () => deleteCloudBook(book.id),
+          deleteLocal: () => deleteStoredBook(book.id),
+        });
+      }
       setStoredBooks((books) => books.filter((candidate) => candidate.id !== book.id));
       setLibraryMessage(`已从书架删除《${book.title}》。`);
     } catch (error) {
-      if (deletedBookIds().has(book.id)) {
+      if (format === "epub" && deletedBookIds().has(book.id)) {
         setStoredBooks((books) => books.filter((candidate) => candidate.id !== book.id));
-        window.alert("云端已删除；本机缓存将在下次打开时继续清理。");
+        setLibraryMessage("云端已删除；本机缓存将在下次打开时继续清理。");
       } else {
-        window.alert(error instanceof Error ? error.message : "删除失败，请稍后重试。");
+        setLibraryMessage(error instanceof Error ? error.message : "删除失败，请稍后重试。");
       }
     } finally {
       setDeletingId(null);
@@ -454,7 +482,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     ? { title: "正在整理书架。", detail: "" }
     : syncState === "local"
       ? { title: "云端暂时不可用。", detail: "你仍然可以在本机导入和阅读。" }
-      : { title: "从一本真正想读的书开始。", detail: "导入 EPUB，它会留在你的书架里。" };
+      : { title: "从一本真正想读的书或论文开始。", detail: "导入 EPUB 或 PDF；PDF 只保存在当前浏览器。" };
   const visibleBooks = filterBooksByQuery(storedBooks, searchQuery);
   const hasSearch = Boolean(searchQuery.trim());
 
@@ -494,13 +522,13 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
       <div className="hero-copy">
         <h1>书架</h1>
         <div className="library-actions">
-          <button className="primary" disabled={isImporting} onClick={() => fileRef.current?.click()}>{isImporting ? "正在导入…" : "添加电子书"} <span>＋</span></button>
+          <button className="primary" disabled={isImporting} onClick={() => fileRef.current?.click()}>{isImporting ? "正在导入…" : "添加书籍或论文"} <span>＋</span></button>
           <input
             ref={fileRef}
             hidden
             multiple
             type="file"
-            accept=".epub,.txt,.md,.markdown"
+            accept=".epub,.pdf,.txt,.md,.markdown"
             onChange={(event) => {
               void importFiles(Array.from(event.target.files ?? []));
               event.currentTarget.value = "";
@@ -516,7 +544,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         <div className="section-heading shelf-heading">
           <div>
             <h2>继续阅读</h2>
-            {hasSearch && <small role="status">{visibleBooks.length ? `${visibleBooks.length} 本匹配` : "没有匹配的书"}</small>}
+            {hasSearch && <small role="status">{visibleBooks.length ? `${visibleBooks.length} 本匹配` : "没有匹配的材料"}</small>}
           </div>
           <label className="shelf-search">
             <span className="search-glyph" aria-hidden="true" />
@@ -534,22 +562,21 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         </div>
         {visibleBooks.length > 0 && <div className="stored-shelf">
           {visibleBooks.map((book) => {
+            const format = publicationFormat(book);
             const assistantMode = bookAssistantModes[book.id] ?? "rewrite";
             const modePresentation = assistantModePresentation[assistantMode];
             const menuOpen = assistantMenuBookId === book.id;
-            return <article className="stored-book" key={book.id}>
+            return <article className={`stored-book ${format}`} key={book.id}>
             <button className="book-open" disabled={openingId === book.id || deletingId === book.id} onClick={() => void openBook(book)}>
               <BookCover book={book} />
-              <div><small>EPUB · {book.synced ? "云端" : "本机"}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
+              <div><small>{shelfFormatLabel(book, book.synced)}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
-            <div
+            {format === "epub" ? <div
               className={`book-assistant-menu ${menuOpen ? "open" : ""}`}
               onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAssistantMenuBookId(null);
               }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setAssistantMenuBookId(null);
-              }}
+              onKeyDown={(event) => { if (event.key === "Escape") setAssistantMenuBookId(null); }}
             >
               <button
                 type="button"
@@ -582,7 +609,9 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
                   </button>;
                 })}
               </div>}
-            </div>
+            </div> : <div className="pdf-assistance-summary" aria-label="PDF 划线辅助">
+              <span aria-hidden="true">Aa</span><div><small>划线后</small><strong>英文先行 · 中文按需</strong></div>
+            </div>}
             <button className="book-delete" disabled={deletingId === book.id} onClick={() => setBookToDelete(book)} aria-label={`从书架删除《${book.title}》`}>
               <span aria-hidden="true">×</span> 删除
             </button>
@@ -590,8 +619,8 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         </div>}
         {hasSearch && visibleBooks.length === 0 && <div className="shelf-no-results" aria-live="polite">
           <h3>书架里没有“{searchQuery.trim()}”</h3>
-          <p>可以换一个书名或文件名试试。</p>
-          <button type="button" onClick={() => setSearchQuery("")}>查看全部书籍</button>
+          <p>可以换一个书名、论文名或文件名试试。</p>
+          <button type="button" onClick={() => setSearchQuery("")}>查看全部材料</button>
         </div>}
       </>}
       {storedBooks.length === 0 && <div className={`library-state ${syncState}`} aria-live="polite">
@@ -603,10 +632,12 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
       <section className="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-book-title" onMouseDown={(event) => event.stopPropagation()}>
         <small>从书架移除</small>
         <h2 id="delete-book-title">删除《{bookToDelete.title}》？</h2>
-        <p>应用内的电子书副本和阅读进度会从已同步设备移除。你原来下载或保存在“文件”里的 EPUB 不会被删除。</p>
+        <p>{publicationFormat(bookToDelete) === "pdf"
+          ? "Dawn 会删除此浏览器中的 PDF 副本、阅读位置和黄色高亮。你电脑上的原文件不会被删除。"
+          : "应用内的电子书副本和阅读进度会从已同步设备移除。你原来下载或保存在“文件”里的 EPUB 不会被删除。"}</p>
         <div>
           <button onClick={() => setBookToDelete(null)}>保留</button>
-          <button className="danger" onClick={() => void removeBook(bookToDelete)}>删除电子书</button>
+          <button className="danger" onClick={() => void removeBook(bookToDelete)}>{publicationFormat(bookToDelete) === "pdf" ? "删除 PDF" : "删除电子书"}</button>
         </div>
       </section>
     </div>}

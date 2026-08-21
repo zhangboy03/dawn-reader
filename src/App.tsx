@@ -2,9 +2,9 @@
 
 import "./readingEvidence.css";
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { LexTale } from "./components/LexTale";
-import { Library, type BookSource } from "./components/Library";
+import { Library, type PublicationSource } from "./components/Library";
 import { ReadingHistory } from "./components/ReadingHistory";
 import { Reader } from "./components/Reader";
 import { listStoredBooks, storedBookFile } from "./lib/bookStore";
@@ -14,12 +14,14 @@ import { saveReaderSettings } from "./lib/readerSettings";
 import { parseReadingPosition } from "./lib/readingPosition";
 import { loadProfile, saveProfile, type ReaderProfile } from "./lib/storage";
 
+const PdfReader = lazy(() => import("./components/pdf/PdfReader").then((module) => ({ default: module.PdfReader })));
+
 type Screen = "calibrate" | "library" | "reader" | "history";
 
 export default function App() {
   const [profile, setProfile] = useState<ReaderProfile>({ score: null, band: "未校准 · 平衡辅助", preset: "balanced" });
   const [screen, setScreen] = useState<Screen>("calibrate");
-  const [source, setSource] = useState<BookSource | null>(null);
+  const [source, setSource] = useState<PublicationSource | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -93,7 +95,10 @@ export default function App() {
   if (!ready) return null;
   if (screen === "calibrate") return <LexTale onComplete={completeCalibration} onSkip={skipCalibration} />;
   if (screen === "history") return <ReadingHistory onClose={() => setScreen("library")} onOpenSource={openHistoryRecord} />;
-  if (screen === "reader" && source) return <Reader source={source} profile={profile} onClose={() => setScreen(source.returnToHistory ? "history" : "library")} />;
+  if (screen === "reader" && source) {
+    if (source.type === "pdf") return <Suspense fallback={<main className="pdf-shell-loading">正在打开 PDF…</main>}><PdfReader source={source} profile={profile} onClose={() => setScreen("library")} /></Suspense>;
+    return <Reader source={source} profile={profile} onClose={() => setScreen(source.returnToHistory ? "history" : "library")} />;
+  }
   return <Library
     profile={profile}
     onProfileChange={changeProfile}

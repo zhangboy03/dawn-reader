@@ -1,30 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { saveCloudProgress } from "./cloudSync";
+import { uploadCloudBook } from "./cloudSync";
+import type { StoredBook } from "./bookStore";
 
-describe("saveCloudProgress", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-  it("can keep the final position request alive while the page closes", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      position: {
-        cfi: "epubcfi(/6/16!/4/4/62/5:0)",
-        percentage: 2,
-        updatedAt: "2026-08-19T02:11:35.800Z",
-      },
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    vi.stubGlobal("fetch", fetchMock);
+describe("PDF cloud boundary", () => {
+  it("rejects local PDF records before any EPUB cloud request", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const pdf = {
+      id: "sha256:pdf",
+      title: "Local paper",
+      fileName: "paper.pdf",
+      blob: new Blob(["%PDF-1.7"], { type: "application/pdf" }),
+      cover: null,
+      coverChecked: true,
+      addedAt: "2026-08-19T00:00:00.000Z",
+      format: "pdf",
+      mimeType: "application/pdf",
+      fileSize: 8,
+    } satisfies StoredBook;
 
-    await saveCloudProgress("book-1", {
-      cfi: "epubcfi(/6/16!/4/4/62/5:0)",
-      percentage: 2,
-      updatedAt: "2026-08-19T02:11:35.800Z",
-    }, { keepalive: true });
-
-    expect(fetchMock).toHaveBeenCalledWith("/api/books/book-1/progress", expect.objectContaining({
-      method: "PUT",
-      keepalive: true,
-    }));
+    await expect(uploadCloudBook(pdf)).rejects.toThrow(/PDF.*本机|local/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

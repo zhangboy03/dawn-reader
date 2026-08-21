@@ -42,6 +42,9 @@ export async function loadCloudLibrary() {
 }
 
 export async function uploadCloudBook(book: StoredBook) {
+  if (book.format === "pdf" || /\.pdf$/i.test(book.fileName)) {
+    throw new Error("PDF records are local-only and cannot enter the EPUB cloud route.");
+  }
   if (!book.blob) throw new Error("The EPUB is not cached on this device.");
   const file = new File([book.blob], book.fileName, { type: "application/epub+zip" });
   const form = new FormData();
@@ -79,17 +82,12 @@ export async function loadCloudProgress(bookId: string) {
   return result.position;
 }
 
-export async function saveCloudProgress(
-  bookId: string,
-  position: ReadingPosition,
-  options: { keepalive?: boolean } = {},
-) {
+export async function saveCloudProgress(bookId: string, position: ReadingPosition) {
   const result = await jsonResponse<{ position: ReadingPosition }>(await fetch(
     `/api/books/${encodeURIComponent(bookId)}/progress`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      keepalive: options.keepalive,
       body: JSON.stringify({
         cfi: position.cfi,
         percentage: position.percentage,

@@ -1,3 +1,5 @@
+import { hasPdfSignature, publicationFormatFromFile } from "./publication";
+
 const DB_NAME = "dawn-reader-library";
 const STORE_NAME = "books";
 const DB_VERSION = 1;
@@ -11,6 +13,9 @@ export type StoredBook = {
   coverChecked?: boolean;
   addedAt: string;
   lastOpenedAt?: string;
+  format?: "epub" | "pdf";
+  mimeType?: string;
+  fileSize?: number;
 };
 
 type EpubPresentation = {
@@ -18,10 +23,12 @@ type EpubPresentation = {
   cover: Blob | null;
 };
 
-export async function epubContentHash(blob: Blob) {
+export async function publicationContentHash(blob: Blob) {
   const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+export const epubContentHash = publicationContentHash;
 
 function openLibrary() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -53,7 +60,7 @@ function transactionFinished(transaction: IDBTransaction) {
 
 export function cleanBookTitle(fileName: string) {
   return fileName
-    .replace(/\.epub$/i, "")
+    .replace(/\.(?:epub|pdf)$/i, "")
     .replace(/\s*\((?:z-library\.sk|1lib\.sk|z-lib\.sk)(?:\s*,\s*(?:z-library\.sk|1lib\.sk|z-lib\.sk))*\)\s*$/i, "")
     .trim();
 }
@@ -75,10 +82,7 @@ export async function extractEpubPresentation(blob: Blob): Promise<EpubPresentat
         // Keep usable metadata even when an embedded cover cannot be decoded.
       }
     }
-    return {
-      title: metadata?.title?.trim() || null,
-      cover,
-    };
+    return { title: metadata?.title?.trim() || null, cover };
   } finally {
     book.destroy?.();
   }
@@ -94,19 +98,24 @@ async function putStoredBook(record: StoredBook) {
   return record;
 }
 
-export async function saveEpub(file: File) {
+async function storedBookById(id: string) {
   const db = await openLibrary();
-  const id = `sha256:${await epubContentHash(file)}`;
   const lookup = db.transaction(STORE_NAME, "readonly");
   const existing = await requestResult(lookup.objectStore(STORE_NAME).get(id)) as StoredBook | undefined;
   db.close();
+  return existing;
+}
+
+export async function saveEpub(file: File) {
+  const id = `sha256:${await publicationContentHash(file)}`;
+  const existing = await storedBookById(id);
   let presentation: EpubPresentation | null = null;
   try {
     presentation = await extractEpubPresentation(file);
   } catch {
-    // A readable EPUB can still be imported when its presentation metadata is malformed.
+    // A readable EPUB can still be imported when presentation metadata is malformed.
   }
-  const record: StoredBook = {
+  return putStoredBook({
     id,
     title: presentation?.title ?? existing?.title ?? cleanBookTitle(file.name),
     fileName: file.name,
@@ -115,8 +124,33 @@ export async function saveEpub(file: File) {
     coverChecked: Boolean(presentation) || existing?.coverChecked,
     addedAt: existing?.addedAt ?? new Date().toISOString(),
     lastOpenedAt: existing?.lastOpenedAt,
-  };
-  return putStoredBook(record);
+    format: "epub",
+    mimeType: "application/epub+zip",
+    fileSize: file.size,
+  });
+}
+
+export async function savePublication(file: File) {
+  const format = publicationFormatFromFile(file);
+  if (format === "epub") return saveEpub(file);
+  if (format !== "pdf") throw new Error("不支持的文件格式。");
+  if (!await hasPdfSignature(file)) throw new Error("这个文件没有有效的 PDF 标识，未保存到书架。");
+
+  const id = `sha256:${await publicationContentHash(file)}`;
+  const existing = await storedBookById(id);
+  return putStoredBook({
+    id,
+    title: existing?.title ?? cleanBookTitle(file.name),
+    fileName: file.name,
+    blob: file,
+    cover: null,
+    coverChecked: true,
+    addedAt: existing?.addedAt ?? new Date().toISOString(),
+    lastOpenedAt: existing?.lastOpenedAt,
+    format: "pdf",
+    mimeType: "application/pdf",
+    fileSize: file.size,
+  });
 }
 
 export function sortBooksByRecency<T extends Pick<StoredBook, "addedAt" | "lastOpenedAt">>(books: T[]) {
@@ -127,12 +161,7 @@ export function sortBooksByRecency<T extends Pick<StoredBook, "addedAt" | "lastO
 }
 
 export function filterBooksByQuery<T extends Pick<StoredBook, "title" | "fileName">>(books: T[], query: string) {
-  const terms = query
-    .normalize("NFKC")
-    .toLocaleLowerCase()
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const terms = query.normalize("NFKC").toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!terms.length) return books;
   return books.filter((book) => {
     const searchable = `${book.title} ${book.fileName}`.normalize("NFKC").toLocaleLowerCase();
@@ -140,25 +169,28 @@ export function filterBooksByQuery<T extends Pick<StoredBook, "title" | "fileNam
   });
 }
 
+export function migrateStoredBookRecord(book: StoredBook): StoredBook {
+  const format = book.format === "pdf" || /\.pdf$/i.test(book.fileName) ? "pdf" : "epub";
+  return {
+    ...book,
+    format,
+    mimeType: book.mimeType ?? (format === "pdf" ? "application/pdf" : "application/epub+zip"),
+    fileSize: book.fileSize ?? book.blob?.size,
+    cover: format === "pdf" ? null : book.cover ?? null,
+    coverChecked: format === "pdf" ? true : book.coverChecked,
+  };
+}
+
 export async function listStoredBooks() {
   const db = await openLibrary();
   const transaction = db.transaction(STORE_NAME, "readonly");
   const records = await requestResult(transaction.objectStore(STORE_NAME).getAll()) as StoredBook[];
   db.close();
-  return sortBooksByRecency(records);
+  return sortBooksByRecency(records.map(migrateStoredBookRecord));
 }
 
 export async function markStoredBookOpened(book: StoredBook, openedAt = new Date().toISOString()) {
-  return putStoredBook({
-    id: book.id,
-    title: book.title,
-    fileName: book.fileName,
-    blob: book.blob,
-    cover: book.cover ?? null,
-    coverChecked: book.coverChecked,
-    addedAt: book.addedAt,
-    lastOpenedAt: openedAt,
-  });
+  return putStoredBook({ ...book, lastOpenedAt: openedAt, fileSize: book.fileSize ?? book.blob?.size });
 }
 
 export async function deleteStoredBook(id: string) {
@@ -172,33 +204,27 @@ export async function deleteStoredBook(id: string) {
 
 export function storedBookFile(book: StoredBook) {
   if (!book.blob) throw new Error("The book is not cached on this device.");
-  return new File([book.blob], book.fileName, { type: "application/epub+zip" });
+  const pdf = book.format === "pdf" || /\.pdf$/i.test(book.fileName);
+  return new File([book.blob], book.fileName, {
+    type: book.mimeType ?? (pdf ? "application/pdf" : "application/epub+zip"),
+  });
 }
 
 export async function cacheStoredBook(book: StoredBook, blob: Blob) {
-  return putStoredBook({
-    id: book.id,
-    title: book.title,
-    fileName: book.fileName,
-    blob,
-    cover: book.cover ?? null,
-    coverChecked: book.coverChecked,
-    addedAt: book.addedAt,
-    lastOpenedAt: book.lastOpenedAt,
-  });
+  return putStoredBook({ ...book, blob, cover: book.cover ?? null, fileSize: blob.size });
 }
 
 export async function hydrateStoredBookPresentation(book: StoredBook, blob = book.blob) {
   if (!blob) throw new Error("The book is not cached on this device.");
   const presentation = await extractEpubPresentation(blob);
   return putStoredBook({
-    id: book.id,
+    ...book,
     title: presentation.title ?? book.title,
-    fileName: book.fileName,
     blob,
     cover: presentation.cover,
     coverChecked: true,
-    addedAt: book.addedAt,
-    lastOpenedAt: book.lastOpenedAt,
+    format: "epub",
+    mimeType: "application/epub+zip",
+    fileSize: blob.size,
   });
 }

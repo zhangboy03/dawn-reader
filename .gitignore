@@ -17,3 +17,4 @@ ios/**/DerivedData-*/
 ios/**/.build/
 ios/**/*.xcuserstate
 ios/**/xcuserdata/
+public/pdfjs/

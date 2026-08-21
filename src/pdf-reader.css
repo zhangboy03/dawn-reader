@@ -1,0 +1,440 @@
+/* Dawn PDF surface. Shared shelf styles live in styles.css and load before this lazy chunk. */
+.dawn-pdf-reader-shell {
+  --pdf-canvas: #edf1ef;
+  --pdf-paper: #f4f6f3;
+  --pdf-ink: #182126;
+  --pdf-muted: #68777d;
+  --pdf-line: #cbd4d3;
+  --pdf-rust: #dd7d45;
+  --pdf-rust-strong: #a94f2e;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--pdf-ink);
+  background: var(--pdf-canvas);
+  font-family: "Avenir Next", Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dawn-pdf-reader-shell *,
+.dawn-pdf-reader-shell *::before,
+.dawn-pdf-reader-shell *::after { box-sizing: border-box; }
+
+.dawn-pdf-toolbar {
+  position: relative;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 9px clamp(12px, 2vw, 26px);
+  border-bottom: 1px solid var(--pdf-line);
+  background: rgba(244, 246, 243, .97);
+  backdrop-filter: blur(16px);
+}
+
+.dawn-pdf-toolbar-group,
+.dawn-pdf-zoom-group,
+.dawn-pdf-page-control,
+.dawn-pdf-searchbar { display: flex; align-items: center; }
+.dawn-pdf-toolbar-group { gap: 7px; min-width: 0; }
+.dawn-pdf-toolbar-start { justify-self: start; }
+.dawn-pdf-toolbar-end { justify-self: end; justify-content: flex-end; }
+.dawn-pdf-zoom-group { gap: 0; }
+
+.dawn-pdf-toolbar-center {
+  min-width: 160px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.dawn-pdf-toolbar-title {
+  max-width: min(38vw, 520px);
+  overflow: hidden;
+  color: #35444a;
+  font: 600 12px/1.15 "Iowan Old Style", Baskerville, Georgia, serif;
+  letter-spacing: .005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dawn-pdf-toolbar button,
+.dawn-pdf-toolbar input,
+.dawn-pdf-searchbar button,
+.dawn-pdf-searchbar input,
+.dawn-pdf-state button,
+.dawn-pdf-state input,
+.dawn-pdf-highlight-delete button {
+  min-height: 36px;
+  border: 1px solid rgba(104, 119, 125, .34);
+  border-radius: 8px;
+  color: #384950;
+  background: rgba(255, 255, 255, .52);
+  font: 600 10px/1 "Avenir Next", Avenir, sans-serif;
+}
+
+.dawn-pdf-toolbar button,
+.dawn-pdf-searchbar button,
+.dawn-pdf-state button,
+.dawn-pdf-highlight-delete button { padding: 0 11px; cursor: pointer; }
+.dawn-pdf-toolbar button:hover:not(:disabled),
+.dawn-pdf-searchbar button:hover:not(:disabled),
+.dawn-pdf-state button:hover:not(:disabled),
+.dawn-pdf-highlight-delete button:hover:not(:disabled) {
+  border-color: rgba(169, 79, 46, .62);
+  color: var(--pdf-rust-strong);
+  background: #fffaf6;
+}
+.dawn-pdf-toolbar button[aria-pressed="true"] {
+  border-color: rgba(169, 79, 46, .54);
+  color: var(--pdf-rust-strong);
+  background: #f8ece6;
+}
+.dawn-pdf-toolbar button:disabled,
+.dawn-pdf-searchbar button:disabled,
+.dawn-pdf-state button:disabled { cursor: not-allowed; opacity: .42; }
+
+.dawn-pdf-toolbar button:focus-visible,
+.dawn-pdf-toolbar input:focus-visible,
+.dawn-pdf-searchbar button:focus-visible,
+.dawn-pdf-searchbar input:focus-visible,
+.dawn-pdf-state button:focus-visible,
+.dawn-pdf-state input:focus-visible,
+.dawn-pdf-outline-level button:focus-visible,
+.pdf-selection-card button:focus-visible,
+.dawn-pdf-highlight-mark:focus-visible,
+.dawn-pdf-highlight-delete button:focus-visible {
+  outline: 2px solid var(--pdf-rust-strong);
+  outline-offset: 2px;
+}
+
+.dawn-pdf-back { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.dawn-pdf-back > span:first-child { color: var(--pdf-rust-strong); font-size: 16px; font-weight: 400; }
+.dawn-pdf-sidebar-toggle,
+.dawn-pdf-search-toggle { min-width: 54px; }
+.dawn-pdf-download { white-space: nowrap; }
+
+.dawn-pdf-page-control { gap: 5px; color: var(--pdf-muted); font-size: 10px; white-space: nowrap; }
+.dawn-pdf-page-control button { width: 32px; min-height: 30px; padding: 0; font-size: 18px; font-weight: 400; }
+.dawn-pdf-page-control input {
+  width: 48px;
+  min-height: 30px;
+  padding: 0 5px;
+  text-align: center;
+  font: 600 10px/1 "SFMono-Regular", Consolas, monospace;
+}
+.dawn-pdf-page-control span { min-width: 34px; font: 9px/1 "SFMono-Regular", Consolas, monospace; }
+
+.dawn-pdf-zoom-group button { border-radius: 0; }
+.dawn-pdf-zoom-group button:first-child { border-radius: 8px 0 0 8px; }
+.dawn-pdf-zoom-group button:last-child { border-radius: 0 8px 8px 0; }
+.dawn-pdf-zoom-group button + button { margin-left: -1px; }
+.dawn-pdf-zoom-group > button:not(.dawn-pdf-fit) { width: 34px; padding: 0; font-size: 16px; font-weight: 400; }
+.dawn-pdf-fit { min-width: 78px; white-space: nowrap; }
+
+.dawn-pdf-searchbar {
+  position: relative;
+  z-index: 11;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 50px;
+  padding: 7px clamp(12px, 2vw, 26px);
+  border-bottom: 1px solid var(--pdf-line);
+  background: rgba(244, 246, 243, .98);
+}
+.dawn-pdf-searchbar input {
+  flex: 1 1 260px;
+  min-width: 160px;
+  padding: 0 11px;
+  font-size: 11px;
+}
+.dawn-pdf-searchbar > span {
+  min-width: 64px;
+  color: var(--pdf-muted);
+  font: 9px/1 "SFMono-Regular", Consolas, monospace;
+  text-align: center;
+}
+
+.dawn-pdf-reader-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--pdf-canvas);
+}
+
+.dawn-pdf-sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 8;
+  width: 292px;
+  overflow: auto;
+  padding: 22px 14px 36px;
+  border-right: 1px solid var(--pdf-line);
+  color: #3d4d53;
+  background: rgba(244, 246, 243, .98);
+}
+.dawn-pdf-sidebar h2 {
+  margin: 0 8px 16px;
+  color: var(--pdf-muted);
+  font: 700 9px/1 "Avenir Next", Avenir, sans-serif;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.dawn-pdf-sidebar > p { margin: 10px 8px; color: var(--pdf-muted); font-size: 11px; line-height: 1.65; }
+.dawn-pdf-outline-level { list-style: none; margin: 0; padding: 0 0 0 12px; }
+.dawn-pdf-outline-level.depth-0 { padding-left: 0; }
+.dawn-pdf-outline-level button {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  color: #45565c;
+  background: transparent;
+  padding: 7px 9px;
+  font: 500 10px/1.45 "Avenir Next", Avenir, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.dawn-pdf-outline-level button:hover { color: var(--pdf-rust-strong); background: rgba(221, 125, 69, .09); }
+
+/* PDFViewer requires this scrolling DIV to be absolutely positioned. */
+.dawn-pdf-scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  background: var(--pdf-canvas);
+  transition: left .18s ease;
+}
+.dawn-pdf-reader-body.sidebar-open .dawn-pdf-scroll { left: 292px; }
+.dawn-pdf-viewer { min-width: 0; padding: 28px 0 72px; }
+.dawn-pdf-viewer .page {
+  margin: 0 auto 24px;
+  border: 0;
+  background: #fff;
+  box-shadow: 0 7px 26px rgba(32, 45, 48, .17);
+}
+.dawn-pdf-viewer .textLayer { opacity: 1; }
+.dawn-pdf-viewer .annotationLayer a { cursor: pointer; }
+.dawn-pdf-viewer .annotationLayer section { pointer-events: auto; }
+
+.dawn-pdf-state {
+  position: absolute;
+  inset: 64px 0 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 30px;
+  color: var(--pdf-ink);
+  text-align: center;
+  background: var(--pdf-canvas);
+}
+.dawn-pdf-state form { width: min(440px, 100%); display: grid; gap: 14px; }
+.dawn-pdf-state h2 { margin: 0; font: 600 28px/1.15 "Iowan Old Style", Baskerville, Georgia, serif; }
+.dawn-pdf-state p { max-width: 520px; margin: 0; color: var(--pdf-muted); font-size: 12px; line-height: 1.65; }
+.dawn-pdf-state input { width: 100%; padding: 0 12px; background: #fff; }
+.dawn-pdf-state form > div,
+.dawn-pdf-state > div:last-child { display: flex; justify-content: center; gap: 8px; }
+.dawn-pdf-state button[type="submit"] { border-color: var(--pdf-rust-strong); color: #fff; background: var(--pdf-rust-strong); }
+.dawn-pdf-state.error h2 { color: #7f3d30; }
+.dawn-pdf-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(104, 119, 125, .28);
+  border-top-color: var(--pdf-rust);
+  border-radius: 50%;
+  animation: dawn-pdf-spin .8s linear infinite;
+}
+@keyframes dawn-pdf-spin { to { transform: rotate(360deg); } }
+
+.dawn-pdf-notices {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 30;
+  width: min(680px, calc(100% - 36px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.dawn-pdf-notices p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 0;
+  padding: 9px 13px;
+  border: 1px solid #d5b87e;
+  border-radius: 12px;
+  color: #6d572f;
+  background: rgba(255, 249, 235, .97);
+  box-shadow: 0 9px 28px rgba(41, 53, 55, .12);
+  font-size: 10px;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+.dawn-pdf-notices button { min-width: 24px; border: 0; color: inherit; background: transparent; cursor: pointer; }
+
+.dawn-pdf-highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.dawn-pdf-highlight-mark {
+  position: absolute;
+  border: 0;
+  border-radius: 2px;
+  padding: 0;
+  background: rgba(255, 237, 0, .38);
+  box-shadow: inset 0 -1px rgba(169, 151, 0, .16);
+  mix-blend-mode: multiply;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.dawn-pdf-highlight-mark:hover { background: rgba(255, 237, 0, .5); }
+
+.dawn-pdf-highlight-delete {
+  position: fixed;
+  z-index: 65;
+  transform: translateX(-12px);
+}
+.dawn-pdf-highlight-delete button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: #7e3f2a;
+  background: #fffdf9;
+  box-shadow: 0 10px 28px rgba(24, 33, 38, .16);
+}
+
+.pdf-selection-card {
+  position: fixed;
+  z-index: 60;
+  width: clamp(320px, 27vw, 420px);
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  border: 1px solid rgba(104, 119, 125, .32);
+  border-radius: 16px;
+  color: var(--pdf-ink);
+  background: rgba(250, 251, 249, .985);
+  box-shadow: 0 18px 48px rgba(24, 33, 38, .18);
+  font-family: "Avenir Next", Avenir, sans-serif;
+}
+.pdf-selection-card-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 47px;
+  padding: 8px 10px 8px 16px;
+  border-bottom: 1px solid rgba(203, 212, 211, .82);
+  background: rgba(244, 246, 243, .98);
+}
+.pdf-selection-card-header > strong {
+  color: #425157;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.pdf-selection-card-actions { display: flex; align-items: center; gap: 5px; }
+.pdf-selection-card-actions button,
+.pdf-selection-retry,
+.pdf-selection-translation-retry {
+  min-height: 31px;
+  border: 1px solid #d5dcda;
+  border-radius: 8px;
+  color: #405056;
+  background: #fff;
+  padding: 0 9px;
+  font: 600 10px/1 "Avenir Next", Avenir, sans-serif;
+  cursor: pointer;
+}
+.pdf-selection-card-actions button:hover:not(:disabled),
+.pdf-selection-retry:hover,
+.pdf-selection-translation-retry:hover { border-color: rgba(169, 79, 46, .58); color: var(--pdf-rust-strong); }
+.pdf-selection-card-actions button:disabled { cursor: not-allowed; opacity: .42; }
+.pdf-highlight-action { width: 32px; padding: 0 !important; background: rgba(255, 237, 0, .2) !important; }
+.pdf-highlight-action span { display: block; width: 14px; height: 8px; margin: auto; border-radius: 2px; background: #ffed00; transform: rotate(-8deg); }
+.pdf-highlight-action.is-saved { border-color: #c7b700; }
+.pdf-selection-close { width: 31px; padding: 0 !important; border-color: transparent !important; background: transparent !important; font-size: 17px !important; font-weight: 400 !important; }
+.pdf-selection-chinese-action { white-space: nowrap; }
+.pdf-selection-card-body { padding: 15px 16px 17px; }
+.pdf-selection-card-body p { margin: 0; }
+.pdf-selection-result { white-space: pre-wrap; font: 400 15px/1.62 "Iowan Old Style", Baskerville, Georgia, serif; }
+.pdf-selection-loading { color: var(--pdf-muted); font-size: 11px; line-height: 1.6; }
+.pdf-selection-loading::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--pdf-rust); animation: dawn-pdf-pulse 1.1s ease-in-out infinite; }
+@keyframes dawn-pdf-pulse { 50% { opacity: .25; transform: scale(.7); } }
+.pdf-selection-error { color: #8f4635; font-size: 11px; line-height: 1.55; }
+.pdf-selection-error button { margin-top: 9px; }
+.pdf-selection-chinese { margin-top: 14px; padding-top: 13px; border-top: 1px solid #dfe5e3; }
+.pdf-selection-chinese > strong { display: block; margin-bottom: 7px; color: var(--pdf-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.pdf-selection-chinese > p { color: #2d3b40; font-size: 13px; line-height: 1.65; }
+.pdf-selection-feedback { margin-top: 11px !important; color: var(--pdf-muted); font-size: 10px; }
+.pdf-selection-feedback.saved { color: #5a6f4d; }
+.pdf-selection-feedback.error { color: #99473f; }
+
+.pdf-shell-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #68777d;
+  background: #edf1ef;
+  font: 600 12px/1 "Avenir Next", Avenir, sans-serif;
+}
+
+@media (max-width: 1180px) {
+  .dawn-pdf-toolbar { grid-template-columns: auto minmax(120px, 1fr) auto; gap: 9px; }
+  .dawn-pdf-toolbar-title { max-width: 30vw; }
+  .dawn-pdf-toolbar-group { gap: 5px; }
+  .dawn-pdf-toolbar button { padding-inline: 8px; }
+  .dawn-pdf-fit { min-width: 68px; }
+}
+
+@media (max-width: 900px) {
+  .dawn-pdf-toolbar {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "start end" "center center";
+    gap: 7px 10px;
+    padding-block: 8px;
+  }
+  .dawn-pdf-toolbar-start { grid-area: start; }
+  .dawn-pdf-toolbar-end { grid-area: end; }
+  .dawn-pdf-toolbar-center { grid-area: center; min-width: 0; width: 100%; grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: start; }
+  .dawn-pdf-toolbar-title { max-width: 48vw; }
+  .dawn-pdf-download { display: none; }
+  .dawn-pdf-sidebar { width: min(292px, 82vw); box-shadow: 14px 0 34px rgba(24, 33, 38, .16); }
+  .dawn-pdf-reader-body.sidebar-open .dawn-pdf-scroll { left: 0; }
+  .dawn-pdf-viewer { padding-top: 20px; }
+}
+
+@media (max-width: 680px) {
+  .dawn-pdf-toolbar-end .dawn-pdf-search-toggle { display: none; }
+  .dawn-pdf-fit { min-width: 62px; font-size: 9px !important; }
+  .dawn-pdf-back > span:last-child,
+  .dawn-pdf-sidebar-toggle { font-size: 0; }
+  .dawn-pdf-sidebar-toggle::after { content: "目录"; font-size: 10px; }
+  .dawn-pdf-toolbar-title { max-width: 42vw; }
+  .pdf-selection-card { left: 12px !important; right: 12px; bottom: 12px; top: auto !important; width: auto; max-width: none; max-height: min(62vh, 520px); }
+  .dawn-pdf-notices { bottom: 10px; width: calc(100% - 20px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dawn-pdf-scroll { transition: none; }
+  .dawn-pdf-spinner,
+  .pdf-selection-loading::before { animation: none; }
+}
