@@ -3,6 +3,7 @@ import { getReaderIdentity } from "../../../../chatgpt-auth";
 import { getDb } from "../../../../../db";
 import { readingProgress } from "../../../../../db/schema";
 import { bookForUser } from "../../../../../src/server/library";
+import { mergeProgressLocators } from "../../../../../src/server/progressMerge";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +45,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const requestedAt = typeof input.updatedAt === "string" && Number.isFinite(Date.parse(input.updatedAt))
     ? new Date(input.updatedAt).toISOString()
     : new Date().toISOString();
-  const cfi = typeof input.cfi === "string" && input.cfi ? input.cfi.slice(0, 4000) : null;
-  const nativeLocator = typeof input.nativeLocator === "string" && input.nativeLocator
-    ? input.nativeLocator.slice(0, 12000)
-    : null;
   const percentage = Math.round(input.percentage);
   const [existing] = await getDb().select().from(readingProgress).where(and(
     eq(readingProgress.userId, user.userId),
@@ -56,6 +53,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (existing && existing.updatedAt > requestedAt) {
     return Response.json({ position: existing, applied: false });
   }
+  const { cfi, nativeLocator } = mergeProgressLocators(existing ?? null, input);
   await getDb().insert(readingProgress).values({
     userId: user.userId,
     bookId: id,

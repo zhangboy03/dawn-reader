@@ -8,10 +8,14 @@ the product.
   or acceptance environment.
 - Do not start a local development server, Simulator, or local browser QA by
   default. Do not make local test/build results the delivery gate.
-- For small, reversible Web changes, use a short-lived `codex/*` branch and PR,
-  make GitHub Actions the primary test/build/security gate, merge when green,
-  then deploy that exact `main` SHA to the current Sites development
-  environment and perform a focused cloud smoke check.
+- For Web work, branch from the long-lived `beta` branch, use a short-lived
+  `codex/*` branch and PR targeting `beta`, make GitHub Actions the primary
+  test/build/security gate, merge when green, then deploy that exact `beta` SHA
+  to the private Beta Sites project and perform a focused cloud smoke check.
+- Promote accepted Beta source to public through the `Promote Beta to Public`
+  workflow. It creates a draft PR against `main`, preserves the public
+  `.openai/hosting.json`, and still requires public CI/CodeQL plus an exact-SHA
+  Sites deployment after merge.
 - Give extra review and an explicit migration/rollback plan to changes that
   affect durable data, migrations, authentication, permissions, deletion,
   sync, external writes, dependencies/runtime, or overlapping parallel work.

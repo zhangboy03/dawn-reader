@@ -12,7 +12,9 @@ export function normalizeDeviceToken(value: string) {
 
 export function createDeviceToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(26));
-  const body = [...bytes].map((value) => TOKEN_ALPHABET[value % TOKEN_ALPHABET.length]).join("");
+  // The alphabet has exactly 32 symbols, so masking the low five unbiased bits
+  // maps every random byte uniformly without modulo-bias ambiguity.
+  const body = [...bytes].map((value) => TOKEN_ALPHABET[value & 31]).join("");
   return `${TOKEN_PREFIX}${body}`;
 }
 
