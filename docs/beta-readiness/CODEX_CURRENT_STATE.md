@@ -30,10 +30,8 @@ Updated: 2026-08-21
 
 ## Still blocks first external invite
 
-- Beta has no AI/search runtime credentials; public secret values are redacted and were not copied.
-- No app-layer per-user AI rate limit, upload count/storage quota, or abuse budget.
-- No account-wide self-service export or delete-all workflow.
-- No visible in-app sign-out entry was found during the authenticated smoke test.
+- Beta has no AI runtime credentials; public secret values are redacted and were not copied. Wikipedia remains the disclosed search fallback.
+- Newly implemented rate limits, EPUB validation, storage quotas, account export/delete, and sign-out must pass cloud gates and destructive Beta acceptance before they move to the verified list.
 - No verified external-user onboarding/acceptance session yet.
 - No end-to-end rollback drill or destructive test-account deletion drill yet.
 
