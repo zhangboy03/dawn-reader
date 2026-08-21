@@ -1101,9 +1101,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     if (cfiRange) {
       try {
         renditionRef.current?.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
-          fill: "#e78349",
-          "fill-opacity": "0.24",
-          "mix-blend-mode": "multiply",
+          fill: "#d7a652",
+          "fill-opacity": "0.46",
+          "mix-blend-mode": "normal",
         });
       } catch { /* browser selection remains as fallback */ }
     }
@@ -1438,9 +1438,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (!cfiRange) return;
       try {
         renderer.rendition.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
-          fill: "#e78349",
-          "fill-opacity": "0.24",
-          "mix-blend-mode": "multiply",
+          fill: "#d7a652",
+          "fill-opacity": "0.46",
+          "mix-blend-mode": "normal",
         });
       } catch {
         // The native selection remains the fallback for a malformed range.
@@ -2375,7 +2375,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     : selectedKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
 
-  return <div className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
+  return <div data-dawn-reading-surface="book" className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
     <header className="reader-topbar">
       <button className="back-button" onClick={closeReader}>← <span>{source.returnToHistory ? "记录" : "书架"}</span></button>
       <div className="reader-title"><strong>{displayTitle}</strong>{source.type === "epub" && <small>{epubContentReady ? (pageNumber ? `${pageNumber.current} / ${pageNumber.total}` : `${pageProgress}%`) : ""}</small>}</div>

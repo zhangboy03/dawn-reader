@@ -827,7 +827,7 @@ export function PdfReader({ source, profile, onClose }: {
   const scaleLabel = fit === "custom" ? `${Math.round(scale * 100)}%` : fit === "width" ? "适合宽度" : "适合页面";
   const failurePagesLabel = useMemo(() => [...pageFailures].sort((a, b) => a - b).join("、"), [pageFailures]);
 
-  return <main className="dawn-pdf-reader-shell">
+  return <main data-dawn-reading-surface="pdf" className="dawn-pdf-reader-shell">
     <header className="dawn-pdf-toolbar" aria-label="PDF 工具栏">
       <div className="dawn-pdf-toolbar-group dawn-pdf-toolbar-start">
         <button type="button" className="dawn-pdf-back" onClick={() => { persistPosition(); onClose(); }} aria-label="返回书架">
