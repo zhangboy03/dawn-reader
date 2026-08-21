@@ -616,16 +616,13 @@ body:has(.onboarding), body:has(.test-screen) {
 .image-viewer-actions button, .image-viewer-actions a { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-ink); background: var(--reader-control); font-size: 10px; text-decoration: none; white-space: nowrap; }
 .image-viewer-actions button:hover, .image-viewer-actions a:hover { border-color: var(--reader-control-active); color: var(--reader-control-active); }
 .image-viewer-actions .image-viewer-close { width: 44px; padding: 0; border-color: transparent; background: transparent; font-size: 24px; }
-.image-viewer-canvas { height: calc(100% - 126px); overflow: auto; display: grid; place-items: center; padding: 22px; background: color-mix(in srgb, var(--reader-chrome) 78%, #667 22%); overscroll-behavior: contain; touch-action: pan-x pan-y pinch-zoom; }
-.image-viewer-canvas img { display: block; object-fit: contain; user-select: none; -webkit-user-drag: none; }
-.image-viewer.fitted .image-viewer-canvas img { width: auto; height: auto; max-width: 100%; max-height: 100%; }
-.image-viewer.zoomed .image-viewer-canvas { display: block; }
-.image-viewer.zoomed .image-viewer-canvas img { width: auto; height: auto; max-width: none; max-height: none; margin: auto; cursor: zoom-out; }
+.image-viewer-canvas { height: calc(100% - 68px); overflow: hidden; display: grid; place-items: center; padding: 22px; background: color-mix(in srgb, var(--reader-chrome) 78%, #667 22%); }
+.image-viewer.has-caption .image-viewer-canvas { height: calc(100% - 126px); }
+.image-viewer-canvas img { width: auto; height: auto; max-width: 100%; max-height: 100%; display: block; object-fit: contain; user-select: none; -webkit-user-drag: none; }
 .image-viewer-error { min-height: 180px; display: grid; place-content: center; gap: 8px; text-align: center; }
 .image-viewer-error strong { font: 500 19px/1.2 "Iowan Old Style", Baskerville, Georgia, serif; }
-.image-viewer-error span, .image-viewer-caption, .image-viewer-hint { color: var(--reader-chrome-muted); }
-.image-viewer-caption { position: absolute; left: 20px; right: 20px; bottom: 14px; max-width: min(72ch, calc(100% - 260px)); margin: 0; overflow: hidden; font-size: 10px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.image-viewer-hint { position: absolute; right: 20px; bottom: 14px; margin: 0; font: 500 8px/1.4 "SFMono-Regular", monospace; }
+.image-viewer-error span, .image-viewer-caption { color: var(--reader-chrome-muted); }
+.image-viewer-caption { position: absolute; left: 20px; right: 20px; bottom: 14px; max-width: min(72ch, calc(100% - 40px)); margin: 0; overflow: hidden; font-size: 10px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .embed-viewer {
   width: min(980px, calc(100vw - 32px));
   max-width: none;
@@ -653,10 +650,9 @@ body:has(.onboarding), body:has(.test-screen) {
   .image-viewer h2 { max-width: 32vw; }
   .image-viewer-actions { gap: 4px; }
   .image-viewer-actions button, .image-viewer-actions a { min-height: 44px; padding: 0 9px; }
-  .image-viewer-actions > button:first-child { display: none; }
-  .image-viewer-canvas { height: calc(100% - 96px); padding: 10px; }
-  .image-viewer-caption { max-width: calc(100% - 40px); bottom: 28px; white-space: normal; }
-  .image-viewer-hint { left: 20px; right: auto; bottom: 10px; }
+  .image-viewer-canvas { height: calc(100% - 64px); padding: 10px; }
+  .image-viewer.has-caption .image-viewer-canvas { height: calc(100% - 96px); }
+  .image-viewer-caption { max-width: calc(100% - 40px); bottom: 10px; white-space: normal; }
   .embed-viewer { width: 100vw; border: 0; border-radius: 0; }
   .embed-viewer > header { padding: max(8px, env(safe-area-inset-top)) 8px 8px 14px; }
   .embed-viewer h2 { max-width: 38vw; }
