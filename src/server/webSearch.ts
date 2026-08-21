@@ -33,8 +33,12 @@ function searchApiKey() {
   return requestEnv?.BRAVE_SEARCH_API_KEY ?? workerEnv.BRAVE_SEARCH_API_KEY ?? process.env.BRAVE_SEARCH_API_KEY;
 }
 
-export function webSearchConfigured() {
+export function webSearchAvailable() {
   return true;
+}
+
+export function webSearchProvider() {
+  return searchApiKey() ? "brave" : "wikipedia";
 }
 
 export async function searchWeb(query: string, topic?: string) {

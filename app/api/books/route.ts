@@ -1,17 +1,21 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, sum } from "drizzle-orm";
 import { getReaderIdentity } from "../../chatgpt-auth";
-import { ensureDeletionSchema, getBooksBucket, getDb } from "../../../db";
+import { getBooksBucket, getDb } from "../../../db";
 import { readerBookDeletions, readerBooks } from "../../../db/schema";
 import { bookObjectKey, legacyBooksWithoutHash, mergeBookRecords } from "../../../src/server/library";
 import { canRestoreDeletedBook } from "../../../src/server/deleteBookResources";
+import { InvalidEpubError, validateEpubUpload } from "../../../src/server/epubUpload";
+import { assertContentLength, enforceRateLimit, RequestLimitError, requestLimitResponse } from "../../../src/server/requestLimits";
 
 export const dynamic = "force-dynamic";
 const MAX_EPUB_BYTES = 40 * 1024 * 1024;
+const MAX_UPLOAD_BODY_BYTES = MAX_EPUB_BYTES + 128 * 1024;
+const MAX_BOOKS_PER_USER = 25;
+const MAX_STORAGE_BYTES_PER_USER = 500 * 1024 * 1024;
 
 export async function GET(request: Request) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  await ensureDeletionSchema();
   const books = await getDb().select({
     id: readerBooks.id,
     title: readerBooks.title,
@@ -32,19 +36,57 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  await ensureDeletionSchema();
-  const form = await request.formData();
+  try {
+    assertContentLength(request, MAX_UPLOAD_BODY_BYTES);
+    await enforceRateLimit({ scope: "book-upload", subject: user.userId, limit: 5, windowMs: 60 * 60 * 1000 });
+  } catch (error) {
+    if (error instanceof RequestLimitError) return requestLimitResponse(error);
+    throw error;
+  }
+  const form = await request.formData().catch(() => null);
+  if (!form) return Response.json({ error: "Invalid EPUB upload." }, { status: 400 });
   const file = form.get("file");
   const id = String(form.get("id") ?? "").trim();
   const title = String(form.get("title") ?? "").trim().slice(0, 300);
   const addedAt = String(form.get("addedAt") ?? "").trim();
   const rawContentHash = String(form.get("contentHash") ?? "").trim().toLowerCase();
-  const contentHash = /^[a-f0-9]{64}$/.test(rawContentHash) ? rawContentHash : null;
   if (!(file instanceof File) || !id || id.length > 512 || !title) {
     return Response.json({ error: "Invalid EPUB upload." }, { status: 400 });
   }
-  if (!file.name.toLowerCase().endsWith(".epub") || file.size > MAX_EPUB_BYTES) {
+  if (!file.name.toLowerCase().endsWith(".epub") || file.size <= 0 || file.size > MAX_EPUB_BYTES) {
     return Response.json({ error: "EPUB files must be 40 MB or smaller." }, { status: 400 });
+  }
+
+  let fileBytes: ArrayBuffer;
+  try {
+    fileBytes = await validateEpubUpload(file);
+  } catch (error) {
+    if (error instanceof InvalidEpubError) return Response.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
+  const digest = await crypto.subtle.digest("SHA-256", fileBytes);
+  const contentHash = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  if ((rawContentHash && rawContentHash !== contentHash) || (id.startsWith("sha256:") && id !== `sha256:${contentHash}`)) {
+    return Response.json({ error: "EPUB content hash does not match its identifier." }, { status: 400 });
+  }
+
+  const [[usage], [existingBook]] = await Promise.all([
+    getDb().select({ bookCount: count(), totalBytes: sum(readerBooks.fileSize) }).from(readerBooks)
+      .where(eq(readerBooks.userId, user.userId)),
+    getDb().select({ fileSize: readerBooks.fileSize }).from(readerBooks).where(and(
+      eq(readerBooks.userId, user.userId),
+      eq(readerBooks.id, id),
+    )).limit(1),
+  ]);
+  const nextCount = Number(usage?.bookCount ?? 0) + (existingBook ? 0 : 1);
+  const nextBytes = Number(usage?.totalBytes ?? 0) - (existingBook?.fileSize ?? 0) + file.size;
+  if (nextCount > MAX_BOOKS_PER_USER || nextBytes > MAX_STORAGE_BYTES_PER_USER) {
+    return Response.json({
+      error: "Cloud library limit reached. Remove an EPUB before uploading another.",
+      limits: { books: MAX_BOOKS_PER_USER, bytes: MAX_STORAGE_BYTES_PER_USER },
+    }, { status: 409 });
   }
 
   const now = new Date().toISOString();
@@ -63,7 +105,7 @@ export async function POST(request: Request) {
       }, { status: 409 });
     }
   }
-  await getBooksBucket().put(bookObjectKey(user.userId, id), file.stream(), {
+  await getBooksBucket().put(bookObjectKey(user.userId, id), fileBytes, {
     httpMetadata: { contentType: "application/epub+zip" },
   });
   await getDb().insert(readerBooks).values({
@@ -92,24 +134,22 @@ export async function POST(request: Request) {
     ));
   }
 
-  if (contentHash) {
-    const candidates = await legacyBooksWithoutHash(user.userId, file.size);
-    for (const candidate of candidates) {
-      if (candidate.id === id || candidate.contentHash) continue;
-      const object = await getBooksBucket().get(bookObjectKey(user.userId, candidate.id));
-      if (!object) continue;
-      const digest = await crypto.subtle.digest("SHA-256", await object.arrayBuffer());
-      const candidateHash = [...new Uint8Array(digest)]
-        .map((byte) => byte.toString(16).padStart(2, "0"))
-        .join("");
-      if (candidateHash === contentHash) {
-        await mergeBookRecords(user.userId, id, candidate.id);
-      } else {
-        await getDb().update(readerBooks).set({ contentHash: candidateHash }).where(and(
-          eq(readerBooks.userId, user.userId),
-          eq(readerBooks.id, candidate.id),
-        ));
-      }
+  const candidates = await legacyBooksWithoutHash(user.userId, file.size);
+  for (const candidate of candidates) {
+    if (candidate.id === id || candidate.contentHash) continue;
+    const object = await getBooksBucket().get(bookObjectKey(user.userId, candidate.id));
+    if (!object) continue;
+    const candidateDigest = await crypto.subtle.digest("SHA-256", await object.arrayBuffer());
+    const candidateHash = [...new Uint8Array(candidateDigest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+    if (candidateHash === contentHash) {
+      await mergeBookRecords(user.userId, id, candidate.id);
+    } else {
+      await getDb().update(readerBooks).set({ contentHash: candidateHash }).where(and(
+        eq(readerBooks.userId, user.userId),
+        eq(readerBooks.id, candidate.id),
+      ));
     }
   }
   return Response.json({ id, syncedAt: now });

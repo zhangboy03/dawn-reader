@@ -25,14 +25,15 @@ Updated: 2026-08-21
 - Plain-language `/privacy` page added and linked before sign-in.
 - Runtime dependencies pass `npm audit --omit=dev --audit-level=high`. Two high advisories remain in the build-only vinext/image-size chain and require a separate framework upgrade.
 - Beta D1 schema contains separate reader books, progress, deletion barriers, state, and devices tables.
+- Owner-authorized ChatGPT sign-in completed in the deployed Beta. The authenticated `/reader` first-run path, calibration skip, empty shelf, import entry, device dialog, privacy page, and cloud settings write were observed successfully.
+- The first external Beta is explicitly Web-only. iPhone/iPad delivery and native endpoint work are outside this release scope.
 
 ## Still blocks first external invite
 
-- Authenticated Beta smoke test is paused at ChatGPT consent because continuing shares the owner's name/email with the newly created Beta app.
 - Beta has no AI/search runtime credentials; public secret values are redacted and were not copied.
 - No app-layer per-user AI rate limit, upload count/storage quota, or abuse budget.
 - No account-wide self-service export or delete-all workflow.
-- iOS service URL is hard-wired to public; owner-only Sites access also blocks bearer-only native calls, so Beta is currently Web-only.
+- No visible in-app sign-out entry was found during the authenticated smoke test.
 - No verified external-user onboarding/acceptance session yet.
 - No end-to-end rollback drill or destructive test-account deletion drill yet.
 
@@ -43,10 +44,10 @@ Updated: 2026-08-21
 | Resolved in Beta | BR-001, BR-011, BR-021 code path |
 | Partially resolved | BR-002, BR-013, BR-015, BR-020, BR-024, BR-027, BR-028, BR-029, BR-031 |
 | Open and in scope | BR-003, BR-004, BR-006 through BR-010, BR-012, BR-014, BR-016 through BR-019, BR-022, BR-023, BR-030, BR-032 |
-| Scope-dependent | BR-005, BR-025, BR-026; these are blockers only if the first external Beta includes iPhone/iPad sync |
+| Out of first-user scope | BR-005, BR-025, BR-026; the first external Beta is Web-only |
 
 The detailed evidence and proposed remediations remain in the Pro baseline files. Every item must be rechecked against the current branch before implementation because the baseline predates the fixes listed above.
 
 ## Evidence boundary
 
-Cloud CI, CodeQL, Sites saved versions/deployments, access policy, and D1 table inventory are verified. Authenticated reading flows, AI calls, iOS Beta, real-user acceptance, rollback, and public promotion are not yet verified.
+Cloud CI, CodeQL, Sites saved versions/deployments, access policy, D1 table inventory, authenticated first-run navigation, and the initial cloud settings write are verified. No EPUB/PDF was uploaded during the smoke test. AI calls, publication rendering, destructive account erasure, external-user acceptance, rollback, and public promotion are not yet verified.
