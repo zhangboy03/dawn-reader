@@ -1,6 +1,7 @@
 "use client";
 
 import "./readingEvidence.css";
+import "./selection/autoInstallReadingSelection";
 
 import { lazy, Suspense, useEffect, useState } from "react";
 import { LexTale } from "./components/LexTale";
