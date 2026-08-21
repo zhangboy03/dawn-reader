@@ -1098,15 +1098,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       );
       signalReadingActivity("selection", observationId);
     }
-    if (cfiRange) {
-      try {
-        renditionRef.current?.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
-          fill: "#d7a652",
-          "fill-opacity": "0.46",
-          "mix-blend-mode": "normal",
-        });
-      } catch { /* browser selection remains as fallback */ }
-    }
     const rect = range.getBoundingClientRect();
     const iframe = contents.document.defaultView?.frameElement as HTMLElement | null;
     const frameRect = iframe?.getBoundingClientRect();
@@ -1437,20 +1428,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       const cfiRange = selectedCfiRef.current;
       if (!cfiRange) return;
       try {
-        renderer.rendition.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
-          fill: "#d7a652",
-          "fill-opacity": "0.46",
-          "mix-blend-mode": "normal",
-        });
-      } catch {
-        // The native selection remains the fallback for a malformed range.
-      }
-      try {
         const range = renderer.rendition.getRange(cfiRange) as Range | null;
         const rect = range?.getBoundingClientRect();
         const iframe = range?.startContainer.ownerDocument?.defaultView?.frameElement as HTMLElement | null;
         const iframeRect = iframe?.getBoundingClientRect();
         if (range && rect && iframeRect) {
+          const selection = range.startContainer.ownerDocument.defaultView?.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
           selectedContentsRef.current = renderer.rendition.getContents?.()
             ?.find((contents: any) => contents?.document === range.startContainer.ownerDocument) ?? null;
           setSelectionAnchor({
@@ -1460,7 +1445,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           });
         }
       } catch {
-        // Keep the existing assistance card position if the range cannot be rebuilt.
+        // Keep the existing selection and assistance position if the range cannot be rebuilt.
       }
     };
 
