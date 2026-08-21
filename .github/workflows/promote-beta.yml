@@ -1,0 +1,52 @@
+name: Promote Beta to Public
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-beta-to-public
+  cancel-in-progress: false
+
+jobs:
+  create-promotion-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Create exact Beta promotion patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main beta
+          beta_sha="$(git rev-parse origin/beta)"
+          branch="promote/beta-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          patch="${RUNNER_TEMP}/beta.patch"
+
+          git diff --binary origin/main origin/beta -- . ':(exclude).openai/hosting.json' > "$patch"
+          if [[ ! -s "$patch" ]]; then
+            echo "Beta has no promotable source changes."
+            exit 0
+          fi
+
+          git switch -c "$branch" origin/main
+          git apply --3way --index "$patch"
+          git diff --quiet origin/main -- .openai/hosting.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "promote: beta ${beta_sha} to public"
+          git push --set-upstream origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --draft \
+            --title "Promote tested Beta to public" \
+            --body "Promotes the complete source difference from Beta commit \`${beta_sha}\` while preserving the public Sites project binding. Merge only after public CI and CodeQL pass."

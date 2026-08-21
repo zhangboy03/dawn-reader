@@ -15,14 +15,24 @@ _确认日期：2026-08-21_
 
 ### 小型、可逆的 Web 改动
 
-1. 从最新 `public/main` 建立短期 `codex/*` 分支，在 checkout 中形成最小补丁。
+1. 从最新 `public/beta` 建立短期 `codex/*` 分支，在 checkout 中形成最小补丁。
 2. 不默认启动本机开发服务器、浏览器验收或 Simulator。
 3. 推送分支并建立 PR，以 GitHub Actions 的测试、构建和安全审计为主要门槛。
-4. CI 通过后合并 `main`。
-5. 发布合并后的同一个完整 SHA 到当前 Sites 开发站。
+4. CI 通过后合并长期 `beta` 分支。
+5. 发布合并后的同一个完整 SHA 到私有 Beta Sites 站。
 6. 只在云端检查本次改动对应的关键路径；失败时优先小步修复或回退到上一版本。
 
 本机 checkout 仍用于编辑、解决冲突和检查 diff。Sites 若要求本机生成部署包，可以运行机械性的构建/打包命令，但不再为同一功能重复做本机手工验收。
+
+### Beta 晋级公开站
+
+Beta 与公开站共享源码演进，但 D1、R2、账号、书籍和进度完全隔离。晋级只同步源码和经过审查的迁移，不复制用户数据。
+
+1. 在 Beta 完成目标路径验收后，手动运行 GitHub Actions 的 `Promote Beta to Public`。
+2. Workflow 从 `main` 创建临时 promotion 分支，应用 `main` 与 `beta` 的完整源码差异，但明确排除 `.openai/hosting.json`。
+3. Workflow 建立 draft PR；公开站 CI 与 CodeQL 通过后才可合并。
+4. 合并后发布公开 `main` 的精确 SHA，并保留上一 Sites 版本作为运行时回滚点。
+5. 数据迁移必须向前兼容；运行时回滚不自动执行数据库反向迁移。
 
 ### 需要额外审查的改动
 
