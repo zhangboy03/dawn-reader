@@ -3,7 +3,8 @@ import type { PdfPresentation } from "./pdfPresentation";
 
 const DB_NAME = "dawn-reader-library";
 const STORE_NAME = "books";
-const DB_VERSION = 1;
+const RECENCY_STORE_NAME = "book-recency";
+const DB_VERSION = 2;
 
 export type StoredBook = {
   id: string;
@@ -27,6 +28,11 @@ type EpubPresentation = {
   cover: Blob | null;
 };
 
+type StoredBookRecency = {
+  id: string;
+  lastOpenedAt: string;
+};
+
 export async function publicationContentHash(blob: Blob) {
   const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -40,6 +46,9 @@ function openLibrary() {
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+      if (!request.result.objectStoreNames.contains(RECENCY_STORE_NAME)) {
+        request.result.createObjectStore(RECENCY_STORE_NAME, { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -197,21 +206,36 @@ export function migrateStoredBookRecord(book: StoredBook): StoredBook {
 
 export async function listStoredBooks() {
   const db = await openLibrary();
-  const transaction = db.transaction(STORE_NAME, "readonly");
-  const records = await requestResult(transaction.objectStore(STORE_NAME).getAll()) as StoredBook[];
+  const transaction = db.transaction([STORE_NAME, RECENCY_STORE_NAME], "readonly");
+  const [records, recency] = await Promise.all([
+    requestResult(transaction.objectStore(STORE_NAME).getAll()) as Promise<StoredBook[]>,
+    requestResult(transaction.objectStore(RECENCY_STORE_NAME).getAll()) as Promise<StoredBookRecency[]>,
+  ]);
   db.close();
-  return sortBooksByRecency(records.map(migrateStoredBookRecord));
+  const openedById = new Map(recency.map((entry) => [entry.id, entry.lastOpenedAt]));
+  return sortBooksByRecency(records.map((record) => migrateStoredBookRecord({
+    ...record,
+    lastOpenedAt: openedById.get(record.id) ?? record.lastOpenedAt,
+  })));
 }
 
-export async function markStoredBookOpened(book: StoredBook, openedAt = new Date().toISOString()) {
-  return putStoredBook({ ...book, lastOpenedAt: openedAt, fileSize: book.fileSize ?? book.blob?.size });
+export async function markStoredBookOpened(bookId: string, openedAt = new Date().toISOString()) {
+  const db = await openLibrary();
+  const transaction = db.transaction(RECENCY_STORE_NAME, "readwrite");
+  const finished = transactionFinished(transaction);
+  const record: StoredBookRecency = { id: bookId, lastOpenedAt: openedAt };
+  transaction.objectStore(RECENCY_STORE_NAME).put(record);
+  await finished;
+  db.close();
+  return record;
 }
 
 export async function deleteStoredBook(id: string) {
   const db = await openLibrary();
-  const transaction = db.transaction(STORE_NAME, "readwrite");
+  const transaction = db.transaction([STORE_NAME, RECENCY_STORE_NAME], "readwrite");
   const finished = transactionFinished(transaction);
   transaction.objectStore(STORE_NAME).delete(id);
+  transaction.objectStore(RECENCY_STORE_NAME).delete(id);
   await finished;
   db.close();
 }

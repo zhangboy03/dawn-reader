@@ -82,4 +82,15 @@ describe("Dawn PDF product regression contracts", () => {
     expect(store).toContain('import("./pdfPresentation")');
     expect(store).toContain('format: "pdf"');
   });
+
+  it("QA-PERF-001 keeps full PDF copies and recency writes off the open path", () => {
+    const reader = source("src/components/pdf/PdfReader.tsx");
+    const library = source("src/components/Library.tsx");
+    const store = source("src/lib/bookStore.ts");
+    expect(reader).toContain("createPdfBlobRangeTransport");
+    expect(reader).not.toContain("source.file.arrayBuffer()");
+    expect(reader).toContain("requestIdleCallback");
+    expect(library).not.toContain("await markStoredBookOpened");
+    expect(store).toContain('RECENCY_STORE_NAME = "book-recency"');
+  });
 });

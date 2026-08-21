@@ -21,6 +21,7 @@ import {
   type PdfLocator,
 } from "../../lib/pdfLocator";
 import { createPdfViewerResizeController } from "../../lib/pdfViewerResize";
+import { createPdfBlobRangeTransport, LOCAL_PDF_RANGE_CHUNK_BYTES } from "../../lib/pdfBlobRangeTransport";
 import {
   boundedSelectionContext,
   initialSelectionAssistanceState,
@@ -64,6 +65,35 @@ const MAX_CANVAS_DIMENSION = 8192;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 const LARGE_FILE_BYTES = 100 * 1024 * 1024;
+const SEARCH_DEBOUNCE_MS = 250;
+
+export function pdfSearchStatusLabel(query: string, phase: "idle" | "searching" | "done", current: number, total: number) {
+  if (!query.trim()) return "";
+  if (phase === "searching") return "正在搜索…";
+  return total > 0 ? `${current} / ${total}` : "0 个结果";
+}
+
+type PdfRuntime = {
+  pdfjsLib: typeof import("pdfjs-dist");
+  viewerModule: typeof import("pdfjs-dist/web/pdf_viewer.mjs");
+};
+
+let pdfRuntimePromise: Promise<PdfRuntime> | null = null;
+
+export function preloadPdfRuntime() {
+  if (!pdfRuntimePromise) {
+    pdfRuntimePromise = import("pdfjs-dist").then(async (pdfjsLib) => {
+      // The published viewer bundle reads its core API from this global.
+      (globalThis as typeof globalThis & { pdfjsLib?: typeof pdfjsLib }).pdfjsLib = pdfjsLib;
+      const viewerModule = await import("pdfjs-dist/web/pdf_viewer.mjs");
+      return { pdfjsLib, viewerModule };
+    }).catch((error) => {
+      pdfRuntimePromise = null;
+      throw error;
+    });
+  }
+  return pdfRuntimePromise;
+}
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -124,6 +154,8 @@ export function PdfReader({ source, profile, onClose }: {
   const chineseControllerRef = useRef<AbortController | null>(null);
   const selectionVersionRef = useRef(0);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSearchQueryRef = useRef("");
   const restoredRef = useRef(false);
   const fitRef = useRef<PdfFitMode>("width");
   const scaleRef = useRef(1);
@@ -143,6 +175,7 @@ export function PdfReader({ source, profile, onClose }: {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCount, setSearchCount] = useState({ current: 0, total: 0 });
+  const [searchPhase, setSearchPhase] = useState<"idle" | "searching" | "done">("idle");
   const [noSelectableText, setNoSelectableText] = useState(false);
   const [pageFailures, setPageFailures] = useState<number[]>([]);
   const [notice, setNotice] = useState(() => {
@@ -242,6 +275,9 @@ export function PdfReader({ source, profile, onClose }: {
   useEffect(() => {
     let cancelled = false;
     let localEventBus: any = null;
+    let supplementaryStarted = false;
+    let supplementaryIdleId: number | null = null;
+    let supplementaryTimer: ReturnType<typeof setTimeout> | null = null;
     const listeners: Array<[string, (event: any) => void]> = [];
     const on = (name: string, handler: (event: any) => void) => {
       (localEventBus?.on ?? localEventBus?._on)?.call(localEventBus, name, handler);
@@ -253,11 +289,7 @@ export function PdfReader({ source, profile, onClose }: {
       setFailure(null);
       restoredRef.current = false;
       try {
-        const pdfjsLib = await import("pdfjs-dist");
-        // The published PDF.js viewer bundle reads its core API from this global.
-        // Load the core first; importing both modules in parallel races on PDF.js 6.
-        (globalThis as typeof globalThis & { pdfjsLib?: typeof pdfjsLib }).pdfjsLib = pdfjsLib;
-        const viewerModule = await import("pdfjs-dist/web/pdf_viewer.mjs");
+        const { pdfjsLib, viewerModule } = await preloadPdfRuntime();
         if (cancelled) return;
         pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
         const container = scrollRef.current;
@@ -324,18 +356,50 @@ export function PdfReader({ source, profile, onClose }: {
           if (restoredRef.current) schedulePersist();
         });
         on("textlayerrendered", (event) => renderHighlightsForPage(Math.max(0, (event.pageNumber ?? 1) - 1)));
+        const scheduleSupplementaryWork = (pdfDocument: any) => {
+          if (supplementaryStarted || cancelled) return;
+          supplementaryStarted = true;
+          const run = () => {
+            void (async () => {
+              const rawOutline = await pdfDocument.getOutline().catch(() => null);
+              if (cancelled) return;
+              const normalizedOutline = Array.isArray(rawOutline) ? rawOutline : [];
+              setOutline(normalizedOutline);
+              setSidebarOpen(normalizedOutline.length > 0);
+              const samples = await Promise.all(Array.from({ length: Math.min(3, pdfDocument.numPages) }, async (_, index) => {
+                const page = await pdfDocument.getPage(index + 1);
+                const content = await page.getTextContent({ disableNormalization: false });
+                return content.items.some((item: any) => typeof item.str === "string" && item.str.trim());
+              }));
+              if (!cancelled) setNoSelectableText(samples.length > 0 && samples.every((value) => !value));
+            })();
+          };
+          if ("requestIdleCallback" in window) {
+            supplementaryIdleId = window.requestIdleCallback(run, { timeout: 1_500 });
+          } else {
+            supplementaryTimer = setTimeout(run, 0);
+          }
+        };
+
         on("pagerendered", (event) => {
           const page = event.pageNumber ?? event.source?.id;
           if (event.error && page) setPageFailures((current) => current.includes(page) ? current : [...current, page]);
+          if (pdfDocumentRef.current) scheduleSupplementaryWork(pdfDocumentRef.current);
         });
         on("updatefindmatchescount", (event) => setSearchCount({
           current: event.matchesCount?.current ?? 0,
           total: event.matchesCount?.total ?? 0,
         }));
+        on("updatefindcontrolstate", (event) => {
+          setSearchPhase(event.state === viewerModule.FindState.PENDING ? "searching" : "done");
+        });
 
-        const bytes = new Uint8Array(await source.file.arrayBuffer());
+        const range = createPdfBlobRangeTransport(pdfjsLib.PDFDataRangeTransport, source.file, source.file.name);
         const loadingTask = pdfjsLib.getDocument({
-          data: bytes,
+          range,
+          rangeChunkSize: LOCAL_PDF_RANGE_CHUNK_BYTES,
+          disableStream: true,
+          disableAutoFetch: true,
           cMapUrl: "/pdfjs/cmaps/",
           cMapPacked: true,
           standardFontDataUrl: "/pdfjs/standard_fonts/",
@@ -363,16 +427,6 @@ export function PdfReader({ source, profile, onClose }: {
         linkService.setDocument(pdfDocument, null);
         findController.setDocument(pdfDocument);
         pdfViewer.setDocument(pdfDocument);
-        const rawOutline = await pdfDocument.getOutline().catch(() => null);
-        const normalizedOutline = Array.isArray(rawOutline) ? rawOutline : [];
-        setOutline(normalizedOutline);
-        setSidebarOpen(normalizedOutline.length > 0);
-        const samples = await Promise.all(Array.from({ length: Math.min(3, pdfDocument.numPages) }, async (_, index) => {
-          const page = await pdfDocument.getPage(index + 1);
-          const content = await page.getTextContent({ disableNormalization: false });
-          return content.items.some((item: any) => typeof item.str === "string" && item.str.trim());
-        }));
-        setNoSelectableText(samples.length > 0 && samples.every((value) => !value));
       } catch (error) {
         if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
         setFailure(failureFor(error));
@@ -386,6 +440,9 @@ export function PdfReader({ source, profile, onClose }: {
       englishControllerRef.current?.abort();
       chineseControllerRef.current?.abort();
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      if (supplementaryIdleId !== null) window.cancelIdleCallback(supplementaryIdleId);
+      if (supplementaryTimer) clearTimeout(supplementaryTimer);
       if (restoredRef.current) persistPosition();
       for (const [name, handler] of listeners) localEventBus?._off?.(name, handler);
       pdfViewerRef.current?.cleanup?.();
@@ -671,13 +728,19 @@ export function PdfReader({ source, profile, onClose }: {
     schedulePersist();
   }, [schedulePersist]);
 
-  const executeSearch = useCallback((again = false, backwards = false) => {
+  const executeSearch = useCallback((query: string, again = false, backwards = false) => {
     const eventBus = eventBusRef.current;
-    if (!eventBus || !searchQuery.trim()) return;
+    const normalizedQuery = query.trim();
+    if (!eventBus || !normalizedQuery) return;
+    if (!again) {
+      lastSearchQueryRef.current = normalizedQuery;
+      setSearchCount({ current: 0, total: 0 });
+      setSearchPhase("searching");
+    }
     eventBus.dispatch("find", {
       source: window,
       type: again ? "again" : "",
-      query: searchQuery,
+      query: normalizedQuery,
       phraseSearch: true,
       caseSensitive: false,
       entireWord: false,
@@ -685,7 +748,32 @@ export function PdfReader({ source, profile, onClose }: {
       findPrevious: backwards,
       matchDiacritics: false,
     });
-  }, [searchQuery]);
+  }, []);
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!searchOpen) return;
+    const normalizedQuery = searchQuery.trim();
+    if (!normalizedQuery) {
+      lastSearchQueryRef.current = "";
+      setSearchCount({ current: 0, total: 0 });
+      setSearchPhase("idle");
+      eventBusRef.current?.dispatch("findbarclose", { source: window });
+      return;
+    }
+    setSearchCount({ current: 0, total: 0 });
+    setSearchPhase("searching");
+    searchTimerRef.current = setTimeout(() => executeSearch(normalizedQuery), SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [executeSearch, searchOpen, searchQuery]);
+
+  const closeSearch = useCallback(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    setSearchOpen(false);
+    eventBusRef.current?.dispatch("findbarclose", { source: window });
+  }, []);
 
   const downloadOriginal = useCallback(() => {
     const url = URL.createObjectURL(source.file);
@@ -784,14 +872,18 @@ export function PdfReader({ source, profile, onClose }: {
         aria-label="搜索 PDF 文字"
         onChange={(event) => setSearchQuery(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") executeSearch(searchCount.total > 0, event.shiftKey);
-          if (event.key === "Escape") setSearchOpen(false);
+          if (event.key === "Enter") {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+            const normalizedQuery = searchQuery.trim();
+            executeSearch(normalizedQuery, lastSearchQueryRef.current === normalizedQuery && searchCount.total > 0, event.shiftKey);
+          }
+          if (event.key === "Escape") closeSearch();
         }}
       />
-      <span aria-live="polite">{searchCount.total ? `${searchCount.current} / ${searchCount.total}` : searchQuery ? "0 个结果" : ""}</span>
-      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(true, true)}>上一个</button>
-      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(true, false)}>下一个</button>
-      <button type="button" onClick={() => setSearchOpen(false)} aria-label="关闭搜索">×</button>
+      <span aria-live="polite">{pdfSearchStatusLabel(searchQuery, searchPhase, searchCount.current, searchCount.total)}</span>
+      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(searchQuery, true, true)}>上一个</button>
+      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(searchQuery, true, false)}>下一个</button>
+      <button type="button" onClick={closeSearch} aria-label="关闭搜索">×</button>
     </section>}
 
     <div className={`dawn-pdf-reader-body ${sidebarOpen ? "sidebar-open" : ""}`}>

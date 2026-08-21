@@ -438,10 +438,10 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         throw new Error(format === "pdf" ? "这份 PDF 的本机副本不可用，请重新导入。" : "这本书尚未同步到当前设备。");
       }
       const openedAt = new Date().toISOString();
-      await markStoredBookOpened(localBook, openedAt).catch(() => undefined);
       setStoredBooks((books) => sortBooksByRecency(books.map((candidate) => (
         candidate.id === book.id ? { ...candidate, lastOpenedAt: openedAt } : candidate
       ))));
+      void markStoredBookOpened(localBook.id, openedAt).catch(() => undefined);
       if (format === "pdf") {
         onOpen({ type: "pdf", id: book.id, title: book.title, file });
       } else {
@@ -591,7 +591,17 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
             const modePresentation = assistantModePresentation[assistantMode];
             const menuOpen = assistantMenuBookId === book.id;
             return <article className={`stored-book ${format}`} key={book.id}>
-            <button className="book-open" disabled={openingId === book.id || deletingId === book.id} onClick={() => void openBook(book)}>
+            <button
+              className="book-open"
+              disabled={openingId === book.id || deletingId === book.id}
+              onPointerEnter={() => {
+                if (format === "pdf") void import("./pdf/PdfReader").then((module) => module.preloadPdfRuntime()).catch(() => undefined);
+              }}
+              onFocus={() => {
+                if (format === "pdf") void import("./pdf/PdfReader").then((module) => module.preloadPdfRuntime()).catch(() => undefined);
+              }}
+              onClick={() => void openBook(book)}
+            >
               <BookCover book={book} />
               <div><small>{shelfFormatLabel(book, book.synced)}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
