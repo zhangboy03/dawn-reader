@@ -203,12 +203,12 @@ describe('warm visual and native-range cleanup', () => {
     } });
 
     const root = document.querySelector('#root')!;
-    const controller = installReadingSelectionController(root, { captureGraceMs: 20 });
+    const controller = installReadingSelectionController(root);
     root.dispatchEvent(pointer('pointerdown', 10));
     document.dispatchEvent(pointer('pointermove', 100));
     document.dispatchEvent(pointer('pointerup', 100));
     expect(window.getSelection()?.rangeCount).toBe(1);
-    vi.advanceTimersByTime(21);
+    vi.advanceTimersByTime(0);
     expect(registered.has('dawn-pointer-selection')).toBe(true);
     expect(window.getSelection()?.rangeCount).toBe(0);
     controller.destroy();

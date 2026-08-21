@@ -1101,9 +1101,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     if (cfiRange) {
       try {
         renditionRef.current?.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
-          fill: "#e78349",
-          "fill-opacity": "0.24",
-          "mix-blend-mode": "multiply",
+          fill: "#d7a652",
+          "fill-opacity": "0.46",
+          "mix-blend-mode": "normal",
         });
       } catch { /* browser selection remains as fallback */ }
     }
@@ -1438,9 +1438,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (!cfiRange) return;
       try {
         renderer.rendition.annotations.highlight(cfiRange, {}, undefined, "dawn-selection", {
-          fill: "#e78349",
-          "fill-opacity": "0.24",
-          "mix-blend-mode": "multiply",
+          fill: "#d7a652",
+          "fill-opacity": "0.46",
+          "mix-blend-mode": "normal",
         });
       } catch {
         // The native selection remains the fallback for a malformed range.

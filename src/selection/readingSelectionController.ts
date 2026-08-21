@@ -8,7 +8,9 @@ import { getWordBoundaries } from './wordBoundary';
 const STYLE_ID = 'dawn-word-selection-style';
 const HIGHLIGHT_NAME = 'dawn-pointer-selection';
 const POINTER_MOVE_THRESHOLD = 2;
-const CAPTURE_GRACE_MS = 900;
+// Renderer/AI capture handlers run in the same pointerup event. Handoff on the
+// next task so the visible selection never lingers as a stacked second color.
+const CAPTURE_GRACE_MS = 0;
 const TRANSIENT_HIGHLIGHT_MS = 12_000;
 
 const NON_READING_TARGETS = [
