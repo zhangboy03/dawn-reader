@@ -64,6 +64,13 @@ const MAX_CANVAS_DIMENSION = 8192;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 const LARGE_FILE_BYTES = 100 * 1024 * 1024;
+const SEARCH_DEBOUNCE_MS = 250;
+
+export function pdfSearchStatusLabel(query: string, phase: "idle" | "searching" | "done", current: number, total: number) {
+  if (!query.trim()) return "";
+  if (phase === "searching") return "正在搜索…";
+  return total > 0 ? `${current} / ${total}` : "0 个结果";
+}
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -124,6 +131,8 @@ export function PdfReader({ source, profile, onClose }: {
   const chineseControllerRef = useRef<AbortController | null>(null);
   const selectionVersionRef = useRef(0);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSearchQueryRef = useRef("");
   const restoredRef = useRef(false);
   const fitRef = useRef<PdfFitMode>("width");
   const scaleRef = useRef(1);
@@ -143,6 +152,7 @@ export function PdfReader({ source, profile, onClose }: {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCount, setSearchCount] = useState({ current: 0, total: 0 });
+  const [searchPhase, setSearchPhase] = useState<"idle" | "searching" | "done">("idle");
   const [noSelectableText, setNoSelectableText] = useState(false);
   const [pageFailures, setPageFailures] = useState<number[]>([]);
   const [notice, setNotice] = useState(() => {
@@ -332,6 +342,9 @@ export function PdfReader({ source, profile, onClose }: {
           current: event.matchesCount?.current ?? 0,
           total: event.matchesCount?.total ?? 0,
         }));
+        on("updatefindcontrolstate", (event) => {
+          setSearchPhase(event.state === viewerModule.FindState.PENDING ? "searching" : "done");
+        });
 
         const bytes = new Uint8Array(await source.file.arrayBuffer());
         const loadingTask = pdfjsLib.getDocument({
@@ -386,6 +399,7 @@ export function PdfReader({ source, profile, onClose }: {
       englishControllerRef.current?.abort();
       chineseControllerRef.current?.abort();
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
       if (restoredRef.current) persistPosition();
       for (const [name, handler] of listeners) localEventBus?._off?.(name, handler);
       pdfViewerRef.current?.cleanup?.();
@@ -671,13 +685,19 @@ export function PdfReader({ source, profile, onClose }: {
     schedulePersist();
   }, [schedulePersist]);
 
-  const executeSearch = useCallback((again = false, backwards = false) => {
+  const executeSearch = useCallback((query: string, again = false, backwards = false) => {
     const eventBus = eventBusRef.current;
-    if (!eventBus || !searchQuery.trim()) return;
+    const normalizedQuery = query.trim();
+    if (!eventBus || !normalizedQuery) return;
+    if (!again) {
+      lastSearchQueryRef.current = normalizedQuery;
+      setSearchCount({ current: 0, total: 0 });
+      setSearchPhase("searching");
+    }
     eventBus.dispatch("find", {
       source: window,
       type: again ? "again" : "",
-      query: searchQuery,
+      query: normalizedQuery,
       phraseSearch: true,
       caseSensitive: false,
       entireWord: false,
@@ -685,7 +705,32 @@ export function PdfReader({ source, profile, onClose }: {
       findPrevious: backwards,
       matchDiacritics: false,
     });
-  }, [searchQuery]);
+  }, []);
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!searchOpen) return;
+    const normalizedQuery = searchQuery.trim();
+    if (!normalizedQuery) {
+      lastSearchQueryRef.current = "";
+      setSearchCount({ current: 0, total: 0 });
+      setSearchPhase("idle");
+      eventBusRef.current?.dispatch("findbarclose", { source: window });
+      return;
+    }
+    setSearchCount({ current: 0, total: 0 });
+    setSearchPhase("searching");
+    searchTimerRef.current = setTimeout(() => executeSearch(normalizedQuery), SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [executeSearch, searchOpen, searchQuery]);
+
+  const closeSearch = useCallback(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    setSearchOpen(false);
+    eventBusRef.current?.dispatch("findbarclose", { source: window });
+  }, []);
 
   const downloadOriginal = useCallback(() => {
     const url = URL.createObjectURL(source.file);
@@ -784,14 +829,18 @@ export function PdfReader({ source, profile, onClose }: {
         aria-label="搜索 PDF 文字"
         onChange={(event) => setSearchQuery(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") executeSearch(searchCount.total > 0, event.shiftKey);
-          if (event.key === "Escape") setSearchOpen(false);
+          if (event.key === "Enter") {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+            const normalizedQuery = searchQuery.trim();
+            executeSearch(normalizedQuery, lastSearchQueryRef.current === normalizedQuery && searchCount.total > 0, event.shiftKey);
+          }
+          if (event.key === "Escape") closeSearch();
         }}
       />
-      <span aria-live="polite">{searchCount.total ? `${searchCount.current} / ${searchCount.total}` : searchQuery ? "0 个结果" : ""}</span>
-      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(true, true)}>上一个</button>
-      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(true, false)}>下一个</button>
-      <button type="button" onClick={() => setSearchOpen(false)} aria-label="关闭搜索">×</button>
+      <span aria-live="polite">{pdfSearchStatusLabel(searchQuery, searchPhase, searchCount.current, searchCount.total)}</span>
+      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(searchQuery, true, true)}>上一个</button>
+      <button type="button" disabled={!searchCount.total} onClick={() => executeSearch(searchQuery, true, false)}>下一个</button>
+      <button type="button" onClick={closeSearch} aria-label="关闭搜索">×</button>
     </section>}
 
     <div className={`dawn-pdf-reader-body ${sidebarOpen ? "sidebar-open" : ""}`}>
