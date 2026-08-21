@@ -1,16 +1,22 @@
 import { and, eq } from "drizzle-orm";
 import { getReaderIdentity } from "../../../chatgpt-auth";
-import { ensureDeletionSchema, getBooksBucket, getDb } from "../../../../db";
+import { getBooksBucket, getDb } from "../../../../db";
 import { readerBookDeletions, readerBooks, readingProgress } from "../../../../db/schema";
 import { bookObjectKey } from "../../../../src/server/library";
 import { deleteBookResources } from "../../../../src/server/deleteBookResources";
+import { enforceRateLimit, RequestLimitError, requestLimitResponse } from "../../../../src/server/requestLimits";
 
 export const dynamic = "force-dynamic";
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  await ensureDeletionSchema();
+  try {
+    await enforceRateLimit({ scope: "book-delete", subject: user.userId, limit: 30, windowMs: 60 * 60 * 1000 });
+  } catch (error) {
+    if (error instanceof RequestLimitError) return requestLimitResponse(error);
+    throw error;
+  }
   const { id } = await context.params;
   if (!id || id.length > 512) return Response.json({ error: "Invalid book id." }, { status: 400 });
 

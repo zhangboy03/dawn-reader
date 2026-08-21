@@ -4,6 +4,7 @@ import { getDb } from "../../../../../db";
 import { readingProgress } from "../../../../../db/schema";
 import { bookForUser } from "../../../../../src/server/library";
 import { mergeProgressLocators } from "../../../../../src/server/progressMerge";
+import { enforceRateLimit, readJsonBody, RequestLimitError, requestLimitResponse } from "../../../../../src/server/requestLimits";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +34,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!await bookForUser(user.userId, id)) {
     return Response.json({ error: "Book not found." }, { status: 404 });
   }
-  const input = await request.json() as {
+  let input: {
     cfi?: string | null;
     nativeLocator?: string | null;
     percentage?: number;
     updatedAt?: string;
   };
+  try {
+    await enforceRateLimit({ scope: "reading-progress", subject: user.userId, limit: 600, windowMs: 10 * 60 * 1000 });
+    input = await readJsonBody(request, 16 * 1024);
+  } catch (error) {
+    if (error instanceof RequestLimitError) return requestLimitResponse(error);
+    throw error;
+  }
   if (typeof input.percentage !== "number" || input.percentage < 0 || input.percentage > 100) {
     return Response.json({ error: "Invalid reading position." }, { status: 400 });
   }
