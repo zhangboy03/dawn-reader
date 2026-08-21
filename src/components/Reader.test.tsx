@@ -81,6 +81,9 @@ describe("Reader chrome", () => {
     expect(readerSource).toContain('image.loading = "eager"');
     expect(readerSource).toContain("hasFocus()");
     expect(readerSource).toContain("iframe?.focus({ preventScroll: true })");
+    expect(readerSource).toContain('fill: "#d7a652"');
+    expect(readerSource).toContain('"fill-opacity": "0.46"');
+    expect(readerSource).toContain('"mix-blend-mode": "normal"');
   });
 
   it("uses a dynamic viewport shell without fixing the document body", () => {
