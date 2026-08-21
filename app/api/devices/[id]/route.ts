@@ -2,13 +2,21 @@ import { and, eq, isNull } from "drizzle-orm";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { getDb } from "../../../../db";
 import { readerDevices } from "../../../../db/schema";
+import { enforceRateLimit, readJsonBody, RequestLimitError, requestLimitResponse } from "../../../../src/server/requestLimits";
 
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  const input = await request.json().catch(() => ({})) as { label?: unknown };
+  let input: { label?: unknown };
+  try {
+    await enforceRateLimit({ scope: "device-update", subject: user.userId, limit: 60, windowMs: 60 * 60 * 1000 });
+    input = await readJsonBody(request, 2 * 1024);
+  } catch (error) {
+    if (error instanceof RequestLimitError) return requestLimitResponse(error);
+    throw error;
+  }
   const label = typeof input.label === "string" ? input.label.trim().slice(0, 80) : "";
   if (!label) return Response.json({ error: "请输入设备名称。" }, { status: 400 });
   const { id } = await params;
@@ -29,6 +37,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
+  try {
+    await enforceRateLimit({ scope: "device-revoke", subject: user.userId, limit: 30, windowMs: 60 * 60 * 1000 });
+  } catch (error) {
+    if (error instanceof RequestLimitError) return requestLimitResponse(error);
+    throw error;
+  }
   const { id } = await params;
   await getDb().update(readerDevices).set({ revokedAt: new Date().toISOString() }).where(and(
     eq(readerDevices.id, id),

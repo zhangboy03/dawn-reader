@@ -33,6 +33,7 @@ import {
   type BookAssistantMode,
 } from "../lib/bookAssistantMode";
 import { DeviceSync } from "./DeviceSync";
+import { AccountDataControls } from "./AccountDataControls";
 
 export type BookSource = (
   { type: "text"; title: string; text: string }
@@ -52,6 +53,7 @@ type AiHealth = {
   configured: boolean;
   pendingProvider: string | null;
   searchConfigured?: boolean;
+  searchProvider?: "brave" | "wikipedia";
 };
 
 type ShelfBook = StoredBook & {
@@ -185,7 +187,11 @@ function AiStatus() {
 
   const waitingForKey = !health?.configured && health?.pendingProvider === "deepseek";
   return <aside className={`ai-status ${testState === "passed" ? "verified" : ""}`} aria-label="AI 连接状态">
-    <div><strong>AI</strong><span>{message || (waitingForKey ? "等待 API 密钥" : health?.model ? `${health.provider} · ${health.model}${health.searchConfigured ? " · 可联网" : ""}` : "离线")}</span></div>
+    <div><strong>AI</strong><span>{message || (waitingForKey
+      ? `等待 API 密钥 · 搜索 ${health?.searchProvider === "brave" ? "Brave" : "Wikipedia"}`
+      : health?.model
+        ? `${health.provider} · ${health.model} · 搜索 ${health.searchProvider === "brave" ? "Brave" : "Wikipedia"}`
+        : "离线")}</span></div>
     <button disabled={!health?.configured || testState === "testing"} onClick={testConnection}>
       {testState === "testing" ? "测试中…" : testState === "passed" ? "重测" : "测试"}
     </button>
@@ -529,6 +535,7 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         {onOpenHistory && <button className="history-link" type="button" onClick={onOpenHistory}>
           <span aria-hidden="true">↗</span> 查阅记录
         </button>}
+        <AccountDataControls />
         <DeviceSync />
         <div className="profile-control">
         <button className="profile-chip" onClick={() => setProfileOpen((open) => !open)}><i /> {profile.band}</button>

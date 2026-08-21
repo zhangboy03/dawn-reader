@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getReaderIdentity } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { readerState } from "../../../db/schema";
+import { enforceRateLimit, readJsonBody, RequestLimitError, requestLimitResponse } from "../../../src/server/requestLimits";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,14 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  const input = await request.json() as { profile?: unknown; settings?: unknown };
+  let input: { profile?: unknown; settings?: unknown };
+  try {
+    await enforceRateLimit({ scope: "reader-state", subject: user.userId, limit: 120, windowMs: 10 * 60 * 1000 });
+    input = await readJsonBody(request, 64 * 1024);
+  } catch (error) {
+    if (error instanceof RequestLimitError) return requestLimitResponse(error);
+    throw error;
+  }
   const now = new Date().toISOString();
   const [existing] = await getDb().select().from(readerState)
     .where(eq(readerState.userId, user.userId)).limit(1);

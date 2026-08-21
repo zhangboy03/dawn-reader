@@ -51,3 +51,14 @@ export const readerDevices = sqliteTable("reader_devices", {
 }, (table) => [
   index("idx_reader_devices_user_created").on(table.userId, table.createdAt),
 ]);
+
+export const readerRateLimits = sqliteTable("reader_rate_limits", {
+  scope: text("scope").notNull(),
+  subject: text("subject").notNull(),
+  windowStart: integer("window_start").notNull(),
+  count: integer("count").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scope, table.subject, table.windowStart] }),
+  index("idx_reader_rate_limits_updated").on(table.updatedAt),
+]);

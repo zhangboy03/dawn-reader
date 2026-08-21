@@ -1,4 +1,7 @@
 import { env } from "cloudflare:workers";
+import { plainTextFromSearchSnippet } from "./searchText";
+
+export { plainTextFromSearchSnippet } from "./searchText";
 
 type SearchEnv = { BRAVE_SEARCH_API_KEY?: string };
 
@@ -30,8 +33,12 @@ function searchApiKey() {
   return requestEnv?.BRAVE_SEARCH_API_KEY ?? workerEnv.BRAVE_SEARCH_API_KEY ?? process.env.BRAVE_SEARCH_API_KEY;
 }
 
-export function webSearchConfigured() {
+export function webSearchAvailable() {
   return true;
+}
+
+export function webSearchProvider() {
+  return searchApiKey() ? "brave" : "wikipedia";
 }
 
 export async function searchWeb(query: string, topic?: string) {
@@ -53,12 +60,19 @@ export async function searchWeb(query: string, topic?: string) {
   if (!response.ok) throw new Error(`Search returned ${response.status}.`);
 
   const data = await response.json() as { web?: { results?: BraveResult[] } };
-  const results = (data.web?.results ?? []).map((result) => ({ ...result, url: safeHttpUrl(result.url) ?? undefined }))
+  const results = (data.web?.results ?? []).map((result) => ({
+    ...result,
+    title: plainTextFromSearchSnippet(result.title),
+    url: safeHttpUrl(result.url) ?? undefined,
+  }))
     .filter((result) => result.title && result.url)
     .slice(0, 5);
   const sources = results.map((result) => ({ title: result.title!, url: result.url! }));
   const context = results.map((result, index) => {
-    const snippets = [result.description, ...(result.extra_snippets ?? [])].filter(Boolean).join(" ");
+    const snippets = [result.description, ...(result.extra_snippets ?? [])]
+      .map(plainTextFromSearchSnippet)
+      .filter(Boolean)
+      .join(" ");
     return `[${index + 1}] ${result.title}\nURL: ${result.url}\n${snippets}`;
   }).join("\n\n");
   return { context: context || "No relevant web results were found.", sources };
@@ -66,16 +80,6 @@ export async function searchWeb(query: string, topic?: string) {
 
 function containsCjk(text: string) {
   return /[\u3400-\u9fff]/u.test(text);
-}
-
-function stripMarkup(text: string | null | undefined) {
-  return (text ?? "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 async function searchWikipedia(query: string) {
@@ -101,8 +105,8 @@ async function searchWikipedia(query: string) {
   }));
   const context = results.map((result, index) => [
     `[${index + 1}] ${result.title}`,
-    result.description ? `Description: ${stripMarkup(result.description)}` : "",
-    stripMarkup(result.excerpt),
+    result.description ? `Description: ${plainTextFromSearchSnippet(result.description)}` : "",
+    plainTextFromSearchSnippet(result.excerpt),
     `URL: ${sources[index].url}`,
   ].filter(Boolean).join("\n")).join("\n\n");
   return { context: context || "No relevant reference results were found.", sources };

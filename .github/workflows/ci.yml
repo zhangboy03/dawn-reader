@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
   pull_request:
 
 permissions:
@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -22,3 +22,30 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+      - name: Package exact Sites deployment artifact
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          test -f dist/server/index.js
+          test -f dist/.openai/hosting.json
+          mkdir -p dist/.openai/drizzle
+          cp drizzle/*.sql dist/.openai/drizzle/
+          find drizzle -maxdepth 1 -type f -name '*.sql' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > dist/.openai/migration-sha256.txt
+          tar -czf dawn-reader-site.tar.gz dist
+          tar -tzf dawn-reader-site.tar.gz > dawn-reader-site.entries
+          grep -qx 'dist/server/index.js' dawn-reader-site.entries
+          grep -qx 'dist/.openai/hosting.json' dawn-reader-site.entries
+          grep -qx 'dist/.openai/drizzle/0003_web_beta_safety.sql' dawn-reader-site.entries
+          sha256sum dawn-reader-site.tar.gz > dawn-reader-site.tar.gz.sha256
+      - name: Upload exact Sites deployment artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sites-${{ github.sha }}
+          path: |
+            dawn-reader-site.tar.gz
+            dawn-reader-site.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
