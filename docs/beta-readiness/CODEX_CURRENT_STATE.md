@@ -27,25 +27,32 @@ Updated: 2026-08-21
 - Beta D1 schema contains separate reader books, progress, deletion barriers, state, and devices tables.
 - Owner-authorized ChatGPT sign-in completed in the deployed Beta. The authenticated `/reader` first-run path, calibration skip, empty shelf, import entry, device dialog, privacy page, and cloud settings write were observed successfully.
 - The first external Beta is explicitly Web-only. iPhone/iPad delivery and native endpoint work are outside this release scope.
+- Runtime DDL was removed. The exact cloud-built Sites archive now contains immutable SQL migrations and hashes; Beta deployment applied the new rate-limit table. A failed remote-build migration attempt was detected and immediately rolled back to the prior verified version before the corrected cloud artifact was deployed.
+- Persistent account-level budgets now protect AI, reader-state, progress, upload, deletion, export, and device mutations. The deployed state-write path created the expected redacted rate-limit row.
+- EPUB uploads now require a bounded ZIP container with safe paths, supported compression, required EPUB structure, no encrypted/script entries, bounded expansion, and a server-computed SHA-256 matching the identifier. Cloud storage is limited to 25 EPUBs and 500 MB per account.
+- The AI status distinguishes the disclosed Wikipedia fallback from Brave configuration; AI remains disabled because Beta has no provider credential.
+- A self-service data dialog provides a streaming ZIP export, explicit cloud-account erasure with a typed confirmation, local Dawn-data clearing, and platform-owned sign-out. The empty-account export produced authenticated downloads and consumed the expected two-per-hour budget; the destructive erasure has not been executed.
+- A small-team incident response runbook covers environment identification, containment, credential/device revocation, rollback, reconciliation, communication, and recovery gates.
 
 ## Still blocks first external invite
 
-- Beta has no AI runtime credentials; public secret values are redacted and were not copied. Wikipedia remains the disclosed search fallback.
-- Newly implemented rate limits, EPUB validation, storage quotas, account export/delete, and sign-out must pass cloud gates and destructive Beta acceptance before they move to the verified list.
+- Beta AI is intentionally disabled; enabling it later requires a separate provider credential, cost budget, and AI acceptance pass.
+- Account erasure passed cloud build/security gates but has not undergone the destructive live Beta drill.
 - No verified external-user onboarding/acceptance session yet.
-- No end-to-end rollback drill or destructive test-account deletion drill yet.
+- Application rollback is proven; D1/R2 backup and disposable-resource restore remain unproven.
 
 ## Pro findings disposition
 
 | Status | Findings |
 | --- | --- |
-| Resolved in Beta | BR-001, BR-011, BR-021 code path |
-| Partially resolved | BR-002, BR-013, BR-015, BR-020, BR-024, BR-027, BR-028, BR-029, BR-031 |
-| Open and in scope | BR-003, BR-004, BR-006 through BR-010, BR-012, BR-014, BR-016 through BR-019, BR-022, BR-023, BR-030, BR-032 |
+| Resolved in Beta | BR-001, BR-002 application path, BR-011, BR-019, BR-021 |
+| Partially resolved | BR-003, BR-006 through BR-010, BR-013 through BR-017, BR-020, BR-022 through BR-024, BR-027 through BR-032 |
+| Open and in scope | BR-004; destructive acceptance portion of BR-014; minimum external-user onboarding and accessibility checks |
+| Disabled for this release | BR-018; Beta AI has no provider credential |
 | Out of first-user scope | BR-005, BR-025, BR-026; the first external Beta is Web-only |
 
 The detailed evidence and proposed remediations remain in the Pro baseline files. Every item must be rechecked against the current branch before implementation because the baseline predates the fixes listed above.
 
 ## Evidence boundary
 
-Cloud CI, CodeQL, Sites saved versions/deployments, access policy, D1 table inventory, authenticated first-run navigation, and the initial cloud settings write are verified. No EPUB/PDF was uploaded during the smoke test. AI calls, publication rendering, destructive account erasure, external-user acceptance, rollback, and public promotion are not yet verified.
+Cloud CI, CodeQL, exact cloud artifact creation, Sites deployment/rollback, access policy, migration application, D1 table inventory, authenticated first-run navigation, state writes, export initiation, typed erasure gating, and the empty-account UI are verified. No EPUB/PDF was uploaded during the smoke test. AI calls, publication rendering, destructive account erasure, D1/R2 restore, external-user acceptance, and public promotion are not yet verified.
