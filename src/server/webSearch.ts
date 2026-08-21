@@ -68,12 +68,14 @@ function containsCjk(text: string) {
   return /[\u3400-\u9fff]/u.test(text);
 }
 
-function stripMarkup(text: string | null | undefined) {
+export function plainTextFromSearchSnippet(text: string | null | undefined) {
   return (text ?? "")
-    .replace(/<[^>]+>/g, "")
     .replace(/&quot;/g, "\"")
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&")
+    // Decode only the entities above, then remove markup last so an entity
+    // replacement cannot create a new tag after sanitization.
+    .replace(/<[^>]+>/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -101,8 +103,8 @@ async function searchWikipedia(query: string) {
   }));
   const context = results.map((result, index) => [
     `[${index + 1}] ${result.title}`,
-    result.description ? `Description: ${stripMarkup(result.description)}` : "",
-    stripMarkup(result.excerpt),
+    result.description ? `Description: ${plainTextFromSearchSnippet(result.description)}` : "",
+    plainTextFromSearchSnippet(result.excerpt),
     `URL: ${sources[index].url}`,
   ].filter(Boolean).join("\n")).join("\n\n");
   return { context: context || "No relevant reference results were found.", sources };
