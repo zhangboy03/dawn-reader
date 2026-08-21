@@ -10,5 +10,6 @@ describe("LandingPage", () => {
     expect(markup).toContain(
       '<span class="landing-headline-line landing-headline-line-accent">读下去。</span>',
     );
+    expect(markup).toContain('<a href="/privacy">隐私</a>');
   });
 });
