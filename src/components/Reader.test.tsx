@@ -106,6 +106,7 @@ describe("Reader chrome", () => {
     expect(readerSource).toContain('"min-width": "32px !important"');
     expect(readerSource).toContain('"min-height": "30px !important"');
     expect(readerSource).toContain('"font-size": ".56em !important"');
+    expect(css).toMatch(/\.image-viewer-canvas\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/s);
     expect(css).toMatch(/\.image-viewer-canvas img\s*\{[^}]*max-width:\s*100%;[^}]*max-height:\s*100%;/s);
     expect(css).not.toContain(".image-viewer-hint");
     expect(css).not.toContain(".image-viewer.zoomed");
