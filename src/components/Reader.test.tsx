@@ -93,6 +93,23 @@ describe("Reader chrome", () => {
     expect(css).not.toMatch(/body\.reader-active\s*\{[^}]*position:\s*fixed/);
   });
 
+  it("keeps the figure viewer fitted and removes instructional chrome", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const readerSource = readFileSync("src/components/Reader.tsx", "utf8");
+
+    expect(readerSource).not.toContain("imageZoomed");
+    expect(readerSource).not.toContain("查看原始尺寸");
+    expect(readerSource).not.toContain("适应窗口");
+    expect(readerSource).not.toContain("点击留白关闭");
+    expect(readerSource).not.toContain("可拖动或双指缩放");
+    expect(readerSource).toContain('"min-width": "32px !important"');
+    expect(readerSource).toContain('"min-height": "30px !important"');
+    expect(readerSource).toContain('"font-size": ".56em !important"');
+    expect(css).toMatch(/\.image-viewer-canvas img\s*\{[^}]*max-width:\s*100%;[^}]*max-height:\s*100%;/s);
+    expect(css).not.toContain(".image-viewer-hint");
+    expect(css).not.toContain(".image-viewer.zoomed");
+  });
+
   it("closes settings on the outside press without passing it to the reading surface", () => {
     render(<Reader
       source={{
