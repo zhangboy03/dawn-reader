@@ -4,7 +4,9 @@ import {
   credentialFingerprint,
   DAWN_SESSION_COOKIE,
   isSameOriginMutation,
+  normalizeInviteCode,
   randomCredential,
+  randomInviteCode,
   safeReturnPath,
   sessionCookie,
 } from "./dawnAuthPrimitives";
@@ -17,10 +19,13 @@ describe("Dawn invitation and session primitives", () => {
   });
 
   it("generates high-entropy single-purpose credentials", () => {
-    const first = randomCredential("dawn_inv_");
-    const second = randomCredential("dawn_inv_");
-    expect(first).toMatch(/^dawn_inv_[A-Za-z0-9_-]{43}$/);
+    const first = randomInviteCode();
+    const second = randomInviteCode();
+    expect(first).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{2}$/);
     expect(second).not.toBe(first);
+    expect(normalizeInviteCode(first.toLowerCase())).toHaveLength(10);
+    expect(normalizeInviteCode("IO01-AAAA-AA")).toBeNull();
+    expect(randomCredential("dawn_sess_")).toMatch(/^dawn_sess_[A-Za-z0-9_-]{43}$/);
   });
 
   it("fingerprints credentials without storing the raw value", async () => {

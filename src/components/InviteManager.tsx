@@ -65,7 +65,7 @@ export function InviteManager({ initialOverview }: { initialOverview: OwnerInvit
 
       <section className="invite-panel">
         <h2>创建第一位测试者</h2>
-        <p>这里只创建账号和一次性邀请码，不发送邮件。你确认后再把邀请码单独交给测试者。</p>
+        <p>这里只创建账号和一次性短码，不发送邮件。短码使用 10 个防混淆字符，你确认后再单独交给测试者。</p>
         <form onSubmit={createInvite} className="invite-create-form">
           <label>测试者备注<input name="displayName" required maxLength={120} placeholder="例如：香港测试者 1" /></label>
           <label>联系邮箱（可选）<input name="contactEmail" type="email" maxLength={320} autoComplete="off" /></label>

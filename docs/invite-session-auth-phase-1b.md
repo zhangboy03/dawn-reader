@@ -14,7 +14,7 @@ The external path is:
 
 ```text
 pre-created reader account
-  -> one-time 256-bit invitation
+  -> one-time 10-character invitation
   -> atomic consume
   -> independent 256-bit Dawn session
   -> HttpOnly, Secure, SameSite=Lax host-only cookie
@@ -24,15 +24,17 @@ pre-created reader account
 
 - Raw invitation and session secrets are never stored in D1. D1 stores HMAC
   SHA-256 fingerprints plus a key version.
-- The invitation expires after 72 hours, is single use, and is not accepted as
-  a session credential.
+- The human-entered invitation carries 50 bits of entropy, excludes ambiguous
+  characters, is protected by per-network and global online attempt budgets,
+  expires after 72 hours, is single use, and is not accepted as a session
+  credential.
 - Invitation redemption inserts the session and consumes the invitation in one
   D1 batch. Exactly one insert and one update must succeed.
 - Redeem attempts use a 15-minute HMAC-pseudonymized network bucket with a
   uniform failure response. Raw network addresses are not stored.
 - Browser mutations require an exact same-origin `Origin` header. Native device
   bearer requests retain their separate authorization path.
-- Dawn sessions have a seven-day idle expiry and 30-day absolute expiry.
+- Dawn sessions have a 30-day idle expiry and 180-day absolute expiry.
 - Account `auth_epoch`, per-session revocation and invitation revocation provide
   independent kill switches.
 - The owner admin APIs require both the internal owner role and the already

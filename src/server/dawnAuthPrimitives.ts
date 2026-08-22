@@ -1,5 +1,6 @@
 export const DAWN_SESSION_COOKIE = "__Host-dawn_session";
-const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_ABSOLUTE_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 type RuntimeAuthEnv = { DAWN_AUTH_HMAC_KEY?: string };
 
@@ -18,10 +19,23 @@ function base64Url(bytes: Uint8Array) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-export function randomCredential(prefix: "dawn_inv_" | "dawn_sess_") {
+export function randomCredential(prefix: "dawn_sess_") {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return `${prefix}${base64Url(bytes)}`;
+}
+
+export function randomInviteCode() {
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  const value = [...bytes].map((byte) => INVITE_ALPHABET[byte & 31]).join("");
+  return `${value.slice(0, 4)}-${value.slice(4, 8)}-${value.slice(8)}`;
+}
+
+export function normalizeInviteCode(value: string) {
+  const normalized = value.trim().toUpperCase().replace(/[\s-]/g, "");
+  if (normalized.length !== 10 || [...normalized].some((character) => !INVITE_ALPHABET.includes(character))) return null;
+  return normalized;
 }
 
 export async function credentialFingerprint(value: string) {

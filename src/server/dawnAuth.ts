@@ -12,7 +12,9 @@ import {
   cookieValue,
   credentialFingerprint,
   isSameOriginMutation,
+  normalizeInviteCode,
   randomCredential,
+  randomInviteCode,
 } from "./dawnAuthPrimitives";
 
 export {
@@ -24,10 +26,11 @@ export {
 
 const AUTH_KEY_VERSION = 1;
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
-const SESSION_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_IDLE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_ABSOLUTE_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 const REDEEM_WINDOW_MS = 15 * 60 * 1000;
 const REDEEM_ATTEMPT_LIMIT = 10;
+const GLOBAL_REDEEM_ATTEMPT_LIMIT = 200;
 
 export type DawnSessionIdentity = ResolvedReaderAccount & {
   role: "owner" | "reader";
@@ -73,8 +76,7 @@ async function requestBucket(request: Request) {
   return credentialFingerprint(`redeem-rate:${forwarded}`);
 }
 
-async function redeemAttemptAllowed(request: Request) {
-  const key = await requestBucket(request);
+async function incrementRedeemBucket(key: string, limit: number) {
   const now = new Date();
   const nowIso = now.toISOString();
   const cutoff = new Date(now.getTime() - REDEEM_WINDOW_MS).toISOString();
@@ -87,7 +89,15 @@ async function redeemAttemptAllowed(request: Request) {
       updated_at = excluded.updated_at
     RETURNING count
   `).bind(key, nowIso, cutoff).first<{ count: number }>();
-  return Boolean(row && row.count <= REDEEM_ATTEMPT_LIMIT);
+  return Boolean(row && row.count <= limit);
+}
+
+async function redeemAttemptAllowed(request: Request) {
+  const [networkAllowed, globalAllowed] = await Promise.all([
+    incrementRedeemBucket(await requestBucket(request), REDEEM_ATTEMPT_LIMIT),
+    incrementRedeemBucket(await credentialFingerprint("redeem-rate:global"), GLOBAL_REDEEM_ATTEMPT_LIMIT),
+  ]);
+  return networkAllowed && globalAllowed;
 }
 
 export type InviteCreation = {
@@ -107,8 +117,10 @@ export async function createReaderInvite(input: {
   if (!displayName) throw new Error("A tester label is required.");
   const accountId = crypto.randomUUID();
   const inviteId = crypto.randomUUID();
-  const code = randomCredential("dawn_inv_");
-  const fingerprint = await credentialFingerprint(code);
+  const code = randomInviteCode();
+  const normalizedCode = normalizeInviteCode(code);
+  if (!normalizedCode) throw new Error("Unable to create invite code.");
+  const fingerprint = await credentialFingerprint(normalizedCode);
   const now = new Date();
   const nowIso = now.toISOString();
   const expiresAt = new Date(now.getTime() + INVITE_TTL_MS).toISOString();
@@ -136,8 +148,8 @@ function resultChanges(result: D1Result<unknown>) {
 
 export async function redeemReaderInvite(request: Request, code: string) {
   if (!isSameOriginMutation(request) || !await redeemAttemptAllowed(request)) return null;
-  const normalized = code.trim();
-  if (!normalized.startsWith("dawn_inv_") || normalized.length > 120) return null;
+  const normalized = normalizeInviteCode(code);
+  if (!normalized) return null;
   const inviteFingerprint = await credentialFingerprint(normalized);
   const sessionSecret = randomCredential("dawn_sess_");
   const sessionFingerprint = await credentialFingerprint(sessionSecret);

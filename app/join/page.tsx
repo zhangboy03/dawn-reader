@@ -17,7 +17,7 @@ export default async function JoinPage({ searchParams }: {
         <form method="post" action="/api/auth/redeem" className="join-form">
           <input type="hidden" name="return_to" value={returnTo} />
           <label htmlFor="invite-code">一次性邀请码</label>
-          <input id="invite-code" name="code" type="text" required autoComplete="one-time-code" maxLength={120} spellCheck={false} />
+          <input id="invite-code" name="code" type="text" required autoComplete="one-time-code" inputMode="text" maxLength={20} spellCheck={false} placeholder="ABCD-EFGH-JK" />
           <button type="submit">进入 Dawn Reader</button>
         </form>
         <p className="join-footnote">Dawn 不会把邀请码当作长期密码，也不会把它保存在浏览器地址中。</p>
