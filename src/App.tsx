@@ -183,6 +183,8 @@ export default function App({ accountContext }: { accountContext: ClientAccountC
   }
   return <Library
     profile={profile}
+    role={accountContext.role}
+    authKind={accountContext.authKind}
     onProfileChange={changeProfile}
     onRetest={() => setScreen("calibrate")}
     onOpenHistory={() => setScreen("history")}

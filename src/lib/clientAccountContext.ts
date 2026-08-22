@@ -2,6 +2,8 @@ export type ClientAccountContext = {
   accountId: string;
   environment: "beta" | "public";
   canClaimLegacyLocalData: boolean;
+  role: "owner" | "reader";
+  authKind: "chatgpt" | "dawn_session" | "device";
 };
 
 let activeContext: ClientAccountContext | null = null;

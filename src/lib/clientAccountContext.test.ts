@@ -26,12 +26,12 @@ describe("account-scoped browser storage", () => {
   });
 
   it("keeps identical keys and database names separate for two accounts", () => {
-    configureClientAccountContext({ accountId: "account-a", environment: "beta", canClaimLegacyLocalData: false });
+    configureClientAccountContext({ accountId: "account-a", environment: "beta", canClaimLegacyLocalData: false, role: "reader", authKind: "dawn_session" });
     const accountA = readerLocalStorage(storage);
     accountA.setItem("dawn-reader-progress:book", "A");
     const databaseA = accountDatabaseName("dawn-reader-library", 3);
 
-    configureClientAccountContext({ accountId: "account-b", environment: "beta", canClaimLegacyLocalData: false });
+    configureClientAccountContext({ accountId: "account-b", environment: "beta", canClaimLegacyLocalData: false, role: "reader", authKind: "dawn_session" });
     const accountB = readerLocalStorage(storage);
     accountB.setItem("dawn-reader-progress:book", "B");
     const databaseB = accountDatabaseName("dawn-reader-library", 3);
@@ -44,7 +44,7 @@ describe("account-scoped browser storage", () => {
   it("copies legacy keys only after an explicit claim and leaves the source intact", () => {
     storage.setItem("dawn-reader-profile", JSON.stringify({ preset: "balanced" }));
     storage.setItem("unrelated", "keep");
-    configureClientAccountContext({ accountId: "owner", environment: "beta", canClaimLegacyLocalData: true });
+    configureClientAccountContext({ accountId: "owner", environment: "beta", canClaimLegacyLocalData: true, role: "owner", authKind: "chatgpt" });
 
     expect(readerLocalStorage(storage).getItem("dawn-reader-profile")).toBeNull();
     expect(claimLegacyLocalStorage(storage)).toBe(1);

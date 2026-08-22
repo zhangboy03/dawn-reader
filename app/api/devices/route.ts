@@ -1,14 +1,14 @@
 import { desc, eq, isNull, and } from "drizzle-orm";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getReaderIdentity } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { readerDevices } from "../../../db/schema";
 import { createDeviceToken, displayDeviceToken, hashDeviceToken } from "../../../src/server/deviceAuth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
+export async function GET(request: Request) {
+  const user = await getReaderIdentity(request);
+  if (!user || user.kind === "device") return Response.json({ error: "Sign in required." }, { status: 401 });
   const devices = await getDb().select({
     id: readerDevices.id,
     label: readerDevices.label,
@@ -22,8 +22,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
+  const user = await getReaderIdentity(request);
+  if (!user || user.kind === "device") return Response.json({ error: "Sign in required." }, { status: 401 });
   const input = await request.json().catch(() => ({})) as { label?: unknown };
   const label = typeof input.label === "string" && input.label.trim()
     ? input.label.trim().slice(0, 80)

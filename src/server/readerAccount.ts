@@ -1,16 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import {
   readerAccounts,
-  readerBookDeletions,
-  readerBooks,
-  readerDevices,
   readerIdentities,
-  readerState,
-  readingProgress,
 } from "../../db/schema";
 import { getDb } from "../../db";
 
 export type ReaderEnvironment = "beta" | "public";
+export type ReaderRole = "owner" | "reader";
 
 export type ExternalReaderIdentity = {
   issuer: "openai_sites";
@@ -22,24 +18,13 @@ export type ResolvedReaderAccount = {
   accountId: string;
   environment: ReaderEnvironment;
   canClaimLegacyLocalData: boolean;
+  role: ReaderRole;
 };
 
-function currentEnvironment(): ReaderEnvironment {
+export function currentEnvironment(): ReaderEnvironment {
   const runtime = globalThis.__DAWN_READER_ENV__ as { DAWN_ENVIRONMENT?: string } | undefined;
   const value = runtime?.DAWN_ENVIRONMENT ?? process.env.DAWN_ENVIRONMENT;
   return value === "public" ? "public" : "beta";
-}
-
-async function legacySubjectOwnsData(subject: string) {
-  const db = getDb();
-  const [state, book, progress, deletion, device] = await Promise.all([
-    db.select({ id: readerState.userId }).from(readerState).where(eq(readerState.userId, subject)).limit(1),
-    db.select({ id: readerBooks.id }).from(readerBooks).where(eq(readerBooks.userId, subject)).limit(1),
-    db.select({ id: readingProgress.bookId }).from(readingProgress).where(eq(readingProgress.userId, subject)).limit(1),
-    db.select({ id: readerBookDeletions.bookId }).from(readerBookDeletions).where(eq(readerBookDeletions.userId, subject)).limit(1),
-    db.select({ id: readerDevices.id }).from(readerDevices).where(eq(readerDevices.userId, subject)).limit(1),
-  ]);
-  return Boolean(state.length || book.length || progress.length || deletion.length || device.length);
 }
 
 async function accountById(accountId: string) {
@@ -49,11 +34,16 @@ async function accountById(accountId: string) {
   return account;
 }
 
-export async function ensureReaderAccount(accountId: string, legacyLocalClaimAllowed = false) {
+export async function ensureReaderAccount(
+  accountId: string,
+  legacyLocalClaimAllowed = false,
+  role: ReaderRole = "reader",
+) {
   const now = new Date().toISOString();
   await getDb().insert(readerAccounts).values({
     id: accountId,
     status: "active",
+    role,
     legacyLocalClaimAllowed,
     createdAt: now,
     updatedAt: now,
@@ -90,16 +80,21 @@ export async function resolveReaderAccount(identity: ExternalReaderIdentity): Pr
       accountId: account.id,
       environment,
       canClaimLegacyLocalData: account.legacyLocalClaimAllowed,
+      role: account.role === "owner" ? "owner" : "reader",
     };
   }
 
   // The owner-only compatibility floor deliberately keeps the existing opaque
   // data owner key. Ownership now resolves through reader_identities, so later
   // providers can link to this account without re-keying every D1/R2 record.
-  const accountId = identity.subject;
   const [anyAccount] = await db.select({ id: readerAccounts.id }).from(readerAccounts).limit(1);
-  const canClaimLegacyLocalData = !anyAccount || await legacySubjectOwnsData(identity.subject);
-  const account = await ensureReaderAccount(accountId, canClaimLegacyLocalData);
+  // After the owner bootstrap exists, an arbitrary ChatGPT user visiting the
+  // public Site must not silently become a Dawn account. New readers enter
+  // only through a pre-created invitation or a later approved provider.
+  if (anyAccount) return null;
+  const accountId = identity.subject;
+  const canClaimLegacyLocalData = true;
+  const account = await ensureReaderAccount(accountId, canClaimLegacyLocalData, canClaimLegacyLocalData ? "owner" : "reader");
   if (!account) return null;
 
   const now = new Date().toISOString();
@@ -126,6 +121,7 @@ export async function resolveReaderAccount(identity: ExternalReaderIdentity): Pr
     accountId: resolvedAccount.id,
     environment,
     canClaimLegacyLocalData: resolvedAccount.legacyLocalClaimAllowed,
+    role: resolvedAccount.role === "owner" ? "owner" : "reader",
   };
 }
 
@@ -136,5 +132,6 @@ export async function resolveDeviceReaderAccount(accountId: string): Promise<Res
     accountId: account.id,
     environment: currentEnvironment(),
     canClaimLegacyLocalData: false,
+    role: account.role === "owner" ? "owner" : "reader",
   };
 }

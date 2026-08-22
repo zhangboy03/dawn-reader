@@ -199,6 +199,39 @@ body:has(.onboarding), body:has(.test-screen) {
 .legacy-data-actions button { min-height: 48px; border: 1px solid #172126; border-radius: 10px; background: #172126; color: white; font: inherit; font-weight: 650; cursor: pointer; }
 .legacy-data-actions button.secondary { background: transparent; color: #172126; }
 .legacy-data-actions button:disabled { cursor: wait; opacity: .58; }
+.join-shell, .invite-admin-shell { min-height: 100dvh; padding: clamp(24px, 6vw, 72px); color: #172126; background: #f5f1e8; }
+.join-shell { display: grid; place-items: center; }
+.join-card { width: min(620px, 100%); padding: clamp(30px, 6vw, 58px); border: 1px solid #b8afa0; border-radius: 18px; background: #fffdf8; box-shadow: 0 18px 55px rgb(28 35 38 / 9%); }
+.join-eyebrow, .invite-admin-header p { margin: 0 0 12px; color: #68797f; font: 700 10px/1.2 "SFMono-Regular", monospace; letter-spacing: .14em; text-transform: uppercase; }
+.join-card h1, .invite-admin-header h1 { margin: 0 0 18px; font: 560 clamp(34px, 6vw, 58px)/1.05 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.04em; }
+.join-card > p { line-height: 1.75; }
+.join-form { display: grid; gap: 12px; margin-top: 28px; }
+.join-form label, .invite-create-form label { display: grid; gap: 7px; color: #4f6167; font-size: 12px; font-weight: 650; }
+.join-form input, .invite-create-form input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid #aeb8b6; border-radius: 9px; color: #172126; background: #fff; font: 500 14px/1.4 "SFMono-Regular", monospace; }
+.join-form button, .invite-create-form button, .invite-secret button { min-height: 48px; padding: 0 18px; border: 1px solid #172126; border-radius: 9px; color: #fff; background: #172126; font: inherit; font-weight: 700; }
+.join-error, .invite-error { padding: 12px 14px; border-left: 3px solid #a54c3d; color: #8f3f34; background: #f5e9e4; }
+.join-footnote { color: #718086; font-size: 12px; }
+.invite-admin-shell { max-width: 980px; margin: 0 auto; }
+.invite-admin-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.invite-admin-header a, .account-link, .logout-form button { min-height: 40px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid #9faeaf; border-radius: 8px; color: #405158; background: transparent; font-size: 11px; text-decoration: none; }
+.invite-panel { margin: 0 0 20px; padding: clamp(22px, 4vw, 34px); border: 1px solid #c5bdb0; border-radius: 14px; background: #fffdf8; }
+.invite-panel h2 { margin: 0 0 8px; font: 560 28px/1.1 "Iowan Old Style", Baskerville, Georgia, serif; }
+.invite-panel > p { color: #66777d; line-height: 1.65; }
+.invite-create-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; margin-top: 22px; }
+.invite-secret { display: grid; gap: 12px; margin-top: 24px; padding: 18px; border: 1px solid #9eb3a7; border-radius: 10px; background: #edf4ef; }
+.invite-secret code { padding: 12px; overflow-wrap: anywhere; border-radius: 7px; color: #183128; background: #dceae1; font-size: 13px; }
+.invite-secret button { justify-self: start; }
+.invite-list { display: grid; gap: 8px; margin-top: 18px; }
+.invite-list article { min-height: 64px; display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto auto; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #ddd6ca; }
+.invite-list article:last-child { border-bottom: 0; }
+.invite-list article span, .invite-list article small { color: #718086; }
+.invite-list article button { min-height: 36px; padding: 0 10px; border: 1px solid #ad7969; border-radius: 7px; color: #8f3f34; background: transparent; }
+.logout-form { margin: 0; }
+@media (max-width: 760px) {
+  .invite-create-form { grid-template-columns: 1fr; }
+  .invite-list article { grid-template-columns: 1fr auto; }
+  .invite-list article span, .invite-list article small { grid-column: 1; }
+}
 .topbar, .reader-topbar { display: flex; align-items: center; justify-content: space-between; }
 .topbar { height: 72px; position: relative; z-index: 20; padding: 0 7vw; border-bottom: 1px solid var(--line); background: rgba(237, 241, 239, .94); backdrop-filter: blur(14px); }
 .brand-lockup { display: flex; align-items: center; gap: 10px; }
