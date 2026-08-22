@@ -147,7 +147,7 @@
 }
 
 .selection-assist-actions .reader-pronunciation-action,
-.selection-assist-actions .reader-chinese-detail-action {
+.selection-assist-surface button.reader-chinese-detail-action {
   position: relative;
   min-height: 30px;
   height: 30px;
@@ -156,7 +156,7 @@
 }
 
 .selection-assist-actions .reader-pronunciation-action::after,
-.selection-assist-actions .reader-chinese-detail-action::after {
+.selection-assist-surface button.reader-chinese-detail-action::after {
   content: "";
   position: absolute;
   inset: -7px 0;
@@ -199,7 +199,7 @@
   border-radius: 0 50% 50% 0;
 }
 
-.selection-assist-actions .reader-chinese-detail-action {
+.selection-assist-surface button.reader-chinese-detail-action {
   min-width: 0;
   padding: 0 8px;
   font-size: 9px;
@@ -306,26 +306,16 @@
   margin-bottom: 8px;
 }
 
-.selection-assist-surface .rewrite-drilldown > header > div {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 7px;
-}
-
 .selection-assist-surface .rewrite-drilldown > header small {
   color: var(--selection-assist-muted);
   font-size: 9px;
   letter-spacing: .07em;
 }
 
-.selection-assist-surface .rewrite-drilldown > header strong {
-  color: var(--selection-assist-accent-strong);
-  font-size: 10px;
-}
-
-.selection-assist-surface .rewrite-drilldown > header button {
-  min-height: 32px;
+.selection-assist-surface .rewrite-drilldown > header .rewrite-drilldown-chinese-action {
+  /* Match the top action rail: close (44) + gap (5) + header inset (6)
+     minus the body inset (16). Mobile uses 44 + 5 + 5 - 15 too. */
+  margin-right: 39px;
 }
 
 .selection-assist-surface .rewrite-drilldown-selection {
