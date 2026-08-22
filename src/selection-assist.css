@@ -70,6 +70,13 @@
   padding: 4px 6px 4px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--selection-assist-line) 76%, transparent);
   background: color-mix(in srgb, var(--selection-assist-background) 94%, var(--selection-assist-line));
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.selection-assist-surface[data-dragging="true"] .selection-assist-header {
+  cursor: grabbing;
 }
 
 .selection-assist-header > strong {
@@ -86,6 +93,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
+  cursor: default;
 }
 
 .selection-assist-actions button,

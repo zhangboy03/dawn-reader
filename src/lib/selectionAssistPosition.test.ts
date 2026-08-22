@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SelectionAssistAnchor } from "./selectionAssistAnchor";
 import {
+  clampSelectionAssistDragPosition,
   selectionAssistPosition,
   selectionAssistPositionEqual,
   visualViewportRect,
@@ -29,6 +30,23 @@ function place(input: Partial<Parameters<typeof selectionAssistPosition>[0]> = {
 }
 
 describe("selectionAssistPosition", () => {
+  it("lets a dragged surface use the whole safe viewport without becoming unreachable", () => {
+    const viewport = { left: 0, top: 0, width: 1000, height: 700 };
+    const safeArea = { left: 0, top: 64, right: 1000, bottom: 680 };
+    expect(clampSelectionAssistDragPosition({
+      position: { left: 2000, top: 2000 },
+      surface: { width: 420, height: 240 },
+      viewport,
+      safeArea,
+    })).toEqual({ left: 568, top: 428 });
+    expect(clampSelectionAssistDragPosition({
+      position: { left: -200, top: -200 },
+      surface: { width: 420, height: 240 },
+      viewport,
+      safeArea,
+    })).toEqual({ left: 12, top: 76 });
+  });
+
   it("places a useful card below when the preferred upper side cannot meet its useful height", () => {
     const result = place({
       anchor: anchor(460, 220),

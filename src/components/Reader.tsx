@@ -2731,6 +2731,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       getEventTargets={readerAssistEventTargets}
       returnFocus={() => readingStageRef.current}
       layoutKey={assistLayoutKey}
+      dragResetKey={`${selected}:${selectionAnchor.focusRect.left}:${selectionAnchor.focusRect.top}:${currentHref}`}
       maximumHeight={source.assistantMode === "ask" ? 620 : 440}
       minimumUsefulHeight={source.assistantMode === "ask" ? 260 : 164}
       footer={source.assistantMode === "ask" ? <form className="chat-compose" onSubmit={submitQuestion}>

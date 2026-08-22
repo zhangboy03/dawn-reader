@@ -104,6 +104,36 @@ describe("SelectionAssistSurface", () => {
     expect(textarea).toHaveFocus();
   });
 
+  it("drags from header chrome, clamps to visible bounds, and leaves actions clickable", () => {
+    Object.assign(window.visualViewport!, { width: 1000, height: 700 });
+    const onAction = vi.fn();
+    render(<SelectionAssistSurface
+      title="简明英文"
+      ariaLabel="所选文字辅助"
+      actions={<button type="button" onClick={onAction}>中文</button>}
+      onDismiss={() => undefined}
+      getAnchor={() => anchor}
+      getBoundary={() => ({ left: 0, top: 64, right: 1000, bottom: 680 })}
+    ><p>Result</p></SelectionAssistSurface>);
+
+    const dialog = screen.getByRole("dialog", { name: "简明英文" });
+    const header = dialog.querySelector<HTMLElement>("[data-selection-assist-drag-handle]")!;
+    vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 420, bottom: 240, width: 420, height: 240,
+      x: 0, y: 0, toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(header, { pointerId: 11, pointerType: "mouse", button: 0, clientX: 200, clientY: 100 });
+    fireEvent.pointerMove(header, { pointerId: 11, pointerType: "mouse", clientX: 2000, clientY: 2000 });
+    expect(dialog).toHaveAttribute("data-position-mode", "manual");
+    expect(dialog).toHaveStyle({ left: "568px", top: "428px" });
+    fireEvent.pointerUp(header, { pointerId: 11, pointerType: "mouse", clientX: 2000, clientY: 2000 });
+    expect(dialog).not.toHaveAttribute("data-dragging");
+
+    fireEvent.click(screen.getByRole("button", { name: "中文" }));
+    expect(onAction).toHaveBeenCalledOnce();
+  });
+
 
   it("does not leave an invisible reader-blocking layer when no current anchor is visible", () => {
     const { container } = render(<SelectionAssistSurface
