@@ -7,7 +7,7 @@ describe("book assistant mode", () => {
 
   beforeEach(() => {
     values.clear();
-    configureClientAccountContext({ accountId: "test-account", environment: "beta", canClaimLegacyLocalData: false });
+    configureClientAccountContext({ accountId: "test-account", environment: "beta", canClaimLegacyLocalData: false, role: "reader", authKind: "dawn_session" });
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),

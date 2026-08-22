@@ -1,9 +1,9 @@
 import { aiConfig } from "../../../src/server/ai";
 import { webSearchConfigured } from "../../../src/server/webSearch";
-import { isAuthorizedReaderRequest } from "../../chatgpt-auth";
+import { getReaderIdentity } from "../../chatgpt-auth";
 
-export async function GET() {
-  if (!await isAuthorizedReaderRequest()) {
+export async function GET(request: Request) {
+  if (!await getReaderIdentity(request)) {
     return Response.json({ error: "Sign in required." }, { status: 401 });
   }
   const config = aiConfig();

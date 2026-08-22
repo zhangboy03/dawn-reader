@@ -1,9 +1,9 @@
 import { rewriteSelection, type RewriteInput } from "../../../src/server/ai";
-import { isAuthorizedReaderRequest } from "../../chatgpt-auth";
+import { getReaderIdentity } from "../../chatgpt-auth";
 
 export async function POST(request: Request) {
   try {
-    if (!await isAuthorizedReaderRequest()) {
+    if (!await getReaderIdentity(request)) {
       return Response.json({ error: "Sign in required." }, { status: 401 });
     }
     const result = await rewriteSelection(await request.json() as RewriteInput);

@@ -37,6 +37,12 @@ export function getDb() {
   return drizzle(binding, { schema });
 }
 
+export function getDatabaseBinding() {
+  const binding = runtimeBinding<D1Database>("DB");
+  if (!binding) throw new Error("Database binding is unavailable.");
+  return binding;
+}
+
 export function getBooksBucket() {
   const binding = runtimeBinding<R2Bucket>("BOOKS");
   if (!binding) throw new Error("Book storage binding is unavailable.");

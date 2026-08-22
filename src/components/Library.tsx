@@ -220,8 +220,10 @@ function mergeShelf(local: StoredBook[], cloud: CloudBook[]): ShelfBook[] {
   return sortBooksByRecency(merged);
 }
 
-export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHistory }: {
+export function Library({ profile, role, authKind, onOpen, onRetest, onProfileChange, onOpenHistory }: {
   profile: ReaderProfile;
+  role: "owner" | "reader";
+  authKind: "chatgpt" | "dawn_session" | "device";
   onOpen: (source: PublicationSource) => void;
   onRetest: () => void;
   onProfileChange: (profile: ReaderProfile) => void;
@@ -511,10 +513,12 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
     <header className="topbar">
       <div className="brand-lockup"><div className="brand">Dawn Reader</div><span className={`sync-mark ${syncState}`}>{syncLabel}</span></div>
       <div className="topbar-actions">
+        {role === "owner" && authKind === "chatgpt" && <a className="account-link" href="/admin/invites">邀请管理</a>}
         {onOpenHistory && <button className="history-link" type="button" onClick={onOpenHistory}>
           <span aria-hidden="true">↗</span> 查阅记录
         </button>}
         <DeviceSync />
+        {authKind === "dawn_session" && <form method="post" action="/api/auth/logout" className="logout-form"><button type="submit">退出</button></form>}
         <div className="profile-control">
         <button className="profile-chip" onClick={() => setProfileOpen((open) => !open)}><i /> {profile.band}</button>
         {profileOpen && <div className="profile-menu">
