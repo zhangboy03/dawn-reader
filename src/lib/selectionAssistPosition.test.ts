@@ -55,6 +55,30 @@ describe("selectionAssistPosition", () => {
     expect(result).toMatchObject({ placement: "below", strategy: "adjacent", top: 256, maxHeight: 372 });
   });
 
+  it("places the card outside the connected multi-line selection instead of covering earlier selected lines", () => {
+    const multiLine = anchor(460, 120);
+    multiLine.rects = [
+      multiLine.focusRect,
+      { left: 420, top: 150, right: 720, bottom: 174, width: 300, height: 24 },
+      { left: 420, top: 180, right: 650, bottom: 204, width: 230, height: 24 },
+    ];
+    const result = place({
+      anchor: multiLine,
+      popover: { width: 390, naturalHeight: 120 },
+    });
+    expect(result).toMatchObject({ placement: "below", top: 216 });
+  });
+
+  it("does not let a disconnected column fragment pull the card away from the endpoint block", () => {
+    const endpoint = anchor(640, 120, 240, 20);
+    endpoint.rects = [
+      endpoint.focusRect,
+      { left: 80, top: 520, right: 360, bottom: 540, width: 280, height: 20 },
+    ];
+    const result = place({ anchor: endpoint, popover: { width: 390, naturalHeight: 120 } });
+    expect(result).toMatchObject({ placement: "below", top: 152 });
+  });
+
   it("keeps an actual multicolumn endpoint anchor above instead of using the disconnected union", () => {
     const endpoint = anchor(640, 88, 280, 20);
     const result = place({

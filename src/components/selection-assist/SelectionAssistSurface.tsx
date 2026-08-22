@@ -40,6 +40,7 @@ type SelectionAssistSurfaceProps = {
   preferredSide?: "above" | "below" | "auto";
   focusOnOpen?: boolean;
   closeLabel?: string;
+  bodyEmpty?: boolean;
 };
 
 function focusableElements(root: HTMLElement) {
@@ -71,6 +72,7 @@ export function SelectionAssistSurface({
   preferredSide = "auto",
   focusOnOpen = false,
   closeLabel = "关闭解释",
+  bodyEmpty = false,
 }: SelectionAssistSurfaceProps) {
   const titleId = useId();
   const returnTargetRef = useRef<HTMLElement | null>(null);
@@ -283,6 +285,7 @@ export function SelectionAssistSurface({
       data-strategy={position?.strategy}
       data-position-mode={manualPosition ? "manual" : "auto"}
       data-dragging={dragging || undefined}
+      data-body-empty={bodyEmpty || undefined}
       onPointerDown={containInternalPointer}
       onPointerUp={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}

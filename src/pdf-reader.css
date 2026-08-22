@@ -160,11 +160,6 @@
 .dawn-pdf-zoom-group button + button { margin-left: -1px; }
 .dawn-pdf-zoom-group > button:not(.dawn-pdf-fit) { width: 34px; padding: 0; font-size: 16px; font-weight: 400; }
 .dawn-pdf-fit { min-width: 78px; white-space: nowrap; }
-.dawn-pdf-assistant-toggle { width: 44px; min-width: 44px; padding: 0 !important; color: var(--pdf-muted); border-color: var(--pdf-line); background: var(--pdf-surface); }
-.dawn-pdf-assistant-toggle > span { font: 650 10px/1 "Avenir Next", Avenir, sans-serif; }
-.dawn-pdf-assistant-toggle:hover,
-.dawn-pdf-assistant-toggle[data-mode="ask"] { border-color: var(--pdf-rust-strong); color: var(--pdf-rust-strong); }
-.dawn-pdf-assistant-slot { width: 44px; height: 36px; flex: none; visibility: hidden; }
 .dawn-pdf-appearance-toggle { display: inline-grid; width: 38px; place-items: center; padding: 0 !important; }
 .dawn-pdf-appearance-icon {
   width: 18px;
@@ -420,11 +415,6 @@
   .dawn-pdf-sidebar-toggle::after { content: "目录"; font-size: 10px; }
   .dawn-pdf-toolbar-title { max-width: 42vw; }
   .dawn-pdf-notices { bottom: 10px; width: calc(100% - 20px); }
-}
-
-@media (max-width: 520px) {
-  .dawn-pdf-zoom-group > button:not(.dawn-pdf-fit) { display: none; }
-  .dawn-pdf-fit { min-width: 58px; border-radius: 8px !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

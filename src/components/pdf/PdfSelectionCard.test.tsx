@@ -49,7 +49,7 @@ describe("PDF selection card", () => {
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
-      onModeToggle={() => undefined}
+      onModeChange={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -68,7 +68,7 @@ describe("PDF selection card", () => {
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
-      onModeToggle={() => undefined}
+      onModeChange={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -90,7 +90,7 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
-      onModeToggle={() => undefined}
+      onModeChange={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -104,7 +104,7 @@ describe("PDF selection card", () => {
 
   it("keeps question mode quiet until the reader types and never repeats the selected passage", () => {
     const onSubmit = vi.fn();
-    const onModeToggle = vi.fn();
+    const onModeChange = vi.fn();
     const { rerender } = render(<PdfSelectionCard
       anchor={anchor}
       mode="ask"
@@ -114,20 +114,20 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
-      onModeToggle={onModeToggle}
+      onModeChange={onModeChange}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
       onClose={() => undefined}
     />);
 
-    expect(screen.getByRole("dialog", { name: "AI 提问" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "AI 提问" })).toHaveAttribute("data-body-empty", "true");
     expect(screen.getByPlaceholderText("输入你想问的问题…")).toBeInTheDocument();
     expect(screen.queryByText("选中")).not.toBeInTheDocument();
     expect(screen.queryByText("局部上下文")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" }));
-    expect(onModeToggle).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "划线后使用英文改写" }));
+    expect(onModeChange).toHaveBeenCalledWith("rewrite");
 
     rerender(<PdfSelectionCard
       anchor={anchor}
@@ -138,7 +138,7 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
-      onModeToggle={onModeToggle}
+      onModeChange={onModeChange}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
@@ -162,7 +162,7 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
-      onModeToggle={onModeToggle}
+      onModeChange={onModeChange}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
@@ -170,6 +170,7 @@ describe("PDF selection card", () => {
     />);
     expect(screen.getByText("问题")).toBeInTheDocument();
     expect(screen.getByText("回答")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "AI 提问" })).not.toHaveAttribute("data-body-empty");
     expect(screen.getByRole("navigation", { name: "来源" })).toContainElement(screen.getByRole("link", { name: "[1] Primary source" }));
   });
 });

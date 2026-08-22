@@ -51,7 +51,6 @@ import type {
   SelectionChatSource,
   SelectionChatState,
 } from "../selection-assist/SelectionChat";
-import { AssistantModeToggle } from "../AssistantModeToggle";
 import { PdfSelectionCard, type SelectionCardAnchor } from "./PdfSelectionCard";
 import "../../pdf-reader.css";
 
@@ -911,8 +910,8 @@ export function PdfReader({ source, profile, onClose }: {
     }
   }, [chatMessages, chatState, selection, source.title]);
 
-  const toggleAssistantMode = useCallback(() => {
-    const next: BookAssistantMode = assistantMode === "rewrite" ? "ask" : "rewrite";
+  const changeAssistantMode = useCallback((next: BookAssistantMode) => {
+    if (next === assistantMode) return;
     setAssistantMode(next);
     saveBookAssistantMode(source.id, next);
     setAppearanceOpen(false);
@@ -1101,9 +1100,6 @@ export function PdfReader({ source, profile, onClose }: {
           <button type="button" className="dawn-pdf-fit" title={scaleLabel} aria-label={`当前缩放：${scaleLabel}`} onClick={() => setViewerFit(fit === "width" ? "page" : "width")}>{fit === "page" ? "适合页面" : "适合宽度"}</button>
           <button type="button" aria-label="放大" disabled={scale >= MAX_SCALE && fit === "custom"} onClick={() => zoom(1.1)}>＋</button>
         </div>
-        {selection
-          ? <span className="dawn-pdf-assistant-slot" aria-hidden="true" />
-          : <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="dawn-pdf-assistant-toggle" />}
         <button
           ref={appearanceToggleRef}
           type="button"
@@ -1236,7 +1232,7 @@ export function PdfReader({ source, profile, onClose }: {
       onHighlight={addHighlight}
       onChinese={() => void requestChinese()}
       onRetryEnglish={() => void requestEnglish(selection, selectionVersionRef.current)}
-      onModeToggle={toggleAssistantMode}
+      onModeChange={changeAssistantMode}
       onChatDraftChange={setChatDraft}
       onChatSubmit={() => void sendQuestion(chatDraft)}
       onChatRetry={() => {
