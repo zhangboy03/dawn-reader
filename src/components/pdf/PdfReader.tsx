@@ -2,12 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import type { ReaderProfile } from "../../lib/storage";
-import {
-  loadPdfAppearanceExperiment,
-  pdfAppearancePageFilter,
-  savePdfAppearanceExperiment,
-  type PdfAppearanceExperiment,
-} from "../../lib/pdfAppearanceExperiment";
+import { loadLegacyPdfAppearanceTheme, pdfAppearancePageFilter, pdfAppearanceTone } from "../../lib/pdfAppearance";
+import { loadReaderSettings, saveReaderSettings, type ReaderSettings, type ReaderTheme } from "../../lib/readerSettings";
+import { saveCloudState } from "../../lib/cloudSync";
 import {
   DAWN_YELLOW,
   addPdfHighlight,
@@ -203,6 +200,8 @@ export function PdfReader({ source, profile, onClose }: {
   const fitRef = useRef<PdfFitMode>("width");
   const scaleRef = useRef(1);
   const sidecarRef = useRef<PdfHighlightSidecar>(loadPdfHighlightSidecar(source.id));
+  const legacyPdfThemeRef = useRef<ReaderTheme | null | undefined>(undefined);
+  if (legacyPdfThemeRef.current === undefined) legacyPdfThemeRef.current = loadLegacyPdfAppearanceTheme();
 
   const [status, setStatus] = useState<"loading" | "password" | "ready" | "error">("loading");
   const [failure, setFailure] = useState<LoadFailure | null>(null);
@@ -233,7 +232,12 @@ export function PdfReader({ source, profile, onClose }: {
   const [highlightState, setHighlightState] = useState<{ phase: "idle" | "saving" | "saved" | "error"; message: string }>({ phase: "idle", message: "" });
   const [sidecar, setSidecar] = useState(sidecarRef.current);
   const [activeHighlight, setActiveHighlight] = useState<{ id: string; left: number; top: number } | null>(null);
-  const [appearance, setAppearance] = useState<PdfAppearanceExperiment>(loadPdfAppearanceExperiment);
+  const [readerSettings, setReaderSettings] = useState<ReaderSettings>(() => {
+    const current = loadReaderSettings();
+    const legacyTheme = legacyPdfThemeRef.current;
+    legacyPdfThemeRef.current = null;
+    return legacyTheme ? { ...current, theme: legacyTheme } : current;
+  });
   const [appearanceOpen, setAppearanceOpen] = useState(false);
 
   useEffect(() => { sidecarRef.current = sidecar; }, [sidecar]);
@@ -241,10 +245,11 @@ export function PdfReader({ source, profile, onClose }: {
   useEffect(() => { scaleRef.current = scale; }, [scale]);
   useEffect(() => { setPageInput(String(pageNumber)); }, [pageNumber]);
 
-  const updateAppearance = useCallback((patch: Partial<PdfAppearanceExperiment>) => {
-    setAppearance((current) => {
-      const next = { ...current, ...patch };
-      try { savePdfAppearanceExperiment(next); } catch { /* Keep the visible experiment usable. */ }
+  const updatePdfTheme = useCallback((theme: ReaderTheme) => {
+    setReaderSettings((current) => {
+      const next = { ...current, theme };
+      saveReaderSettings(next);
+      void saveCloudState({ settings: next }).catch(() => undefined);
       return next;
     });
   }, []);
@@ -939,14 +944,13 @@ export function PdfReader({ source, profile, onClose }: {
 
   const scaleLabel = fit === "custom" ? `${Math.round(scale * 100)}%` : fit === "width" ? "适合宽度" : "适合页面";
   const failurePagesLabel = useMemo(() => [...pageFailures].sort((a, b) => a - b).join("、"), [pageFailures]);
-  const selectionAssistTheme = appearance.tone === "original" ? "paper" : appearance.tone === "warm" ? "sepia" : "night";
+  const appearanceTone = pdfAppearanceTone(readerSettings.theme);
 
   return <main
     data-dawn-reading-surface="pdf"
-    data-pdf-appearance={appearance.tone}
-    data-pdf-treatment={appearance.treatment}
-    className={`dawn-pdf-reader-shell reader-theme-${selectionAssistTheme}`}
-    style={{ "--pdf-page-filter": pdfAppearancePageFilter(appearance) } as CSSProperties}
+    data-pdf-appearance={appearanceTone}
+    className={`dawn-pdf-reader-shell reader-theme-${readerSettings.theme}`}
+    style={{ "--pdf-page-filter": pdfAppearancePageFilter(readerSettings.theme) } as CSSProperties}
   >
     <header className="dawn-pdf-toolbar" aria-label="PDF 工具栏">
       <div className="dawn-pdf-toolbar-group dawn-pdf-toolbar-start">
@@ -982,7 +986,7 @@ export function PdfReader({ source, profile, onClose }: {
         <button
           type="button"
           className="dawn-pdf-appearance-toggle"
-          aria-label="PDF 外观对比"
+          aria-label="PDF 阅读外观"
           aria-expanded={appearanceOpen}
           onClick={() => {
             setSearchOpen(false);
@@ -1001,33 +1005,27 @@ export function PdfReader({ source, profile, onClose }: {
       <button
         type="button"
         className="dawn-pdf-appearance-backdrop"
-        aria-label="关闭 PDF 外观对比"
+        aria-label="关闭 PDF 阅读外观"
         onClick={() => setAppearanceOpen(false)}
       />
-      <section className="dawn-pdf-appearance-panel" role="dialog" aria-modal="true" aria-label="PDF 外观对比">
-        <div className="dawn-pdf-appearance-row treatment" role="group" aria-label="处理方式">
-          <small>处理</small>
-          {(["surroundings", "page"] as const).map((treatment) => <button
+      <section
+        className="dawn-pdf-appearance-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="PDF 阅读外观"
+        aria-description="暖纸和夜读只改变屏幕显示，不会修改 PDF 文件。"
+      >
+        <div className="dawn-pdf-appearance-row tones" role="group" aria-label="纸色">
+          <small>纸色</small>
+          {(["paper", "sepia", "night"] as const).map((theme) => <button
             type="button"
-            key={treatment}
-            aria-pressed={appearance.treatment === treatment}
-            onClick={() => updateAppearance({ treatment })}
-          >{treatment === "surroundings" ? "环境" : "页面"}</button>)}
-        </div>
-        <div className="dawn-pdf-appearance-row tones" role="group" aria-label="显示色调">
-          <small>色调</small>
-          {(["original", "warm", "night"] as const).map((tone) => <button
-            type="button"
-            className={`dawn-pdf-tone-dot tone-${tone}`}
-            aria-label={{ original: "原色", warm: "暖纸", night: "夜读" }[tone]}
-            aria-pressed={appearance.tone === tone}
-            key={tone}
-            onClick={() => updateAppearance({ tone })}
+            className={`dawn-pdf-tone-dot tone-${pdfAppearanceTone(theme)}`}
+            aria-label={{ paper: "原色", sepia: "暖纸", night: "夜读" }[theme]}
+            aria-pressed={readerSettings.theme === theme}
+            key={theme}
+            onClick={() => updatePdfTheme(theme)}
           />)}
         </div>
-        <p>{appearance.treatment === "surroundings"
-          ? "只改变页面周围，PDF 保持原样。"
-          : "暖纸和夜读会调整屏幕显示，不修改 PDF 文件；原色可一键还原。"}</p>
       </section>
     </div>}
 
