@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Reader } from "./Reader";
 import { configureClientAccountContext } from "../lib/clientAccountContext";
@@ -52,10 +52,29 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
 });
 
 describe("Reader chrome", () => {
+  it("changes the selection action with one reader-level button", () => {
+    render(<Reader
+      source={{
+        type: "text",
+        title: "Two quiet modes",
+        text: "A paragraph that can be rewritten or discussed.",
+        assistantMode: "rewrite",
+      }}
+      profile={profile}
+      onClose={() => undefined}
+    />);
+
+    const rewrite = screen.getByRole("button", { name: "划线后：英文改写。点击切换：AI 提问" });
+    expect(rewrite.textContent).toContain("英");
+    fireEvent.click(rewrite);
+    expect(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" }).textContent).toContain("问");
+  });
+
   it("keeps EPUB navigation outside the reflowing reading stage", () => {
     const markup = renderToStaticMarkup(<Reader
       source={{

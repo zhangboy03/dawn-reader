@@ -5,6 +5,7 @@ const reader = readFileSync("src/components/Reader.tsx", "utf8");
 const pdfCard = readFileSync("src/components/pdf/PdfSelectionCard.tsx", "utf8");
 const pdfReader = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
 const shared = readFileSync("src/components/selection-assist/SelectionAssistSurface.tsx", "utf8");
+const sharedChat = readFileSync("src/components/selection-assist/SelectionChat.tsx", "utf8");
 const hook = readFileSync("src/components/selection-assist/useSelectionAssistSurface.ts", "utf8");
 const css = readFileSync("src/selection-assist.css", "utf8");
 
@@ -45,8 +46,12 @@ describe("shared selection-assistance consumers", () => {
     expect(reader).toContain("reader-chinese-detail-action");
     expect(reader).toContain("播放发音");
     expect(reader).toContain("wordPronunciationExperimentEnabled");
-    expect(reader).toContain("chat-compose");
-    expect(reader).toContain("chat-sources");
+    expect(reader).toContain("SelectionChatComposer");
+    expect(reader).toContain("SelectionChatBody");
+    expect(pdfCard).toContain("SelectionChatComposer");
+    expect(pdfCard).toContain("SelectionChatBody");
+    expect(sharedChat).toContain("chat-compose");
+    expect(sharedChat).toContain("chat-sources");
     expect(pdfCard).toContain("pdf-highlight-action");
     expect(pdfCard).toContain("重试中文");
     expect(pdfCard).toContain('title="黄色标记"');

@@ -27,7 +27,6 @@ import { deletePdfLocator } from "../lib/pdfLocator";
 import { isCloudEligiblePublication, publicationFormat, shelfFormatLabel, type PdfBookSource } from "../lib/publication";
 import {
   loadBookAssistantModes,
-  saveBookAssistantMode,
   type BookAssistantMode,
 } from "../lib/bookAssistantMode";
 import { DeviceSync } from "./DeviceSync";
@@ -58,19 +57,6 @@ type ShelfBook = StoredBook & {
 };
 
 type SyncState = "loading" | "syncing" | "ready" | "local";
-
-const assistantModePresentation: Record<BookAssistantMode, { title: string; description: string; mark: string }> = {
-  rewrite: {
-    title: "英文改写",
-    description: "换成更易读的英文",
-    mark: "Aa",
-  },
-  ask: {
-    title: "AI 提问",
-    description: "带上附近原文继续聊",
-    mark: "?",
-  },
-};
 
 const fallbackCoverPalettes = [
   { background: "#173147", ink: "#d8e8ea", accent: "#e78349" },
@@ -241,8 +227,7 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
-  const [bookAssistantModes, setBookAssistantModes] = useState(loadBookAssistantModes);
-  const [assistantMenuBookId, setAssistantMenuBookId] = useState<string | null>(null);
+  const [bookAssistantModes] = useState(loadBookAssistantModes);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -478,11 +463,6 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
     }
   }
 
-  function chooseAssistantMode(bookId: string, mode: BookAssistantMode) {
-    setBookAssistantModes(saveBookAssistantMode(bookId, mode));
-    setAssistantMenuBookId(null);
-  }
-
   const syncLabel = {
     loading: "连接中",
     syncing: "同步中",
@@ -576,9 +556,6 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
         {visibleBooks.length > 0 && <div className="stored-shelf">
           {visibleBooks.map((book) => {
             const format = publicationFormat(book);
-            const assistantMode = bookAssistantModes[book.id] ?? "rewrite";
-            const modePresentation = assistantModePresentation[assistantMode];
-            const menuOpen = assistantMenuBookId === book.id;
             return <article className={`stored-book ${format}`} key={book.id}>
             <button
               className="book-open"
@@ -594,47 +571,6 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
               <BookCover book={book} />
               <div><small>{shelfFormatLabel(book, book.synced)}</small><h3>{book.title}</h3><strong>{openingId === book.id ? "正在打开…" : deletingId === book.id ? "正在删除…" : "继续阅读"} <span>→</span></strong></div>
             </button>
-            {format === "epub" ? <div
-              className={`book-assistant-menu ${menuOpen ? "open" : ""}`}
-              onBlur={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAssistantMenuBookId(null);
-              }}
-              onKeyDown={(event) => { if (event.key === "Escape") setAssistantMenuBookId(null); }}
-            >
-              <button
-                type="button"
-                className="book-assistant-trigger"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                aria-controls={`assistant-menu-${book.id}`}
-                onClick={() => setAssistantMenuBookId(menuOpen ? null : book.id)}
-              >
-                <span className={`assistant-mode-mark ${assistantMode}`} aria-hidden="true">{modePresentation.mark}</span>
-                <span className="assistant-mode-current"><small>划线后</small><strong>{modePresentation.title}</strong></span>
-                <span className="assistant-chevron" aria-hidden="true" />
-              </button>
-              {menuOpen && <div className="book-assistant-popover" id={`assistant-menu-${book.id}`} role="menu" aria-label={`《${book.title}》划线后的动作`}>
-                <p>划线后</p>
-                {(Object.keys(assistantModePresentation) as BookAssistantMode[]).map((mode) => {
-                  const presentation = assistantModePresentation[mode];
-                  const selected = assistantMode === mode;
-                  return <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selected}
-                    className={selected ? "selected" : ""}
-                    onClick={() => chooseAssistantMode(book.id, mode)}
-                    key={mode}
-                  >
-                    <span className={`assistant-option-mark ${mode}`} aria-hidden="true">{presentation.mark}</span>
-                    <span><strong>{presentation.title}</strong><small>{presentation.description}</small></span>
-                    <i aria-hidden="true">{selected ? "✓" : ""}</i>
-                  </button>;
-                })}
-              </div>}
-            </div> : <div className="pdf-assistance-summary" aria-label="PDF 划线辅助">
-              <span aria-hidden="true">Aa</span><div><small>划线后</small><strong>英文先行 · 中文按需</strong></div>
-            </div>}
             <button className="book-delete" disabled={deletingId === book.id} onClick={() => setBookToDelete(book)} aria-label={`从书架删除《${book.title}》`}>
               <span aria-hidden="true">×</span> 删除
             </button>
