@@ -31,9 +31,11 @@ describe("shared selection-assistance consumers", () => {
     expect(hook).toContain("viewport.width <= compactBreakpoint");
   });
 
-  it("carries the saved Dawn reader theme into the PDF shell", () => {
-    expect(pdfReader).toContain("loadReaderSettings");
+  it("reacts to the PDF experiment tone without remounting the shared shell", () => {
+    expect(pdfReader).toContain("loadPdfAppearanceExperiment");
+    expect(pdfReader).toContain('appearance.tone === "original" ? "paper"');
     expect(pdfReader).toContain("reader-theme-${selectionAssistTheme}");
+    expect(css).toContain(".dawn-pdf-reader-shell.reader-theme-sepia .selection-assist-surface");
     expect(css).toContain(".dawn-pdf-reader-shell.reader-theme-night .selection-assist-surface");
   });
 

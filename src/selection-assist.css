@@ -47,6 +47,13 @@
   --selection-assist-muted: var(--pdf-muted);
 }
 
+.dawn-pdf-reader-shell.reader-theme-sepia .selection-assist-surface {
+  --selection-assist-background: #f2e7d3;
+  --selection-assist-ink: #342e25;
+  --selection-assist-line: #cdbfa7;
+  --selection-assist-muted: #746b5d;
+}
+
 .dawn-pdf-reader-shell.reader-theme-night .selection-assist-surface {
   --selection-assist-background: #20221e;
   --selection-assist-ink: #ded8ce;
