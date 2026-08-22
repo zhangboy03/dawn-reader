@@ -160,7 +160,14 @@
 .dawn-pdf-zoom-group button + button { margin-left: -1px; }
 .dawn-pdf-zoom-group > button:not(.dawn-pdf-fit) { width: 34px; padding: 0; font-size: 16px; font-weight: 400; }
 .dawn-pdf-fit { min-width: 78px; white-space: nowrap; }
-.dawn-pdf-appearance-toggle { width: 38px; padding: 0 !important; font-family: "Iowan Old Style", Baskerville, Georgia, serif !important; font-size: 12px !important; }
+.dawn-pdf-appearance-toggle { display: inline-grid; width: 38px; place-items: center; padding: 0 !important; }
+.dawn-pdf-appearance-icon {
+  width: 18px;
+  height: 18px;
+  border: 1.7px solid currentColor;
+  border-radius: 50%;
+  background: linear-gradient(90deg, currentColor 0 50%, transparent 50% 100%);
+}
 
 .dawn-pdf-appearance-layer { position: fixed; z-index: 40; inset: 0; }
 .dawn-pdf-appearance-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; cursor: default; }
@@ -168,22 +175,22 @@
   position: absolute;
   top: 58px;
   right: max(14px, env(safe-area-inset-right));
-  width: 210px;
-  padding: 12px 14px;
+  width: 246px;
+  padding: 14px;
   border: 1px solid var(--pdf-line);
   border-radius: 12px;
   color: var(--pdf-ink);
   background: var(--pdf-surface);
   box-shadow: 0 22px 52px rgba(20, 29, 31, .24);
 }
-.dawn-pdf-appearance-row { display: grid; align-items: center; gap: 6px; }
-.dawn-pdf-appearance-row.tones { grid-template-columns: 46px repeat(3, 1fr); }
-.dawn-pdf-appearance-row small { color: var(--pdf-muted); font-size: 9px; }
-.dawn-pdf-appearance-row button { min-height: 32px; border: 1px solid var(--pdf-line); border-radius: 7px; color: var(--pdf-muted); background: transparent; font: 600 10px/1 "Avenir Next", Avenir, sans-serif; cursor: pointer; }
+.dawn-pdf-appearance-heading { display: block; margin: 0 0 9px 2px; color: var(--pdf-muted); font: 600 9px/1 "Avenir Next", Avenir, sans-serif; letter-spacing: .06em; }
+.dawn-pdf-appearance-row { display: grid; grid-template-columns: repeat(3, 1fr); align-items: stretch; gap: 7px; }
+.dawn-pdf-appearance-row button { min-height: 62px; border: 1px solid var(--pdf-line); border-radius: 9px; color: var(--pdf-muted); background: transparent; font: 600 10px/1 "Avenir Next", Avenir, sans-serif; cursor: pointer; }
 .dawn-pdf-appearance-row button:hover,
 .dawn-pdf-appearance-row button[aria-pressed="true"] { border-color: var(--pdf-rust-strong); color: var(--pdf-rust-strong); background: color-mix(in srgb, var(--pdf-rust) 10%, var(--pdf-surface)); }
 .dawn-pdf-appearance-row button:focus-visible { outline: 2px solid var(--pdf-rust-strong); outline-offset: 2px; }
-.dawn-pdf-appearance-row .dawn-pdf-tone-dot { width: 27px; height: 27px; min-height: 27px; justify-self: center; border-radius: 50%; }
+.dawn-pdf-appearance-option { display: grid; place-items: center; align-content: center; gap: 7px; padding: 7px 4px; }
+.dawn-pdf-tone-dot { width: 27px; height: 27px; border: 1px solid color-mix(in srgb, var(--pdf-line) 88%, black); border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, white 42%, transparent); }
 .dawn-pdf-tone-dot.tone-original { background: #fff; }
 .dawn-pdf-tone-dot.tone-warm { background: #e9dfc8; }
 .dawn-pdf-tone-dot.tone-night { background: #1b1d1a; }

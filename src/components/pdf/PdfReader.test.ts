@@ -21,9 +21,21 @@ describe("PDF appearance", () => {
     expect(source).toContain("data-pdf-appearance={appearanceTone}");
     expect(source).not.toContain("data-pdf-treatment");
     expect(source).not.toContain("处理方式");
-    expect(source).toContain('(["paper", "sepia", "night"] as const)');
+    expect(source).toContain('theme: "paper", label: "原色"');
+    expect(source).toContain('theme: "sepia", label: "暖纸"');
+    expect(source).toContain('theme: "night", label: "夜读"');
     expect(source).toContain("saveReaderSettings(next)");
     expect(source).toContain("saveCloudState({ settings: next })");
+  });
+
+  it("uses an appearance glyph instead of the text-formatting Aa glyph", () => {
+    const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
+
+    expect(source).not.toContain(">Aa</button>");
+    expect(source).toContain('className="dawn-pdf-appearance-icon"');
+    expect(source).not.toContain('<svg className="dawn-pdf-appearance-icon"');
+    expect(source).toContain('aria-controls="pdf-appearance-panel"');
+    expect(source).toContain("PDF_APPEARANCE_OPTIONS.map");
   });
 
   it("applies appearance after PDF.js rendering without changing its lifecycle", () => {
