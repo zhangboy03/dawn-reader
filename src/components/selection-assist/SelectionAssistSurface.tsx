@@ -21,6 +21,7 @@ type SelectionAssistSurfaceProps = {
   open?: boolean;
   title: ReactNode;
   ariaLabel: string;
+  leadingAction?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -41,6 +42,7 @@ type SelectionAssistSurfaceProps = {
   focusOnOpen?: boolean;
   closeLabel?: string;
   bodyEmpty?: boolean;
+  onEscape?: () => boolean;
 };
 
 function focusableElements(root: HTMLElement) {
@@ -53,6 +55,7 @@ export function SelectionAssistSurface({
   open = true,
   title,
   ariaLabel,
+  leadingAction,
   actions,
   children,
   footer,
@@ -73,6 +76,7 @@ export function SelectionAssistSurface({
   focusOnOpen = false,
   closeLabel = "关闭解释",
   bodyEmpty = false,
+  onEscape,
 }: SelectionAssistSurfaceProps) {
   const titleId = useId();
   const returnTargetRef = useRef<HTMLElement | null>(null);
@@ -168,6 +172,7 @@ export function SelectionAssistSurface({
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
+        if (onEscape?.()) return;
         dismiss();
         return;
       }
@@ -183,7 +188,7 @@ export function SelectionAssistSurface({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [compact, surfaceRef]);
+  }, [compact, onEscape, surfaceRef]);
 
   if (!open) return null;
   const style = {
@@ -221,7 +226,7 @@ export function SelectionAssistSurface({
   };
   const onDragPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0 || !position) return;
-    if ((event.target as Element | null)?.closest(".selection-assist-actions")) return;
+    if ((event.target as Element | null)?.closest("button, a, input, textarea, select, [role='menuitem']")) return;
     event.preventDefault();
     event.stopPropagation();
     const origin = clampDraggedPosition(manualPosition ?? { left: position.left, top: position.top });
@@ -301,7 +306,10 @@ export function SelectionAssistSurface({
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
       >
-        <strong id={titleId}>{title}</strong>
+        <div className="selection-assist-title-group">
+          {leadingAction}
+          <strong id={titleId}>{title}</strong>
+        </div>
         <div className="selection-assist-actions">
           {actions}
           <button

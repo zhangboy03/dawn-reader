@@ -1,7 +1,5 @@
 import type { SelectionAssistAnchor, SelectionAssistVisibleBounds } from "../../lib/selectionAssistAnchor";
 import { canRequestChinese, type SelectionAssistanceState } from "../../lib/selectionAssistance";
-import type { BookAssistantMode } from "../../lib/bookAssistantMode";
-import { AssistantModeToggle } from "../AssistantModeToggle";
 import { SelectionAssistSurface } from "../selection-assist/SelectionAssistSurface";
 import {
   SelectionChatBody,
@@ -11,6 +9,7 @@ import {
 } from "../selection-assist/SelectionChat";
 
 export type SelectionCardAnchor = SelectionAssistAnchor;
+export type PdfSelectionAssistRoute = "rewrite" | "ask";
 
 export function PdfSelectionCard({
   anchor,
@@ -19,14 +18,15 @@ export function PdfSelectionCard({
   getEventTargets,
   getBoundaryElement,
   returnFocus,
-  mode,
+  route,
   state,
   chat,
   highlightState,
   onHighlight,
   onChinese,
   onRetryEnglish,
-  onModeChange,
+  onEnterAsk,
+  onReturnToRewrite,
   onChatDraftChange,
   onChatSubmit,
   onChatRetry,
@@ -40,7 +40,7 @@ export function PdfSelectionCard({
   getEventTargets?: () => Array<EventTarget | null | undefined>;
   getBoundaryElement?: () => Element | null;
   returnFocus?: () => HTMLElement | null;
-  mode: BookAssistantMode;
+  route: PdfSelectionAssistRoute;
   state: SelectionAssistanceState;
   chat: {
     draft: string;
@@ -52,7 +52,8 @@ export function PdfSelectionCard({
   onHighlight: () => void;
   onChinese: () => void;
   onRetryEnglish: () => void;
-  onModeChange: (mode: BookAssistantMode) => void;
+  onEnterAsk: () => void;
+  onReturnToRewrite: () => void;
   onChatDraftChange: (value: string) => void;
   onChatSubmit: () => void;
   onChatRetry: () => void;
@@ -60,13 +61,13 @@ export function PdfSelectionCard({
   layoutKey?: string | number;
   dragResetKey?: string | number;
 }) {
-  const showChinese = mode === "rewrite" && (state.english.phase === "success" || state.chinese.phase !== "idle");
-  const error = mode === "rewrite"
+  const showChinese = route === "rewrite" && (state.english.phase === "success" || state.chinese.phase !== "idle");
+  const error = route === "rewrite"
     ? state.english.phase === "error" || state.chinese.phase === "error" || highlightState.phase === "error"
     : chat.state === "error" || highlightState.phase === "error";
   const contentLayoutKey = [
     layoutKey,
-    mode,
+    route,
     state.english.phase,
     state.english.text.length,
     state.english.error.length,
@@ -83,11 +84,16 @@ export function PdfSelectionCard({
   ].join(":");
 
   return <SelectionAssistSurface
-    title={mode === "ask" ? "AI 提问" : "简明英文"}
-    ariaLabel={mode === "ask" ? "AI 提问" : "所选文字辅助"}
-    className={`pdf-selection-assist ${mode === "ask" ? "ask-mode" : "rewrite-mode"} ${error ? "is-error" : ""}`}
-    actions={<>
-      <AssistantModeToggle mode={mode} onChange={onModeChange} autoFocusTarget />
+    title={route === "ask" ? "问这段" : "简明英文"}
+    ariaLabel={route === "ask" ? "问这段" : "简明英文"}
+    className={`pdf-selection-assist ${route === "ask" ? "ask-route" : "rewrite-route"} ${error ? "is-error" : ""}`}
+    leadingAction={route === "ask" ? <button
+      type="button"
+      className="selection-assist-back"
+      onClick={onReturnToRewrite}
+      aria-label="返回简明英文"
+    >← <span>简明英文</span></button> : undefined}
+    actions={route === "rewrite" ? <>
       <button
         type="button"
         className={`pdf-highlight-action ${highlightState.phase === "saved" ? "is-saved" : ""}`}
@@ -103,8 +109,10 @@ export function PdfSelectionCard({
         onClick={onChinese}
         aria-label="中文"
       >{state.chinese.phase === "loading" ? "中文生成中…" : "中文"}</button>}
-    </>}
+    </> : undefined}
     onDismiss={onClose}
+    onEscape={route === "ask" ? () => { onReturnToRewrite(); return true; } : undefined}
+    closeLabel="关闭本次辅助"
     getAnchor={getAnchor ?? (() => anchor)}
     getBoundary={getBoundary}
     getEventTargets={getEventTargets}
@@ -113,17 +121,18 @@ export function PdfSelectionCard({
     layoutKey={contentLayoutKey}
     dragResetKey={dragResetKey}
     maximumHeight={560}
-    minimumUsefulHeight={mode === "ask" ? 156 : 184}
-    bodyEmpty={mode === "ask" && chat.messages.length === 0 && chat.state !== "error" && !highlightState.message}
-    footer={mode === "ask" ? <SelectionChatComposer
+    minimumUsefulHeight={route === "ask" ? 156 : 184}
+    bodyEmpty={route === "ask" && chat.messages.length === 0 && chat.state !== "error"}
+    footer={route === "ask" ? <SelectionChatComposer
       draft={chat.draft}
       messages={chat.messages}
       state={chat.state}
       onDraftChange={onChatDraftChange}
       onSubmit={onChatSubmit}
+      focusOnMount
     /> : undefined}
   >
-    {mode === "rewrite" ? <div aria-live="polite">
+    {route === "rewrite" ? <div aria-live="polite">
       {state.english.phase === "idle" && <p className="pdf-selection-loading">正在读取所选内容…</p>}
       {state.english.phase === "loading" && <p className="pdf-selection-loading">正在生成简明英文…</p>}
       {state.english.phase === "success" && <p className="pdf-selection-result">{state.english.text}</p>}
@@ -142,6 +151,12 @@ export function PdfSelectionCard({
       </section>}
 
       {highlightState.message && <p className={`pdf-selection-feedback ${highlightState.phase}`}>{highlightState.message}</p>}
+      {(state.english.phase === "success" || state.english.phase === "error") && <button
+        type="button"
+        className="selection-assist-escalation"
+        onClick={onEnterAsk}
+        aria-label={chat.messages.length ? "继续向 AI 问原文所选内容" : "向 AI 问原文所选内容"}
+      >{chat.messages.length ? "继续提问" : "问这段"}</button>}
     </div> : <div>
       <SelectionChatBody
         messages={chat.messages}
@@ -149,7 +164,6 @@ export function PdfSelectionCard({
         error={chat.error}
         onRetry={onChatRetry}
       />
-      {highlightState.message && <p className={`pdf-selection-feedback ${highlightState.phase}`}>{highlightState.message}</p>}
     </div>}
   </SelectionAssistSurface>;
 }

@@ -14,13 +14,21 @@ export function SelectionChatComposer({
   state,
   onDraftChange,
   onSubmit,
+  focusOnMount = false,
 }: {
   draft: string;
   messages: SelectionChatMessage[];
   state: SelectionChatState;
   onDraftChange: (value: string) => void;
   onSubmit: () => void;
+  focusOnMount?: boolean;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (focusOnMount) textareaRef.current?.focus({ preventScroll: true });
+  }, [focusOnMount]);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit();
@@ -28,6 +36,7 @@ export function SelectionChatComposer({
 
   return <form className="chat-compose" onSubmit={submit}>
     <textarea
+      ref={textareaRef}
       aria-label="向 AI 提问"
       placeholder={messages.length ? "继续提问…" : "输入你想问的问题…"}
       rows={2}
@@ -53,7 +62,8 @@ export function SelectionChatBody({ messages, state, error, onRetry }: {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView?.({ block: "nearest" });
+    const body = endRef.current?.closest<HTMLElement>("[data-selection-assist-body]");
+    if (body) body.scrollTop = body.scrollHeight;
   }, [messages, state]);
 
   if (!messages.length && state !== "error") return null;
