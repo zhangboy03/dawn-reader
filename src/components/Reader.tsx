@@ -18,6 +18,7 @@ import {
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { selectionKind } from "../lib/selectionKind";
+import { canSpeakWord, speakEnglishWord } from "../lib/wordPronunciation";
 import {
   selectionAssistAnchorFromRange,
   type SelectionAssistAnchor,
@@ -430,6 +431,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [chatError, setChatError] = useState("");
   const [chatSources, setChatSources] = useState<ChatSource[]>([]);
   const [searchAvailable, setSearchAvailable] = useState(false);
+  const [wordSpeechAvailable, setWordSpeechAvailable] = useState(false);
   const [pendingEvidence, setPendingEvidence] = useState<ReadingEvidenceDraft | null>(null);
   const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
   const [referenceMode, setReferenceMode] = useState(Boolean(source.initialCfi));
@@ -459,6 +461,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       onSlice: saveReadingTimeSlice,
     });
   }
+
+  useEffect(() => {
+    setWordSpeechAvailable(canSpeakWord());
+  }, []);
 
   useEffect(() => {
     const recorder = activityRecorderRef.current!;
@@ -1055,6 +1061,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     if (!selected || !context) return;
     setAssistanceMode("chinese");
     void requestRewrite(selected, context, "chinese");
+  }
+
+  function playSelectedWord() {
+    speakEnglishWord(selected);
   }
 
   function retryAssistance() {
@@ -2738,7 +2748,18 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       className={`reader-selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${source.assistantMode === "ask" ? chatState : rewriteState} ${(source.assistantMode === "ask" ? chatState : rewriteState) === "error" ? "is-error" : ""}`}
       actions={<>
         {source.assistantMode === "ask" && <small className="chat-capability">局部上下文{searchAvailable ? " · 可联网" : ""}</small>}
-        {source.assistantMode === "rewrite" && assistanceMode === "english" && rewriteState === "complete" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
+        {source.assistantMode === "rewrite" && assistanceMode === "english" && selectedKind === "word" && wordSpeechAvailable && <button
+          type="button"
+          className="reader-pronunciation-action"
+          onClick={playSelectedWord}
+          aria-label={`播放 ${selected} 的发音`}
+          title="播放发音"
+        ><span aria-hidden="true" /></button>}
+        {source.assistantMode === "rewrite" && assistanceMode === "english" && rewriteState === "complete" && <button
+          type="button"
+          className="reader-chinese-detail-action"
+          onClick={requestChineseDetail}
+        >中文详解</button>}
       </>}
       onDismiss={clearSelection}
       getAnchor={currentSelectionAssistAnchor}

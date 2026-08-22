@@ -41,6 +41,9 @@ describe("shared selection-assistance consumers", () => {
 
   it("keeps only format capabilities different inside the shared shell", () => {
     expect(reader).toContain("中文详解");
+    expect(reader).toContain("reader-pronunciation-action");
+    expect(reader).toContain("reader-chinese-detail-action");
+    expect(reader).toContain("播放发音");
     expect(reader).toContain("chat-compose");
     expect(reader).toContain("chat-sources");
     expect(pdfCard).toContain("pdf-highlight-action");
@@ -54,6 +57,7 @@ describe("shared selection-assistance consumers", () => {
     expect(css).toMatch(/\.selection-assist-surface\s*\{[\s\S]*?overflow:\s*hidden;/);
     expect(css).toMatch(/\.selection-assist-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(css).toMatch(/min-height:\s*44px/);
+    expect(css).toMatch(/\.reader-pronunciation-action,[\s\S]*?\.reader-chinese-detail-action\s*\{[\s\S]*?height:\s*30px;/);
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(shared).toContain('aria-modal={compact ? true : undefined}');
     expect(shared).toContain('aria-hidden="true"');
