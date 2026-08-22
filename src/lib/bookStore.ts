@@ -1,5 +1,4 @@
 import { hasPdfSignature, publicationFormatFromFile } from "./publication";
-import type { PdfPresentation } from "./pdfPresentation";
 import { accountDatabaseName } from "./clientAccountContext";
 
 const LEGACY_DB_NAME = "dawn-reader-library";
@@ -161,29 +160,26 @@ export async function savePublication(file: File) {
 
   const id = `sha256:${await publicationContentHash(file)}`;
   const existing = await storedBookById(id);
-  let presentation: PdfPresentation | null = null;
-  try {
-    const { extractPdfPresentation } = await import("./pdfPresentation");
-    presentation = await extractPdfPresentation(file);
-  } catch {
-    // Keep the source PDF usable when its first page or metadata cannot be rendered.
-  }
-  return putStoredBook({
+  const stored = await putStoredBook({
     id,
-    title: presentation?.title ?? existing?.title ?? cleanBookTitle(file.name),
+    title: existing?.title ?? cleanBookTitle(file.name),
     fileName: file.name,
     blob: file,
-    cover: presentation?.cover ?? existing?.cover ?? null,
-    coverChecked: Boolean(presentation) || existing?.coverChecked,
+    cover: existing?.cover ?? null,
+    coverChecked: existing?.coverChecked ?? false,
     addedAt: existing?.addedAt ?? new Date().toISOString(),
     lastOpenedAt: existing?.lastOpenedAt,
     format: "pdf",
     mimeType: "application/pdf",
     fileSize: file.size,
-    paperAuthor: presentation?.author ?? existing?.paperAuthor ?? null,
-    paperYear: presentation?.year ?? existing?.paperYear ?? null,
-    pageCount: presentation?.pageCount ?? existing?.pageCount ?? null,
+    paperAuthor: existing?.paperAuthor ?? null,
+    paperYear: existing?.paperYear ?? null,
+    pageCount: existing?.pageCount ?? null,
   });
+
+  // Library hydration enriches presentation metadata after this durable import
+  // boundary and updates the visible shelf without blocking the original PDF.
+  return stored;
 }
 
 export function sortBooksByRecency<T extends Pick<StoredBook, "addedAt" | "lastOpenedAt">>(books: T[]) {

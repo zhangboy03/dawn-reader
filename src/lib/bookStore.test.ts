@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { cleanBookTitle, filterBooksByQuery, migrateStoredBookRecord, sortBooksByRecency } from "./bookStore";
 
@@ -24,6 +25,17 @@ describe("stored publication migration", () => {
     expect(migrateStoredBookRecord({ ...common, fileName: "legacy.epub" })).toMatchObject({
       format: "epub", mimeType: "application/epub+zip",
     });
+  });
+});
+
+describe("PDF import durability", () => {
+  it("persists the original source before optional presentation extraction", () => {
+    const source = readFileSync("src/lib/bookStore.ts", "utf8");
+    const pdfSave = source.slice(source.indexOf("export async function savePublication"), source.indexOf("export function sortBooksByRecency"));
+
+    expect(pdfSave.indexOf("const stored = await putStoredBook")).toBeGreaterThanOrEqual(0);
+    expect(pdfSave).not.toContain("extractPdfPresentation");
+    expect(pdfSave).toContain("return stored;");
   });
 });
 
