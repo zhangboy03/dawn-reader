@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import type { ReaderProfile } from "../../lib/storage";
+import { loadReaderSettings } from "../../lib/readerSettings";
 import {
   DAWN_YELLOW,
   addPdfHighlight,
@@ -22,6 +23,15 @@ import {
 } from "../../lib/pdfLocator";
 import { createPdfViewerResizeController } from "../../lib/pdfViewerResize";
 import { createPdfBlobRangeTransport, LOCAL_PDF_RANGE_CHUNK_BYTES } from "../../lib/pdfBlobRangeTransport";
+import { selectionAssistAnchorFromPdfQuads } from "../../lib/pdfSelectionAssistAnchor";
+import {
+  selectionAssistAnchorFromRects,
+  selectionAssistDirection,
+  type SelectionAssistAnchor,
+  type SelectionAssistPoint,
+  type SelectionAssistVisibleBounds,
+} from "../../lib/selectionAssistAnchor";
+import { visualViewportRect } from "../../lib/selectionAssistPosition";
 import {
   boundedSelectionContext,
   initialSelectionAssistanceState,
@@ -99,6 +109,33 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function currentPdfVisualBounds(): SelectionAssistVisibleBounds {
+  const viewport = visualViewportRect(window.visualViewport, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  return {
+    left: viewport.left,
+    top: viewport.top,
+    right: viewport.left + viewport.width,
+    bottom: viewport.top + viewport.height,
+  };
+}
+
+function intersectPdfBounds(
+  first: SelectionAssistVisibleBounds,
+  second: SelectionAssistVisibleBounds,
+): SelectionAssistVisibleBounds {
+  const left = Math.max(first.left, second.left);
+  const top = Math.max(first.top, second.top);
+  return {
+    left,
+    top,
+    right: Math.max(left, Math.min(first.right, second.right)),
+    bottom: Math.max(top, Math.min(first.bottom, second.bottom)),
+  };
+}
+
 function failureFor(error: unknown): LoadFailure {
   const name = error instanceof Error ? error.name : "";
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -156,6 +193,7 @@ export function PdfReader({ source, profile, onClose }: {
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSearchQueryRef = useRef("");
+  const selectionCaptureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredRef = useRef(false);
   const fitRef = useRef<PdfFitMode>("width");
   const scaleRef = useRef(1);
@@ -179,7 +217,7 @@ export function PdfReader({ source, profile, onClose }: {
   const [noSelectableText, setNoSelectableText] = useState(false);
   const [pageFailures, setPageFailures] = useState<number[]>([]);
   const [notice, setNotice] = useState(() => {
-    const messages = [];
+    const messages: string[] = [];
     if (source.file.size > LARGE_FILE_BYTES) messages.push("这是大型 PDF；Dawn 会按可见页渲染并限制单页画布尺寸。");
     const discarded = sidecarRef.current.recovery?.discarded ?? 0;
     if (discarded > 0) messages.push(`已隔离 ${discarded} 条无法验证的旧高亮记录；PDF 仍可正常阅读。`);
@@ -197,6 +235,8 @@ export function PdfReader({ source, profile, onClose }: {
   useEffect(() => { setPageInput(String(pageNumber)); }, [pageNumber]);
 
   const closeSelection = useCallback(() => {
+    if (selectionCaptureTimerRef.current) clearTimeout(selectionCaptureTimerRef.current);
+    selectionCaptureTimerRef.current = null;
     englishControllerRef.current?.abort();
     chineseControllerRef.current?.abort();
     selectionVersionRef.current += 1;
@@ -210,11 +250,11 @@ export function PdfReader({ source, profile, onClose }: {
   const renderHighlightsForPage = useCallback((pageIndex: number) => {
     const pageView = pdfViewerRef.current?._pages?.[pageIndex];
     if (!pageView?.div || !pageView.viewport) return;
-    let layer = pageView.div.querySelector<HTMLElement>(":scope > .dawn-pdf-highlight-layer");
+    let layer = pageView.div.querySelector(":scope > .dawn-pdf-highlight-layer") as HTMLElement | null;
     if (!layer) {
       layer = document.createElement("div");
       layer.className = "dawn-pdf-highlight-layer";
-      pageView.div.append(layer);
+      pageView.div.appendChild(layer);
     }
     layer.replaceChildren();
     for (const highlight of sidecarRef.current.highlights.filter((item) => item.pageIndex === pageIndex)) {
@@ -235,7 +275,7 @@ export function PdfReader({ source, profile, onClose }: {
           const bounds = mark.getBoundingClientRect();
           setActiveHighlight({ id: highlight.id, left: bounds.left, top: bounds.bottom + 6 });
         });
-        layer.append(mark);
+        layer.appendChild(mark);
       }
     }
   }, []);
@@ -443,6 +483,7 @@ export function PdfReader({ source, profile, onClose }: {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
       if (supplementaryIdleId !== null) window.cancelIdleCallback(supplementaryIdleId);
       if (supplementaryTimer) clearTimeout(supplementaryTimer);
+      if (selectionCaptureTimerRef.current) clearTimeout(selectionCaptureTimerRef.current);
       if (restoredRef.current) persistPosition();
       for (const [name, handler] of listeners) localEventBus?._off?.(name, handler);
       pdfViewerRef.current?.cleanup?.();
@@ -528,7 +569,7 @@ export function PdfReader({ source, profile, onClose }: {
     }
   }, [profile.preset]);
 
-  const captureSelection = useCallback(() => {
+  const captureSelection = useCallback((endpoint: SelectionAssistPoint | null = null) => {
     const container = scrollRef.current;
     const pdfViewer = pdfViewerRef.current;
     const domSelection = window.getSelection();
@@ -562,24 +603,42 @@ export function PdfReader({ source, profile, onClose }: {
     const pageIndex = [...pageIndexes][0];
     const pageView = pages[pageIndex];
     const pageRect = pageView.div.getBoundingClientRect();
-    const quads = rectPages
-      .map(({ rect }) => clientRectToPdfQuad(rect, pageRect, pageView.viewport))
-      .filter((quad): quad is PdfQuad => Boolean(quad));
-    if (!quads.length) {
+    const visibleBounds = intersectPdfBounds(currentPdfVisualBounds(), {
+      left: pageRect.left,
+      top: pageRect.top,
+      right: pageRect.right,
+      bottom: pageRect.bottom,
+    });
+    const direction = selectionAssistDirection(domSelection);
+    const initialAnchor = selectionAssistAnchorFromRects(
+      rectPages.filter(({ index }) => index === pageIndex).map(({ rect }) => rect),
+      { direction, endpoint, visibleBounds },
+    );
+    if (!initialAnchor) {
       setNotice("无法稳定定位这段文字，请重新选择。未创建高亮。");
       return;
     }
-    const left = Math.min(...clientRects.map((rect) => rect.left));
-    const right = Math.max(...clientRects.map((rect) => rect.right));
-    const top = Math.min(...clientRects.map((rect) => rect.top));
-    const bottom = Math.max(...clientRects.map((rect) => rect.bottom));
+    const located = initialAnchor.rects
+      .map((rect) => ({ rect, quad: clientRectToPdfQuad(rect as DOMRect, pageRect, pageView.viewport) }))
+      .filter((item): item is { rect: typeof initialAnchor.rects[number]; quad: PdfQuad } => Boolean(item.quad));
+    if (!located.length) {
+      setNotice("无法稳定定位这段文字，请重新选择。未创建高亮。");
+      return;
+    }
+    const anchor = selectionAssistAnchorFromRects(located.map(({ rect }) => rect), {
+      direction,
+      endpoint,
+      visibleBounds,
+    });
+    if (!anchor) return;
+    const quads = located.map(({ quad }) => quad);
     const pageText = (pageView.div.querySelector(".textLayer")?.textContent ?? "").replace(/\s+/g, " ");
     const snapshot: SelectionSnapshot = {
       text,
       context: boundedSelectionContext(text, pageText),
       pageIndex,
       quads,
-      anchor: { left, right, top, bottom },
+      anchor,
     };
     const version = ++selectionVersionRef.current;
     setSelection(snapshot);
@@ -588,13 +647,56 @@ export function PdfReader({ source, profile, onClose }: {
     void requestEnglish(snapshot, version);
   }, [closeSelection, requestEnglish]);
 
+  function pdfAssistBoundary(): SelectionAssistVisibleBounds {
+    const visual = currentPdfVisualBounds();
+    const scroll = scrollRef.current?.getBoundingClientRect();
+    const toolbarBottom = document.querySelector<HTMLElement>(".dawn-pdf-toolbar")?.getBoundingClientRect().bottom
+      ?? visual.top;
+    const readerBounds = {
+      left: scroll?.left ?? visual.left,
+      top: Math.max(scroll?.top ?? visual.top, toolbarBottom + 8),
+      right: scroll?.right ?? visual.right,
+      bottom: scroll?.bottom ?? visual.bottom,
+    };
+    return intersectPdfBounds(visual, readerBounds);
+  }
+
+  function currentPdfSelectionAnchor(snapshot: SelectionSnapshot): SelectionAssistAnchor | null {
+    const pageView = pdfViewerRef.current?._pages?.[snapshot.pageIndex];
+    const pageRect = pageView?.div?.getBoundingClientRect?.();
+    const viewport = pageView?.viewport;
+    if (!pageRect || !viewport) return null;
+    return selectionAssistAnchorFromPdfQuads({
+      quads: snapshot.quads,
+      viewport,
+      pageRect,
+      focusIndex: snapshot.anchor.focusIndex,
+      direction: snapshot.anchor.direction,
+      visibleBounds: pdfAssistBoundary(),
+    });
+  }
+
+  function pdfAssistEventTargets() {
+    return [scrollRef.current, viewerElementRef.current];
+  }
+
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
-    const scheduleCapture = () => setTimeout(captureSelection, 0);
+    const scheduleCapture = (event: Event) => {
+      if (selectionCaptureTimerRef.current) clearTimeout(selectionCaptureTimerRef.current);
+      const pointer = event.type === "pointerup" ? event as PointerEvent : null;
+      const endpoint = pointer ? { x: pointer.clientX, y: pointer.clientY } : null;
+      selectionCaptureTimerRef.current = setTimeout(() => {
+        selectionCaptureTimerRef.current = null;
+        captureSelection(endpoint);
+      }, 0);
+    };
     container.addEventListener("pointerup", scheduleCapture);
     container.addEventListener("keyup", scheduleCapture);
     return () => {
+      if (selectionCaptureTimerRef.current) clearTimeout(selectionCaptureTimerRef.current);
+      selectionCaptureTimerRef.current = null;
       container.removeEventListener("pointerup", scheduleCapture);
       container.removeEventListener("keyup", scheduleCapture);
     };
@@ -602,16 +704,12 @@ export function PdfReader({ source, profile, onClose }: {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        if (selection) closeSelection();
-        else if (sidebarOpen || searchOpen || activeHighlight) {
-          setSidebarOpen(false); setSearchOpen(false); setActiveHighlight(null);
-        }
+      if (event.key === "Escape" && !selection && (sidebarOpen || searchOpen || activeHighlight)) {
+        setSidebarOpen(false); setSearchOpen(false); setActiveHighlight(null);
       }
     };
     const onPointer = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (selection && !target?.closest(".pdf-selection-card") && !target?.closest(".textLayer")) closeSelection();
       if (activeHighlight && !target?.closest(".dawn-pdf-highlight-delete") && !target?.closest(".dawn-pdf-highlight-mark")) setActiveHighlight(null);
     };
     window.addEventListener("keydown", onKey);
@@ -620,7 +718,7 @@ export function PdfReader({ source, profile, onClose }: {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointer, true);
     };
-  }, [activeHighlight, closeSelection, searchOpen, selection, sidebarOpen]);
+  }, [activeHighlight, searchOpen, selection, sidebarOpen]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -781,7 +879,7 @@ export function PdfReader({ source, profile, onClose }: {
     anchor.href = url;
     anchor.download = source.file.name;
     anchor.rel = "noopener noreferrer";
-    document.body.append(anchor);
+    document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
@@ -826,8 +924,9 @@ export function PdfReader({ source, profile, onClose }: {
 
   const scaleLabel = fit === "custom" ? `${Math.round(scale * 100)}%` : fit === "width" ? "适合宽度" : "适合页面";
   const failurePagesLabel = useMemo(() => [...pageFailures].sort((a, b) => a - b).join("、"), [pageFailures]);
+  const selectionAssistTheme = useMemo(() => loadReaderSettings().theme, []);
 
-  return <main data-dawn-reading-surface="pdf" className="dawn-pdf-reader-shell">
+  return <main data-dawn-reading-surface="pdf" className={`dawn-pdf-reader-shell reader-theme-${selectionAssistTheme}`}>
     <header className="dawn-pdf-toolbar" aria-label="PDF 工具栏">
       <div className="dawn-pdf-toolbar-group dawn-pdf-toolbar-start">
         <button type="button" className="dawn-pdf-back" onClick={() => { persistPosition(); onClose(); }} aria-label="返回书架">
@@ -922,6 +1021,12 @@ export function PdfReader({ source, profile, onClose }: {
 
     {selection && <PdfSelectionCard
       anchor={selection.anchor}
+      getAnchor={() => currentPdfSelectionAnchor(selection)}
+      getBoundary={pdfAssistBoundary}
+      getBoundaryElement={() => scrollRef.current}
+      getEventTargets={pdfAssistEventTargets}
+      returnFocus={() => scrollRef.current}
+      layoutKey={`${selection.pageIndex}:${pageNumber}:${scale}:${fit}:${sidebarOpen ? 1 : 0}`}
       state={assistance}
       highlightState={highlightState}
       onHighlight={addHighlight}

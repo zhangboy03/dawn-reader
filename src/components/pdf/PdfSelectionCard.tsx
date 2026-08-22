@@ -1,81 +1,84 @@
-import { useEffect, useRef } from "react";
+import type { SelectionAssistAnchor, SelectionAssistVisibleBounds } from "../../lib/selectionAssistAnchor";
 import { canRequestChinese, type SelectionAssistanceState } from "../../lib/selectionAssistance";
+import { SelectionAssistSurface } from "../selection-assist/SelectionAssistSurface";
 
-export type SelectionCardAnchor = { left: number; right: number; top: number; bottom: number };
+export type SelectionCardAnchor = SelectionAssistAnchor;
 
 export function PdfSelectionCard({
   anchor,
+  getAnchor,
+  getBoundary,
+  getEventTargets,
+  getBoundaryElement,
+  returnFocus,
   state,
   highlightState,
   onHighlight,
   onChinese,
   onRetryEnglish,
   onClose,
+  layoutKey = 0,
 }: {
   anchor: SelectionCardAnchor;
+  getAnchor?: () => SelectionAssistAnchor | null;
+  getBoundary?: () => SelectionAssistVisibleBounds | null;
+  getEventTargets?: () => Array<EventTarget | null | undefined>;
+  getBoundaryElement?: () => Element | null;
+  returnFocus?: () => HTMLElement | null;
   state: SelectionAssistanceState;
   highlightState: { phase: "idle" | "saving" | "saved" | "error"; message: string };
   onHighlight: () => void;
   onChinese: () => void;
   onRetryEnglish: () => void;
   onClose: () => void;
+  layoutKey?: string | number;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const card = cardRef.current;
-    if (!card) return;
-    const viewport = window.visualViewport;
-    const viewportLeft = viewport?.offsetLeft ?? 0;
-    const viewportTop = viewport?.offsetTop ?? 0;
-    const viewportWidth = viewport?.width ?? window.innerWidth;
-    const viewportHeight = viewport?.height ?? window.innerHeight;
-    const margin = 12;
-    const gap = 10;
-    const bounds = card.getBoundingClientRect();
-    const preferredLeft = (anchor.left + anchor.right - bounds.width) / 2;
-    const left = Math.max(viewportLeft + margin, Math.min(preferredLeft, viewportLeft + viewportWidth - bounds.width - margin));
-    const above = anchor.top - bounds.height - gap;
-    const below = anchor.bottom + gap;
-    const top = above >= viewportTop + 66 + margin
-      ? above
-      : Math.min(below, viewportTop + viewportHeight - bounds.height - margin);
-    card.style.left = `${left}px`;
-    card.style.top = `${Math.max(viewportTop + 66 + margin, top)}px`;
-  }, [anchor, state, highlightState]);
-
   const showChinese = state.english.phase === "success" || state.chinese.phase !== "idle";
-  return <div
-    ref={cardRef}
-    className="pdf-selection-card"
-    role="dialog"
-    aria-label="所选文字辅助"
-    style={{ left: anchor.left, top: anchor.bottom + 10 }}
-    onPointerDown={(event) => event.stopPropagation()}
-  >
-    <div className="pdf-selection-card-header">
-      <strong>简明英文</strong>
-      <div className="pdf-selection-card-actions">
-        <button
-          type="button"
-          className={`pdf-highlight-action ${highlightState.phase === "saved" ? "is-saved" : ""}`}
-          disabled={highlightState.phase === "saving"}
-          onClick={onHighlight}
-          aria-label="用黄色标记所选文字"
-          title="黄色标记"
-        ><span aria-hidden="true" /></button>
-        {showChinese && <button
-          type="button"
-          className="pdf-selection-chinese-action"
-          disabled={!canRequestChinese(state)}
-          onClick={onChinese}
-          aria-label="中文"
-        >{state.chinese.phase === "loading" ? "中文生成中…" : "中文"}</button>}
-        <button type="button" className="pdf-selection-close" onClick={onClose} aria-label="关闭解释">×</button>
-      </div>
-    </div>
+  const error = state.english.phase === "error" || state.chinese.phase === "error" || highlightState.phase === "error";
+  const contentLayoutKey = [
+    layoutKey,
+    state.english.phase,
+    state.english.text.length,
+    state.english.error.length,
+    state.chinese.phase,
+    state.chinese.text.length,
+    state.chinese.error.length,
+    highlightState.phase,
+    highlightState.message.length,
+  ].join(":");
 
-    <div className="pdf-selection-card-body" aria-live="polite">
+  return <SelectionAssistSurface
+    title="简明英文"
+    ariaLabel="所选文字辅助"
+    className={`pdf-selection-assist ${error ? "is-error" : ""}`}
+    actions={<>
+      <button
+        type="button"
+        className={`pdf-highlight-action ${highlightState.phase === "saved" ? "is-saved" : ""}`}
+        disabled={highlightState.phase === "saving"}
+        onClick={onHighlight}
+        aria-label="用黄色标记所选文字"
+        title="黄色标记"
+      ><span aria-hidden="true" /></button>
+      {showChinese && <button
+        type="button"
+        className="pdf-selection-chinese-action"
+        disabled={!canRequestChinese(state)}
+        onClick={onChinese}
+        aria-label="中文"
+      >{state.chinese.phase === "loading" ? "中文生成中…" : "中文"}</button>}
+    </>}
+    onDismiss={onClose}
+    getAnchor={getAnchor ?? (() => anchor)}
+    getBoundary={getBoundary}
+    getEventTargets={getEventTargets}
+    getBoundaryElement={getBoundaryElement}
+    returnFocus={returnFocus}
+    layoutKey={contentLayoutKey}
+    maximumHeight={560}
+    minimumUsefulHeight={184}
+  >
+    <div aria-live="polite">
       {state.english.phase === "idle" && <p className="pdf-selection-loading">正在读取所选内容…</p>}
       {state.english.phase === "loading" && <p className="pdf-selection-loading">正在生成简明英文…</p>}
       {state.english.phase === "success" && <p className="pdf-selection-result">{state.english.text}</p>}
@@ -95,5 +98,5 @@ export function PdfSelectionCard({
 
       {highlightState.message && <p className={`pdf-selection-feedback ${highlightState.phase}`}>{highlightState.message}</p>}
     </div>
-  </div>;
+  </SelectionAssistSurface>;
 }

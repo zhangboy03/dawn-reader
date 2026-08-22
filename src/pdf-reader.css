@@ -107,7 +107,6 @@
 .dawn-pdf-state button:focus-visible,
 .dawn-pdf-state input:focus-visible,
 .dawn-pdf-outline-level button:focus-visible,
-.pdf-selection-card button:focus-visible,
 .dawn-pdf-highlight-mark:focus-visible,
 .dawn-pdf-highlight-delete button:focus-visible {
   outline: 2px solid var(--pdf-rust-strong);
@@ -318,76 +317,6 @@
   box-shadow: 0 10px 28px rgba(24, 33, 38, .16);
 }
 
-.pdf-selection-card {
-  position: fixed;
-  z-index: 60;
-  width: clamp(320px, 27vw, 420px);
-  max-width: calc(100vw - 24px);
-  max-height: min(70vh, 560px);
-  overflow: auto;
-  border: 1px solid rgba(104, 119, 125, .32);
-  border-radius: 16px;
-  color: var(--pdf-ink);
-  background: rgba(250, 251, 249, .985);
-  box-shadow: 0 18px 48px rgba(24, 33, 38, .18);
-  font-family: "Avenir Next", Avenir, sans-serif;
-}
-.pdf-selection-card-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 47px;
-  padding: 8px 10px 8px 16px;
-  border-bottom: 1px solid rgba(203, 212, 211, .82);
-  background: rgba(244, 246, 243, .98);
-}
-.pdf-selection-card-header > strong {
-  color: #425157;
-  font-size: 10px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.pdf-selection-card-actions { display: flex; align-items: center; gap: 5px; }
-.pdf-selection-card-actions button,
-.pdf-selection-retry,
-.pdf-selection-translation-retry {
-  min-height: 31px;
-  border: 1px solid #d5dcda;
-  border-radius: 8px;
-  color: #405056;
-  background: #fff;
-  padding: 0 9px;
-  font: 600 10px/1 "Avenir Next", Avenir, sans-serif;
-  cursor: pointer;
-}
-.pdf-selection-card-actions button:hover:not(:disabled),
-.pdf-selection-retry:hover,
-.pdf-selection-translation-retry:hover { border-color: rgba(169, 79, 46, .58); color: var(--pdf-rust-strong); }
-.pdf-selection-card-actions button:disabled { cursor: not-allowed; opacity: .42; }
-.pdf-highlight-action { width: 32px; padding: 0 !important; background: rgba(255, 237, 0, .2) !important; }
-.pdf-highlight-action span { display: block; width: 14px; height: 8px; margin: auto; border-radius: 2px; background: #ffed00; transform: rotate(-8deg); }
-.pdf-highlight-action.is-saved { border-color: #c7b700; }
-.pdf-selection-close { width: 31px; padding: 0 !important; border-color: transparent !important; background: transparent !important; font-size: 17px !important; font-weight: 400 !important; }
-.pdf-selection-chinese-action { white-space: nowrap; }
-.pdf-selection-card-body { padding: 15px 16px 17px; }
-.pdf-selection-card-body p { margin: 0; }
-.pdf-selection-result { white-space: pre-wrap; font: 400 15px/1.62 "Iowan Old Style", Baskerville, Georgia, serif; }
-.pdf-selection-loading { color: var(--pdf-muted); font-size: 11px; line-height: 1.6; }
-.pdf-selection-loading::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--pdf-rust); animation: dawn-pdf-pulse 1.1s ease-in-out infinite; }
-@keyframes dawn-pdf-pulse { 50% { opacity: .25; transform: scale(.7); } }
-.pdf-selection-error { color: #8f4635; font-size: 11px; line-height: 1.55; }
-.pdf-selection-error button { margin-top: 9px; }
-.pdf-selection-chinese { margin-top: 14px; padding-top: 13px; border-top: 1px solid #dfe5e3; }
-.pdf-selection-chinese > strong { display: block; margin-bottom: 7px; color: var(--pdf-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
-.pdf-selection-chinese > p { color: #2d3b40; font-size: 13px; line-height: 1.65; }
-.pdf-selection-feedback { margin-top: 11px !important; color: var(--pdf-muted); font-size: 10px; }
-.pdf-selection-feedback.saved { color: #5a6f4d; }
-.pdf-selection-feedback.error { color: #99473f; }
-
 .pdf-shell-loading {
   min-height: 100vh;
   display: grid;
@@ -429,7 +358,6 @@
   .dawn-pdf-sidebar-toggle { font-size: 0; }
   .dawn-pdf-sidebar-toggle::after { content: "目录"; font-size: 10px; }
   .dawn-pdf-toolbar-title { max-width: 42vw; }
-  .pdf-selection-card { left: 12px !important; right: 12px; bottom: 12px; top: auto !important; width: auto; max-width: none; max-height: min(62vh, 520px); }
   .dawn-pdf-notices { bottom: 10px; width: calc(100% - 20px); }
 }
 

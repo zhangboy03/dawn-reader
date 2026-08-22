@@ -2,12 +2,38 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SelectionAssistAnchor } from "../../lib/selectionAssistAnchor";
 import { PdfSelectionCard } from "./PdfSelectionCard";
 
-const anchor = { left: 20, right: 120, top: 20, bottom: 40 };
+const focusRect = { left: 20, right: 120, top: 200, bottom: 224, width: 100, height: 24 };
+const anchor: SelectionAssistAnchor = {
+  rects: [focusRect],
+  focusRect,
+  focusPoint: { x: 70, y: 212 },
+  focusIndex: 0,
+  direction: "forward",
+  strategy: "direction",
+};
 
-afterEach(cleanup);
+class Observer {
+  observe() {}
+  disconnect() {}
+}
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: Observer });
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    callback(0);
+    return 1;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("PDF selection card", () => {
   it("keeps yellow highlighting independent and reveals Chinese only after English succeeds", () => {

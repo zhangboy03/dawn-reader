@@ -1,0 +1,295 @@
+.selection-assist-dismiss-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 88;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: default;
+  touch-action: none;
+}
+
+.selection-assist-surface {
+  --selection-assist-accent: var(--accent, var(--pdf-rust, #dd7d45));
+  --selection-assist-accent-strong: var(--accent-strong, var(--pdf-rust-strong, #a94f2e));
+  --selection-assist-background: var(--reader-note, #fbfaf6);
+  --selection-assist-ink: var(--reader-note-ink, #292824);
+  --selection-assist-line: var(--reader-note-line, #c9c7bf);
+  --selection-assist-muted: var(--reader-chrome-muted, var(--pdf-muted, #68777d));
+  position: fixed;
+  z-index: 89;
+  display: flex;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--selection-assist-line);
+  border-top: 3px solid var(--selection-assist-accent);
+  border-radius: 14px;
+  color: var(--selection-assist-ink);
+  background: color-mix(in srgb, var(--selection-assist-background) 97%, transparent);
+  box-shadow: 0 18px 44px rgba(32, 48, 53, .2);
+  font-family: "Avenir Next", Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: auto;
+  overscroll-behavior: contain;
+  animation: selection-assist-in .16s cubic-bezier(.16, 1, .3, 1);
+  box-sizing: border-box;
+}
+
+.dawn-pdf-reader-shell .selection-assist-surface {
+  --selection-assist-background: #fbfaf6;
+  --selection-assist-ink: #292824;
+  --selection-assist-line: #c9c7bf;
+  --selection-assist-muted: var(--pdf-muted);
+}
+
+.dawn-pdf-reader-shell.reader-theme-night .selection-assist-surface {
+  --selection-assist-background: #20221e;
+  --selection-assist-ink: #ded8ce;
+  --selection-assist-line: #48504a;
+  --selection-assist-muted: #919b96;
+  color-scheme: dark;
+}
+
+.reader-theme-night .selection-assist-surface {
+  color-scheme: dark;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .42);
+}
+
+.selection-assist-header {
+  flex: none;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px 4px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--selection-assist-line) 76%, transparent);
+  background: color-mix(in srgb, var(--selection-assist-background) 94%, var(--selection-assist-line));
+}
+
+.selection-assist-header > strong {
+  min-width: 0;
+  color: var(--selection-assist-accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .055em;
+}
+
+.selection-assist-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.selection-assist-actions button,
+.selection-assist-body button,
+.selection-assist-footer button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--selection-assist-line) 92%, transparent);
+  border-radius: 8px;
+  color: var(--selection-assist-accent-strong);
+  background: color-mix(in srgb, var(--selection-assist-background) 88%, white);
+  font: 650 10px/1 "Avenir Next", Avenir, sans-serif;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.reader-theme-night .selection-assist-actions button,
+.reader-theme-night .selection-assist-body button,
+.reader-theme-night .selection-assist-footer button {
+  background: color-mix(in srgb, var(--selection-assist-background) 90%, black);
+}
+
+.selection-assist-actions button:hover:not(:disabled),
+.selection-assist-body button:hover:not(:disabled),
+.selection-assist-footer button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--selection-assist-accent-strong) 58%, transparent);
+  background: color-mix(in srgb, var(--selection-assist-accent) 10%, var(--selection-assist-background));
+}
+
+.selection-assist-actions button:disabled,
+.selection-assist-body button:disabled,
+.selection-assist-footer button:disabled {
+  cursor: not-allowed;
+  opacity: .44;
+}
+
+.selection-assist-actions button:focus-visible,
+.selection-assist-body button:focus-visible,
+.selection-assist-footer button:focus-visible,
+.selection-assist-footer textarea:focus-visible {
+  outline: 2px solid var(--selection-assist-accent-strong);
+  outline-offset: 2px;
+}
+
+.selection-assist-close {
+  width: 44px;
+  padding: 0 !important;
+  border-color: transparent !important;
+  color: var(--selection-assist-ink) !important;
+  background: transparent !important;
+  font-size: 21px !important;
+  font-weight: 400 !important;
+}
+
+.selection-assist-body {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.selection-assist-body-inner {
+  min-height: 1px;
+  padding: 14px 16px 16px;
+}
+
+.selection-assist-footer {
+  flex: none;
+  padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid color-mix(in srgb, var(--selection-assist-line) 76%, transparent);
+  background: color-mix(in srgb, var(--selection-assist-background) 96%, var(--selection-assist-line));
+}
+
+.selection-assist-surface[data-placement="panel"] {
+  border-radius: 12px;
+}
+
+.selection-assist-surface[data-placement="sheet"] {
+  border-radius: 16px 16px 8px 8px;
+  box-shadow: 0 12px 36px rgba(32, 48, 53, .24);
+}
+
+.selection-assist-surface p {
+  margin: 0;
+}
+
+.selection-assist-surface.is-error {
+  border-top-color: #a74a3f;
+}
+
+.selection-assist-surface .assist-retry,
+.selection-assist-surface .pdf-selection-retry,
+.selection-assist-surface .pdf-selection-translation-retry {
+  margin-top: 10px;
+}
+
+.selection-assist-surface .pdf-highlight-action {
+  width: 44px;
+  padding: 0 !important;
+  background: rgba(255, 237, 0, .18) !important;
+}
+
+.selection-assist-surface .pdf-highlight-action span {
+  display: block;
+  width: 15px;
+  height: 8px;
+  margin: auto;
+  border-radius: 2px;
+  background: #ffed00;
+  transform: rotate(-8deg);
+}
+
+.selection-assist-surface .pdf-highlight-action.is-saved {
+  border-color: #c7b700;
+}
+
+.selection-assist-surface .pdf-selection-result,
+.selection-assist-surface .rewrite-result {
+  white-space: pre-wrap;
+  font: 400 15px/1.58 "Iowan Old Style", Baskerville, Georgia, serif;
+}
+
+.selection-assist-surface .pdf-selection-loading {
+  color: var(--selection-assist-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.selection-assist-surface .pdf-selection-loading::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--selection-assist-accent);
+  animation: selection-assist-pulse 1.1s ease-in-out infinite;
+}
+
+.selection-assist-surface .pdf-selection-error,
+.selection-assist-surface.is-error .rewrite-result {
+  color: #8f4635;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.selection-assist-surface .pdf-selection-chinese {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--selection-assist-line);
+}
+
+.selection-assist-surface .pdf-selection-chinese > strong {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--selection-assist-muted);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.selection-assist-surface .pdf-selection-chinese > p {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.selection-assist-surface .pdf-selection-feedback {
+  margin-top: 11px;
+  color: var(--selection-assist-muted);
+  font-size: 10px;
+}
+
+.selection-assist-surface .pdf-selection-feedback.saved { color: #5a6f4d; }
+.selection-assist-surface .pdf-selection-feedback.error { color: #99473f; }
+
+@keyframes selection-assist-in {
+  from { opacity: 0; transform: translateY(4px) scale(.99); }
+}
+
+@keyframes selection-assist-pulse {
+  50% { opacity: .25; transform: scale(.7); }
+}
+
+@media (max-width: 720px) {
+  .selection-assist-surface {
+    border-radius: 16px 16px 8px 8px;
+  }
+  .selection-assist-header {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(5px, env(safe-area-inset-right));
+  }
+  .selection-assist-body-inner {
+    padding-left: max(15px, env(safe-area-inset-left));
+    padding-right: max(15px, env(safe-area-inset-right));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-assist-surface,
+  .selection-assist-surface .pdf-selection-loading::before,
+  .selection-assist-surface .rewrite-wait > i,
+  .selection-assist-surface .chat-thinking i {
+    animation: none;
+  }
+}
