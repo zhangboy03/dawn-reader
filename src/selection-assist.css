@@ -286,6 +286,68 @@
   font: 400 15px/1.58 "Iowan Old Style", Baskerville, Georgia, serif;
 }
 
+.selection-assist-surface .rewrite-result[data-selectable-rewrite] {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.selection-assist-surface .rewrite-drilldown {
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px solid var(--selection-assist-line);
+}
+
+.selection-assist-surface .rewrite-drilldown > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.selection-assist-surface .rewrite-drilldown > header > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.selection-assist-surface .rewrite-drilldown > header small {
+  color: var(--selection-assist-muted);
+  font-size: 9px;
+  letter-spacing: .07em;
+}
+
+.selection-assist-surface .rewrite-drilldown > header strong {
+  color: var(--selection-assist-accent-strong);
+  font-size: 10px;
+}
+
+.selection-assist-surface .rewrite-drilldown > header button {
+  min-height: 32px;
+}
+
+.selection-assist-surface .rewrite-drilldown-selection {
+  margin-bottom: 8px;
+  overflow: hidden;
+  color: var(--selection-assist-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-assist-surface .rewrite-drilldown-result {
+  white-space: pre-wrap;
+  font: 400 14px/1.58 "Iowan Old Style", Baskerville, Georgia, serif;
+}
+
+.selection-assist-surface .rewrite-drilldown.is-error .rewrite-drilldown-result {
+  color: #8f4635;
+  font-size: 11px;
+}
+
 .selection-assist-surface .pdf-selection-loading {
   color: var(--selection-assist-muted);
   font-size: 11px;

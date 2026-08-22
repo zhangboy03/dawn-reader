@@ -18,6 +18,7 @@ import {
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { selectionKind } from "../lib/selectionKind";
+import { rewriteDrilldownSelection } from "../lib/rewriteDrilldown";
 import {
   canSpeakWord,
   speakEnglishWord,
@@ -393,6 +394,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const referenceModeRef = useRef(Boolean(source.initialCfi));
   const activityRecorderRef = useRef<ReadingActivityRecorder | null>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
+  const drilldownAbortRef = useRef<AbortController | null>(null);
   const epubResizeFrameRef = useRef<number | null>(null);
   const epubViewportStabilityRef = useRef(new EpubViewportStability(2));
   const epubRenderRevisionRef = useRef(0);
@@ -434,6 +436,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [rewrite, setRewrite] = useState("");
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
   const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
+  const [drilldownSelected, setDrilldownSelected] = useState("");
+  const [drilldownRewrite, setDrilldownRewrite] = useState("");
+  const [drilldownState, setDrilldownState] = useState<RewriteState>("idle");
+  const [drilldownMode, setDrilldownMode] = useState<AssistanceMode>("english");
+  const drilldownContextRef = useRef<RewriteContext | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatState, setChatState] = useState<ChatState>("idle");
@@ -476,6 +483,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   useEffect(() => {
     if (!wordPronunciationExperimentEnabled()) return;
     setWordSpeechAvailable(canSpeakWord());
+  }, []);
+
+  useEffect(() => () => {
+    rewriteAbortRef.current?.abort();
+    drilldownAbortRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -1046,12 +1058,92 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
   }
 
+  function resetRewriteDrilldown() {
+    drilldownAbortRef.current?.abort();
+    drilldownAbortRef.current = null;
+    drilldownContextRef.current = null;
+    setDrilldownSelected("");
+    setDrilldownRewrite("");
+    setDrilldownState("idle");
+    setDrilldownMode("english");
+  }
+
+  async function requestRewriteDrilldown(
+    text: string,
+    context: RewriteContext,
+    mode: AssistanceMode = "english",
+  ) {
+    drilldownAbortRef.current?.abort();
+    const controller = new AbortController();
+    drilldownAbortRef.current = controller;
+    setDrilldownRewrite("");
+    setDrilldownState("loading");
+    try {
+      const response = await fetch("/api/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: text.slice(0, 1200),
+          context,
+          bookTitle: displayTitle,
+          preset: profile.preset,
+          mode,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? "Rewrite failed");
+      }
+      const data = await response.json() as { rewrite?: string };
+      if (!data.rewrite?.trim()) throw new Error("The provider returned no rewrite.");
+      setDrilldownRewrite(data.rewrite.trim());
+      setDrilldownState("complete");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setDrilldownRewrite(error instanceof Error ? error.message : "Rewrite failed");
+      setDrilldownState("error");
+    }
+  }
+
+  function startRewriteDrilldown(root: HTMLElement) {
+    const captured = rewriteDrilldownSelection(root);
+    if (!captured) return;
+    const context = contextFromDomSelection(captured.selection);
+    drilldownContextRef.current = context;
+    setDrilldownSelected(captured.text);
+    setDrilldownMode("english");
+    void requestRewriteDrilldown(captured.text, context, "english");
+  }
+
+  function scheduleRewriteDrilldown(root: HTMLElement) {
+    // Browsers finalize a native drag selection at the end of the pointer
+    // event. Reading it on the next task keeps the exact visible range intact.
+    window.setTimeout(() => {
+      if (root.isConnected) startRewriteDrilldown(root);
+    }, 0);
+  }
+
+  function requestDrilldownChineseDetail() {
+    const context = drilldownContextRef.current;
+    if (!drilldownSelected || !context) return;
+    setDrilldownMode("chinese");
+    void requestRewriteDrilldown(drilldownSelected, context, "chinese");
+  }
+
+  function retryRewriteDrilldown() {
+    const context = drilldownContextRef.current;
+    if (!drilldownSelected || !context) return;
+    void requestRewriteDrilldown(drilldownSelected, context, drilldownMode);
+  }
+
   function beginSelection(
     text: string,
     anchor: SelectionAnchor,
     context: RewriteContext,
     evidence: SelectionEvidenceContext,
   ) {
+    resetRewriteDrilldown();
     selectedContextRef.current = context;
     selectedEvidenceRef.current = evidence;
     setPendingEvidence(null);
@@ -1071,6 +1163,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   function requestChineseDetail() {
     const context = selectedContextRef.current;
     if (!selected || !context) return;
+    resetRewriteDrilldown();
     setAssistanceMode("chinese");
     void requestRewrite(selected, context, "chinese");
   }
@@ -1082,6 +1175,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   function retryAssistance() {
     const context = selectedContextRef.current;
     if (!selected || !context) return;
+    resetRewriteDrilldown();
     void requestRewrite(selected, context, assistanceMode);
   }
 
@@ -2276,6 +2370,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectionTimerRef.current = null;
     rewriteAbortRef.current?.abort();
     rewriteAbortRef.current = null;
+    resetRewriteDrilldown();
     window.getSelection()?.removeAllRanges();
     selectedContentsRef.current?.window?.getSelection()?.removeAllRanges();
     if (selectedCfiRef.current) {
@@ -2558,11 +2653,25 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     : selectedKind === "word" ? "正在查询读音与词义…"
     : selectedKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
+  const drilldownKind = selectionKind(drilldownSelected);
+  const drilldownTitle = drilldownMode === "chinese"
+    ? "中文详解"
+    : drilldownKind === "word" ? "读音与词义"
+    : drilldownKind === "phrase" ? "短语含义"
+    : "简明英文";
+  const drilldownLoadingTitle = drilldownMode === "chinese"
+    ? "正在生成中文解释…"
+    : drilldownKind === "word" ? "正在查询读音与词义…"
+    : drilldownKind === "phrase" ? "正在解释短语…"
+    : "正在生成简明英文…";
   const assistLayoutKey = [
     source.assistantMode,
     assistanceMode,
     rewriteState,
     rewrite.length,
+    drilldownState,
+    drilldownRewrite.length,
+    drilldownSelected.length,
     chatState,
     chatMessages.length,
     chatMessages.reduce((total, message) => total + message.content.length, 0),
@@ -2842,8 +2951,31 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       </form> : undefined}
     >
       {source.assistantMode === "rewrite" ? <div role="status" aria-live="polite">
-        {rewrite ? <p className="rewrite-result">{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
+        {rewrite ? <p
+          className="rewrite-result"
+          data-selectable-rewrite={rewriteState === "complete" || undefined}
+          onPointerUp={rewriteState === "complete"
+            ? (event) => scheduleRewriteDrilldown(event.currentTarget)
+            : undefined}
+        >{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
         {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
+        {drilldownSelected && <section className={`rewrite-drilldown ${drilldownState === "error" ? "is-error" : ""}`} aria-label={`继续解释：${drilldownSelected}`}>
+          <header>
+            <div>
+              <small>继续解释</small>
+              <strong>{drilldownTitle}</strong>
+            </div>
+            {drilldownMode === "english" && drilldownState === "complete" && <button
+              type="button"
+              onClick={requestDrilldownChineseDetail}
+            >中文详解</button>}
+          </header>
+          <p className="rewrite-drilldown-selection">{drilldownSelected}</p>
+          {drilldownRewrite
+            ? <p className="rewrite-drilldown-result">{drilldownRewrite}</p>
+            : <div className="rewrite-wait"><i /><span>{drilldownLoadingTitle}</span></div>}
+          {drilldownState === "error" && <button className="assist-retry" type="button" onClick={retryRewriteDrilldown}>重试</button>}
+        </section>}
       </div> : <div className="selection-chat">
         <div className="chat-selection"><span>选中</span><p>{selected}</p></div>
         {chatMessages.length > 0 && <div className="chat-thread" aria-live="polite">
