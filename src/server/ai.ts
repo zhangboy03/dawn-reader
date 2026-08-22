@@ -17,6 +17,27 @@ type AiConfig = {
   model: string;
 };
 
+export type AiRequestDiagnostics = {
+  attempts: number;
+  errorClass?: string;
+  inputTokens?: number;
+  model: string;
+  outputTokens?: number;
+  provider: string;
+  providerMs?: number;
+  reportedModel: string;
+};
+
+export class AiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly diagnostics: AiRequestDiagnostics,
+  ) {
+    super(message);
+    this.name = "AiRequestError";
+  }
+}
+
 type RuntimeEnv = {
   AI_PROVIDER?: string;
   AI_BASE_URL?: string;
@@ -123,41 +144,90 @@ export async function rewriteSelection(input: RewriteInput) {
     mode,
   });
 
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.key}`,
-    },
-    body: JSON.stringify({
+  const providerStarted = performance.now();
+  let response: Response;
+  try {
+    response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.key}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        stream: false,
+        messages: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
+        max_tokens: prompt.maxTokens,
+        ...providerSamplingOptions(config.provider, 0.1),
+        ...providerRequestOptions(config.provider),
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (error) {
+    const providerMs = performance.now() - providerStarted;
+    const errorClass = error instanceof DOMException && error.name === "TimeoutError"
+      ? "provider_timeout"
+      : "provider_transport";
+    throw new AiRequestError(`${config.provider} request failed.`, {
+      attempts: 1,
+      errorClass,
       model: config.model,
-      stream: false,
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user },
-      ],
-      max_tokens: prompt.maxTokens,
-      ...providerSamplingOptions(config.provider, 0.1),
-      ...providerRequestOptions(config.provider),
-    }),
-    signal: AbortSignal.timeout(30000),
-  });
-
+      provider: config.provider,
+      providerMs,
+      reportedModel: config.model,
+    });
+  }
   if (!response.ok) {
     const detail = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(`${config.provider} returned ${response.status}${detail?.error?.message ? `: ${detail.error.message}` : ""}`);
+    const providerMs = performance.now() - providerStarted;
+    throw new AiRequestError(`${config.provider} returned ${response.status}${detail?.error?.message ? `: ${detail.error.message}` : ""}`, {
+      attempts: 1,
+      errorClass: response.status === 429 ? "rate_limit" : response.status >= 500 ? "provider_5xx" : "provider_error",
+      model: config.model,
+      provider: config.provider,
+      providerMs,
+      reportedModel: config.model,
+    });
   }
 
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const data = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    model?: string;
+    usage?: { completion_tokens?: number; prompt_tokens?: number };
+  };
+  const providerMs = performance.now() - providerStarted;
   const rawRewrite = stripThinking(data.choices?.[0]?.message?.content ?? "");
   const rewrite = mode === "chinese" && isSingleWord(text)
     ? formatChineseWordExplanation(rawRewrite)
     : rawRewrite;
-  if (!rewrite) throw new Error(`${config.provider} returned no rewrite.`);
+  if (!rewrite) {
+    throw new AiRequestError(`${config.provider} returned no rewrite.`, {
+      attempts: 1,
+      errorClass: "empty_output",
+      inputTokens: data.usage?.prompt_tokens,
+      model: config.model,
+      outputTokens: data.usage?.completion_tokens,
+      provider: config.provider,
+      providerMs,
+      reportedModel: data.model ?? config.model,
+    });
+  }
   return {
     status: 200,
     body: { rewrite },
     provider: `${config.provider} | ${config.model}`,
+    diagnostics: {
+      attempts: 1,
+      inputTokens: data.usage?.prompt_tokens,
+      model: config.model,
+      outputTokens: data.usage?.completion_tokens,
+      provider: config.provider,
+      providerMs,
+      reportedModel: data.model ?? config.model,
+    } satisfies AiRequestDiagnostics,
   };
 }
 

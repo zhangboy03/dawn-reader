@@ -628,6 +628,7 @@ export function PdfReader({ source, profile, onClose }: {
         context: snapshot.context,
         preset: profile.preset,
         mode: "english",
+        monitor: "pdf",
         signal: controller.signal,
       });
       if (selectionVersionRef.current !== version) return;
