@@ -42,11 +42,6 @@ import {
   type SelectionAssistanceState,
   type SelectionContext,
 } from "../../lib/selectionAssistance";
-import {
-  loadBookAssistantModes,
-  saveBookAssistantMode,
-  type BookAssistantMode,
-} from "../../lib/bookAssistantMode";
 import type {
   SelectionChatMessage,
   SelectionChatSource,
@@ -76,6 +71,7 @@ type SelectionSnapshot = {
   quads: PdfQuad[];
   anchor: SelectionCardAnchor;
 };
+type SelectionAssistRoute = "rewrite" | "ask";
 
 type LoadFailure = {
   kind: "malformed" | "memory" | "missing" | "unknown";
@@ -250,7 +246,7 @@ export function PdfReader({ source, profile, onClose }: {
     return messages.join(" ");
   });
   const [selection, setSelection] = useState<SelectionSnapshot | null>(null);
-  const [assistantMode, setAssistantMode] = useState<BookAssistantMode>(() => loadBookAssistantModes()[source.id] ?? "rewrite");
+  const [assistRoute, setAssistRoute] = useState<SelectionAssistRoute>("rewrite");
   const [assistance, setAssistance] = useState<SelectionAssistanceState>(initialSelectionAssistanceState);
   const [chatDraft, setChatDraft] = useState("");
   const [chatMessages, setChatMessages] = useState<SelectionChatMessage[]>([]);
@@ -312,6 +308,7 @@ export function PdfReader({ source, profile, onClose }: {
     chatControllerRef.current?.abort();
     selectionVersionRef.current += 1;
     setSelection(null);
+    setAssistRoute("rewrite");
     setAssistance(initialSelectionAssistanceState);
     setChatDraft("");
     setChatMessages([]);
@@ -808,9 +805,9 @@ export function PdfReader({ source, profile, onClose }: {
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    if (assistantMode === "rewrite") void requestEnglish(snapshot, version);
-    else setAssistance(initialSelectionAssistanceState);
-  }, [assistantMode, closeSelection, requestEnglish]);
+    setAssistRoute("rewrite");
+    void requestEnglish(snapshot, version);
+  }, [closeSelection, requestEnglish]);
 
   function pdfAssistBoundary(): SelectionAssistVisibleBounds {
     const visual = currentPdfVisualBounds();
@@ -961,8 +958,6 @@ export function PdfReader({ source, profile, onClose }: {
     const outgoing = [...history, { role: "user" as const, content: trimmed }];
     const version = selectionVersionRef.current;
     chatControllerRef.current?.abort();
-    englishControllerRef.current?.abort();
-    chineseControllerRef.current?.abort();
     const controller = new AbortController();
     chatControllerRef.current = controller;
     setChatMessages(outgoing);
@@ -997,22 +992,13 @@ export function PdfReader({ source, profile, onClose }: {
     }
   }, [chatMessages, chatState, selection, source.title]);
 
-  const changeAssistantMode = useCallback((next: BookAssistantMode) => {
-    if (next === assistantMode) return;
-    setAssistantMode(next);
-    saveBookAssistantMode(source.id, next);
-    setAppearanceOpen(false);
-    setSearchOpen(false);
-    chatControllerRef.current?.abort();
-    englishControllerRef.current?.abort();
-    chineseControllerRef.current?.abort();
-    setChatDraft("");
-    setChatMessages([]);
-    setChatState("idle");
-    setChatError("");
-    setAssistance(initialSelectionAssistanceState);
-    if (next === "rewrite" && selection) void requestEnglish(selection, selectionVersionRef.current);
-  }, [assistantMode, requestEnglish, selection, source.id]);
+  const enterAsk = useCallback(() => {
+    if (selection) setAssistRoute("ask");
+  }, [selection]);
+
+  const returnToRewrite = useCallback(() => {
+    setAssistRoute("rewrite");
+  }, []);
 
   const applyPageInput = useCallback(() => {
     const viewer = pdfViewerRef.current;
@@ -1307,7 +1293,7 @@ export function PdfReader({ source, profile, onClose }: {
       returnFocus={() => scrollRef.current}
       layoutKey={`${selection.pageIndex}:${pageNumber}:${scale}:${fit}:${sidebarOpen ? 1 : 0}`}
       dragResetKey={selectionVersionRef.current}
-      mode={assistantMode}
+      route={assistRoute}
       state={assistance}
       chat={{
         draft: chatDraft,
@@ -1319,7 +1305,8 @@ export function PdfReader({ source, profile, onClose }: {
       onHighlight={addHighlight}
       onChinese={() => void requestChinese()}
       onRetryEnglish={() => void requestEnglish(selection, selectionVersionRef.current)}
-      onModeChange={changeAssistantMode}
+      onEnterAsk={enterAsk}
+      onReturnToRewrite={returnToRewrite}
       onChatDraftChange={setChatDraft}
       onChatSubmit={() => void sendQuestion(chatDraft)}
       onChatRetry={() => {

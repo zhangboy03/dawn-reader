@@ -40,16 +40,18 @@ describe("PDF selection card", () => {
   it("keeps yellow highlighting independent and reveals Chinese only after English succeeds", () => {
     const onChinese = vi.fn();
     const onHighlight = vi.fn();
+    const onEnterAsk = vi.fn();
     const { rerender } = render(<PdfSelectionCard
       anchor={anchor}
-      mode="rewrite"
+      route="rewrite"
       state={{ english: { phase: "loading", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
       chat={emptyChat}
       highlightState={{ phase: "idle", message: "" }}
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
-      onModeChange={() => undefined}
+      onEnterAsk={onEnterAsk}
+      onReturnToRewrite={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -61,14 +63,15 @@ describe("PDF selection card", () => {
 
     rerender(<PdfSelectionCard
       anchor={anchor}
-      mode="rewrite"
+      route="rewrite"
       state={{ english: { phase: "success", text: "Clear English", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
       chat={emptyChat}
       highlightState={{ phase: "saved", message: "高亮已保存在本机" }}
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
-      onModeChange={() => undefined}
+      onEnterAsk={onEnterAsk}
+      onReturnToRewrite={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -77,20 +80,23 @@ describe("PDF selection card", () => {
     expect(screen.getByText("Clear English")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "中文" }));
     expect(onChinese).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "向 AI 问原文所选内容" }));
+    expect(onEnterAsk).toHaveBeenCalledOnce();
   });
 
   it("keeps retry paths explicit without replacing a successful English result", () => {
     const onChinese = vi.fn();
     render(<PdfSelectionCard
       anchor={anchor}
-      mode="rewrite"
+      route="rewrite"
       state={{ english: { phase: "success", text: "Clear English", error: "" }, chinese: { phase: "error", text: "", error: "中文解释暂时失败。" } }}
       chat={emptyChat}
       highlightState={{ phase: "error", message: "标记未保存" }}
       onHighlight={() => undefined}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
-      onModeChange={() => undefined}
+      onEnterAsk={() => undefined}
+      onReturnToRewrite={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -104,41 +110,46 @@ describe("PDF selection card", () => {
 
   it("keeps question mode quiet until the reader types and never repeats the selected passage", () => {
     const onSubmit = vi.fn();
-    const onModeChange = vi.fn();
+    const onReturnToRewrite = vi.fn();
     const { rerender } = render(<PdfSelectionCard
       anchor={anchor}
-      mode="ask"
+      route="ask"
       state={{ english: { phase: "idle", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
       chat={emptyChat}
       highlightState={{ phase: "idle", message: "" }}
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
-      onModeChange={onModeChange}
+      onEnterAsk={() => undefined}
+      onReturnToRewrite={onReturnToRewrite}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
       onClose={() => undefined}
     />);
 
-    expect(screen.getByRole("dialog", { name: "AI 提问" })).toHaveAttribute("data-body-empty", "true");
+    expect(screen.getByRole("dialog", { name: "问这段" })).toHaveAttribute("data-body-empty", "true");
     expect(screen.getByPlaceholderText("输入你想问的问题…")).toBeInTheDocument();
     expect(screen.queryByText("选中")).not.toBeInTheDocument();
     expect(screen.queryByText("局部上下文")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用黄色标记所选文字" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "中文" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "划线后使用英文改写" }));
-    expect(onModeChange).toHaveBeenCalledWith("rewrite");
+    expect(screen.getByRole("textbox", { name: "向 AI 提问" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "返回简明英文" }));
+    expect(onReturnToRewrite).toHaveBeenCalledOnce();
 
     rerender(<PdfSelectionCard
       anchor={anchor}
-      mode="ask"
+      route="ask"
       state={{ english: { phase: "idle", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
       chat={{ ...emptyChat, draft: "这和上一段有什么关系？" }}
       highlightState={{ phase: "idle", message: "" }}
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
-      onModeChange={onModeChange}
+      onEnterAsk={() => undefined}
+      onReturnToRewrite={onReturnToRewrite}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
@@ -149,7 +160,7 @@ describe("PDF selection card", () => {
 
     rerender(<PdfSelectionCard
       anchor={anchor}
-      mode="ask"
+      route="ask"
       state={{ english: { phase: "idle", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
       chat={{
         ...emptyChat,
@@ -162,7 +173,8 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
-      onModeChange={onModeChange}
+      onEnterAsk={() => undefined}
+      onReturnToRewrite={onReturnToRewrite}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
@@ -170,7 +182,7 @@ describe("PDF selection card", () => {
     />);
     expect(screen.getByText("问题")).toBeInTheDocument();
     expect(screen.getByText("回答")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "AI 提问" })).not.toHaveAttribute("data-body-empty");
+    expect(screen.getByRole("dialog", { name: "问这段" })).not.toHaveAttribute("data-body-empty");
     expect(screen.getByRole("navigation", { name: "来源" })).toContainElement(screen.getByRole("link", { name: "[1] Primary source" }));
   });
 });

@@ -39,8 +39,6 @@ import {
   type SelectionChatSource,
   type SelectionChatState,
 } from "./selection-assist/SelectionChat";
-import { AssistantModeToggle } from "./AssistantModeToggle";
-import { loadBookAssistantModes, saveBookAssistantMode, type BookAssistantMode } from "../lib/bookAssistantMode";
 import {
   latestReadingPosition,
   parseReadingPosition,
@@ -113,6 +111,7 @@ import {
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type AssistanceMode = "english" | "chinese";
+type SelectionAssistRoute = "rewrite" | "ask";
 type AutoSaveState = "idle" | "pending" | "saved" | "error";
 type SelectionAnchor = SelectionAssistAnchor;
 type SelectionEndpoint = { document: Document; point: SelectionAssistPoint };
@@ -399,6 +398,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const referenceModeRef = useRef(Boolean(source.initialCfi));
   const activityRecorderRef = useRef<ReadingActivityRecorder | null>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
+  const chineseAbortRef = useRef<AbortController | null>(null);
   const chatAbortRef = useRef<AbortController | null>(null);
   const drilldownAbortRef = useRef<AbortController | null>(null);
   const epubResizeFrameRef = useRef<number | null>(null);
@@ -435,15 +435,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const selectionRangeRef = useRef<Range | null>(null);
   const selectionEndpointRef = useRef<SelectionEndpoint | null>(null);
   const selectionDirectionRef = useRef<SelectionAssistDirection>("unknown");
+  const selectionVersionRef = useRef(0);
   const [displayTitle, setDisplayTitle] = useState(source.title);
-  const [assistantMode, setAssistantMode] = useState<BookAssistantMode>(() => (
-    source.type === "epub" && source.id ? loadBookAssistantModes()[source.id] ?? "rewrite" : "rewrite"
-  ));
+  const [assistRoute, setAssistRoute] = useState<SelectionAssistRoute>("rewrite");
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
   const [rewrite, setRewrite] = useState("");
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
-  const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
+  const [chineseDetail, setChineseDetail] = useState("");
+  const [chineseState, setChineseState] = useState<RewriteState>("idle");
   const [drilldownSelected, setDrilldownSelected] = useState("");
   const [drilldownRewrite, setDrilldownRewrite] = useState("");
   const [drilldownState, setDrilldownState] = useState<RewriteState>("idle");
@@ -493,6 +493,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   useEffect(() => () => {
     rewriteAbortRef.current?.abort();
+    chineseAbortRef.current?.abort();
     chatAbortRef.current?.abort();
     drilldownAbortRef.current?.abort();
   }, []);
@@ -1009,13 +1010,24 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     });
   }
 
-  async function requestRewrite(text: string, context: RewriteContext, mode: AssistanceMode = "english") {
+  async function requestRewrite(
+    text: string,
+    context: RewriteContext,
+    mode: AssistanceMode = "english",
+    version = selectionVersionRef.current,
+  ) {
     const evidence = selectedEvidenceRef.current;
-    rewriteAbortRef.current?.abort();
+    const controllerRef = mode === "chinese" ? chineseAbortRef : rewriteAbortRef;
+    controllerRef.current?.abort();
     const controller = new AbortController();
-    rewriteAbortRef.current = controller;
-    setRewrite("");
-    setRewriteState("loading");
+    controllerRef.current = controller;
+    if (mode === "chinese") {
+      setChineseDetail("");
+      setChineseState("loading");
+    } else {
+      setRewrite("");
+      setRewriteState("loading");
+    }
     try {
       const response = await fetch("/api/rewrite", {
         method: "POST",
@@ -1035,18 +1047,29 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       }
       const data = await response.json() as { rewrite?: string };
       if (!data.rewrite?.trim()) throw new Error("The provider returned no rewrite.");
+      if (selectionVersionRef.current !== version) return;
       const completedRewrite = data.rewrite.trim();
-      setRewrite(completedRewrite);
-      setRewriteState("complete");
+      if (mode === "chinese") {
+        setChineseDetail(completedRewrite);
+        setChineseState("complete");
+      } else {
+        setRewrite(completedRewrite);
+        setRewriteState("complete");
+      }
       queueEvidence(evidence, {
         mode,
         text: completedRewrite,
         provider: response.headers.get("X-AI-Provider") ?? undefined,
       });
     } catch (error) {
-      if (controller.signal.aborted) return;
-      setRewrite(error instanceof Error ? error.message : "Rewrite failed");
-      setRewriteState("error");
+      if (controller.signal.aborted || selectionVersionRef.current !== version) return;
+      if (mode === "chinese") {
+        setChineseDetail(error instanceof Error ? error.message : "中文详解失败。");
+        setChineseState("error");
+      } else {
+        setRewrite(error instanceof Error ? error.message : "Rewrite failed");
+        setRewriteState("error");
+      }
     }
   }
 
@@ -1135,6 +1158,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     context: RewriteContext,
     evidence: SelectionEvidenceContext,
   ) {
+    const version = ++selectionVersionRef.current;
+    rewriteAbortRef.current?.abort();
+    chineseAbortRef.current?.abort();
     chatAbortRef.current?.abort();
     resetRewriteDrilldown();
     selectedContextRef.current = context;
@@ -1144,19 +1170,20 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectionDirectionRef.current = anchor.direction;
     setSelected(text);
     setSelectionAnchor(anchor);
-    setAssistanceMode("english");
+    setAssistRoute("rewrite");
+    setChineseDetail("");
+    setChineseState("idle");
     setChatDraft("");
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    if (assistantMode === "rewrite") void requestRewrite(text, context, "english");
+    void requestRewrite(text, context, "english", version);
   }
 
   function requestChineseDetail() {
     const context = selectedContextRef.current;
     if (!selected || !context) return;
     resetRewriteDrilldown();
-    setAssistanceMode("chinese");
     void requestRewrite(selected, context, "chinese");
   }
 
@@ -1168,7 +1195,13 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const context = selectedContextRef.current;
     if (!selected || !context) return;
     resetRewriteDrilldown();
-    void requestRewrite(selected, context, assistanceMode);
+    void requestRewrite(selected, context, "english");
+  }
+
+  function retryChineseDetail() {
+    const context = selectedContextRef.current;
+    if (!selected || !context) return;
+    void requestRewrite(selected, context, "chinese");
   }
 
   async function sendQuestion(question: string, history = chatMessages) {
@@ -1177,6 +1210,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const trimmed = question.trim();
     if (!selected || !context || !trimmed || chatState === "loading") return;
     const outgoing = [...history, { role: "user" as const, content: trimmed }];
+    const version = selectionVersionRef.current;
     setChatMessages(outgoing);
     setChatDraft("");
     setChatState("loading");
@@ -1202,6 +1236,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         sources?: SelectionChatSource[];
       } | null;
       if (!response.ok || !data?.answer?.trim()) throw new Error(data?.error ?? "没有收到回答。");
+      if (selectionVersionRef.current !== version) return;
       const completedAnswer = data.answer.trim();
       setChatMessages([...outgoing, { role: "assistant", content: completedAnswer, sources: data.sources ?? [] }]);
       setChatState("idle");
@@ -1212,32 +1247,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         provider: response.headers.get("X-AI-Provider") ?? undefined,
       });
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || selectionVersionRef.current !== version) return;
       setChatError(error instanceof Error ? error.message : "对话失败，请稍后重试。");
       setChatState("error");
     }
   }
 
-  function changeAssistantMode(next: BookAssistantMode) {
-    if (next === assistantMode) return;
-    setAssistantMode(next);
-    if (source.type === "epub" && source.id) saveBookAssistantMode(source.id, next);
-    setSettingsOpen(false);
-    setTocOpen(false);
+  function enterAsk() {
+    if (!selected || !selectedContextRef.current) return;
+    setAssistRoute("ask");
+  }
 
-    const context = selectedContextRef.current;
-    if (!selected || !context) return;
-    rewriteAbortRef.current?.abort();
-    chatAbortRef.current?.abort();
-    resetRewriteDrilldown();
-    setRewrite("");
-    setRewriteState("idle");
-    setAssistanceMode("english");
-    setChatDraft("");
-    setChatMessages([]);
-    setChatState("idle");
-    setChatError("");
-    if (next === "rewrite") void requestRewrite(selected, context, "english");
+  function returnToRewrite() {
+    setAssistRoute("rewrite");
   }
 
   function captureEpubSelection(contents: any, suppliedCfi?: string) {
@@ -2369,12 +2391,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   function clearSelection() {
+    selectionVersionRef.current += 1;
     if (pageFallbackTimerRef.current) window.clearTimeout(pageFallbackTimerRef.current);
     pageFallbackTimerRef.current = null;
     if (selectionTimerRef.current) window.clearTimeout(selectionTimerRef.current);
     selectionTimerRef.current = null;
     rewriteAbortRef.current?.abort();
     rewriteAbortRef.current = null;
+    chineseAbortRef.current?.abort();
+    chineseAbortRef.current = null;
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
     resetRewriteDrilldown();
@@ -2395,7 +2420,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setSelectionAnchor(null);
     setRewrite("");
     setRewriteState("idle");
-    setAssistanceMode("english");
+    setAssistRoute("rewrite");
+    setChineseDetail("");
+    setChineseState("idle");
     setChatDraft("");
     setChatMessages([]);
     setChatState("idle");
@@ -2647,16 +2674,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     "--reader-page-width": `${readingWidth}px`,
   } as CSSProperties;
   const selectedKind = selectionKind(selected);
-  const assistanceTitle = assistantMode === "ask"
-    ? "AI 提问"
-    : assistanceMode === "chinese"
-    ? "中文详解"
-    : selectedKind === "word" ? "读音与词义"
-    : selectedKind === "phrase" ? "短语含义"
-    : "简明英文";
-  const loadingTitle = assistanceMode === "chinese"
-    ? "正在生成中文解释…"
-    : selectedKind === "word" ? "正在查询读音与词义…"
+  const assistanceTitle = assistRoute === "ask" ? "问这段" : "简明英文";
+  const loadingTitle = selectedKind === "word" ? "正在查询读音与词义…"
     : selectedKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
   const drilldownKind = selectionKind(drilldownSelected);
@@ -2666,10 +2685,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     : drilldownKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
   const assistLayoutKey = [
-    assistantMode,
-    assistanceMode,
+    assistRoute,
     rewriteState,
     rewrite.length,
+    chineseState,
+    chineseDetail.length,
     drilldownState,
     drilldownRewrite.length,
     drilldownSelected.length,
@@ -2907,23 +2927,31 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     {selected && selectionAnchor && <SelectionAssistSurface
       title={assistanceTitle}
       ariaLabel={assistanceTitle}
-      className={`reader-selection-assist ${assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${assistantMode === "ask" ? chatState : rewriteState} ${(assistantMode === "ask" ? chatState : rewriteState) === "error" ? "is-error" : ""}`}
-      actions={<>
-        <AssistantModeToggle mode={assistantMode} onChange={changeAssistantMode} autoFocusTarget />
-        {assistantMode === "rewrite" && assistanceMode === "english" && selectedKind === "word" && wordSpeechAvailable && <button
+      className={`reader-selection-assist ${assistRoute === "ask" ? "ask-route" : "rewrite-route"} ${assistRoute === "ask" ? chatState : rewriteState} ${(assistRoute === "ask" ? chatState : rewriteState) === "error" ? "is-error" : ""}`}
+      leadingAction={assistRoute === "ask" ? <button
+        type="button"
+        className="selection-assist-back"
+        onClick={returnToRewrite}
+        aria-label="返回简明英文"
+      >← <span>简明英文</span></button> : undefined}
+      actions={assistRoute === "rewrite" ? <>
+        {selectedKind === "word" && wordSpeechAvailable && <button
           type="button"
           className="reader-pronunciation-action"
           onClick={playSelectedWord}
           aria-label={`播放 ${selected} 的发音`}
           title="播放发音"
         ><span aria-hidden="true" /></button>}
-        {assistantMode === "rewrite" && assistanceMode === "english" && rewriteState === "complete" && <button
+        {rewriteState === "complete" && <button
           type="button"
           className="reader-chinese-detail-action"
           onClick={requestChineseDetail}
+          disabled={chineseState === "loading"}
         >中文详解</button>}
-      </>}
+      </> : undefined}
       onDismiss={clearSelection}
+      onEscape={assistRoute === "ask" ? () => { returnToRewrite(); return true; } : undefined}
+      closeLabel="关闭本次辅助"
       getAnchor={currentSelectionAssistAnchor}
       getBoundary={readerAssistBoundary}
       getBoundaryElement={() => readingStageRef.current}
@@ -2931,26 +2959,27 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       returnFocus={() => readingStageRef.current}
       layoutKey={assistLayoutKey}
       dragResetKey={`${selected}:${selectionAnchor.focusRect.left}:${selectionAnchor.focusRect.top}:${currentHref}`}
-      maximumHeight={assistantMode === "ask" ? 620 : 440}
-      minimumUsefulHeight={assistantMode === "ask" ? 156 : 164}
-      bodyEmpty={assistantMode === "ask" && chatMessages.length === 0 && chatState !== "error"}
-      footer={assistantMode === "ask" ? <SelectionChatComposer
+      maximumHeight={assistRoute === "ask" ? 620 : 440}
+      minimumUsefulHeight={assistRoute === "ask" ? 156 : 164}
+      bodyEmpty={assistRoute === "ask" && chatMessages.length === 0 && chatState !== "error"}
+      footer={assistRoute === "ask" ? <SelectionChatComposer
         draft={chatDraft}
         messages={chatMessages}
         state={chatState}
         onDraftChange={setChatDraft}
         onSubmit={() => void sendQuestion(chatDraft)}
+        focusOnMount
       /> : undefined}
     >
-      {assistantMode === "rewrite" ? <div role="status" aria-live="polite">
-        {rewrite ? <p
+      {assistRoute === "rewrite" ? <div role="status" aria-live="polite">
+        {rewriteState === "complete" ? <p
           className="rewrite-result"
-          data-selectable-rewrite={rewriteState === "complete" || undefined}
-          onPointerUp={rewriteState === "complete"
-            ? (event) => scheduleRewriteDrilldown(event.currentTarget)
-            : undefined}
-        >{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
-        {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
+          data-selectable-rewrite
+          onPointerUp={(event) => scheduleRewriteDrilldown(event.currentTarget)}
+        >{rewrite}</p> : rewriteState === "error" ? <div className="rewrite-error">
+          <p>暂时无法生成简明英文。</p>
+          <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>
+        </div> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
         {drilldownSelected && <section className={`rewrite-drilldown ${drilldownState === "error" ? "is-error" : ""}`} aria-label={`继续解释：${drilldownSelected}`}>
           <header>
             <small>继续解释</small>
@@ -2966,6 +2995,18 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             : <div className="rewrite-wait"><i /><span>{drilldownLoadingTitle}</span></div>}
           {drilldownState === "error" && <button className="assist-retry" type="button" onClick={retryRewriteDrilldown}>重试</button>}
         </section>}
+        {chineseState !== "idle" && <section className={`reader-chinese-detail ${chineseState === "error" ? "is-error" : ""}`} lang="zh-CN">
+          <strong>中文详解</strong>
+          {chineseState === "loading" ? <div className="rewrite-wait"><i /><span>正在生成中文详解…</span></div>
+            : chineseState === "complete" ? <p>{chineseDetail}</p>
+            : <><p>暂时无法生成中文详解。</p><button className="assist-retry" type="button" onClick={retryChineseDetail}>重试中文详解</button></>}
+        </section>}
+        {(rewriteState === "complete" || rewriteState === "error") && <button
+          type="button"
+          className="selection-assist-escalation"
+          onClick={enterAsk}
+          aria-label={chatMessages.length ? "继续向 AI 问原文所选内容" : "向 AI 问原文所选内容"}
+        >{chatMessages.length ? "继续提问" : "问这段"}</button>}
       </div> : <SelectionChatBody
         messages={chatMessages}
         state={chatState}

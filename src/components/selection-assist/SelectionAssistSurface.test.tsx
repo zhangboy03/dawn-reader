@@ -87,6 +87,23 @@ describe("SelectionAssistSurface", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it("lets a nested ask route handle Escape without dismissing the surface", () => {
+    const onDismiss = vi.fn();
+    const onEscape = vi.fn(() => true);
+    render(<SelectionAssistSurface
+      title="问这段"
+      ariaLabel="问这段"
+      onDismiss={onDismiss}
+      onEscape={onEscape}
+      getAnchor={() => anchor}
+    ><p>Question</p></SelectionAssistSurface>);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onEscape).toHaveBeenCalledOnce();
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "问这段" })).toBeInTheDocument();
+  });
+
   it("contains internal gestures without cancelling textarea focus or control defaults", () => {
     render(<SelectionAssistSurface
       title="问这段内容"
