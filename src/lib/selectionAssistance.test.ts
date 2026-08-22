@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { boundedSelectionContext, canRequestChinese, requestSelectionAssistance } from "./selectionAssistance";
+import {
+  boundedSelectionContext,
+  canRequestChinese,
+  cloudflareColo,
+  requestSelectionAssistance,
+  serverTimingDuration,
+} from "./selectionAssistance";
 
 describe("PDF selection assistance", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -33,5 +39,13 @@ describe("PDF selection assistance", () => {
     expect(context.after.length).toBeLessThanOrEqual(6);
     expect(`123456 target abcdef`).toContain(`${context.before}target${context.after}`);
     expect(boundedSelectionContext("missing", "unrelated page")).toEqual({ before: "", after: "" });
+  });
+
+  it("parses only privacy-safe response diagnostics", () => {
+    expect(serverTimingDuration("ai-provider;dur=812.4, ai-worker;dur=830.1", "ai-provider")).toBe(812.4);
+    expect(serverTimingDuration("ai-provider;dur=812.4, ai-worker;dur=830.1", "ai-worker")).toBe(830.1);
+    expect(serverTimingDuration(null, "ai-provider")).toBeNull();
+    expect(cloudflareColo("a2f25b368aebf9ce-LAX")).toBe("LAX");
+    expect(cloudflareColo("invalid")).toBeNull();
   });
 });

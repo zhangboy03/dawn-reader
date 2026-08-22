@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  listAiPerformanceEvents,
+  subscribeAiPerformance,
+  summarizeAiPerformance,
+  type AiPerformanceEvent,
+  type AiPerformancePeriod,
+} from "../lib/aiPerformance";
+import {
   deleteReadingEvidence,
   listReadingEvidence,
   listReadingTimeSlices,
@@ -20,6 +27,18 @@ function formatMinutes(milliseconds: number) {
   return remainder ? `${hours} 小时 ${remainder} 分钟` : `${hours} 小时`;
 }
 
+function formatDuration(milliseconds: number | null) {
+  if (milliseconds == null) return "—";
+  return milliseconds < 1000 ? `${Math.round(milliseconds)} ms` : `${(milliseconds / 1000).toFixed(2)} s`;
+}
+
+const periodLabels: Record<AiPerformancePeriod, string> = {
+  morning: "早上 07–12",
+  afternoon: "下午 12–19",
+  evening: "晚上 19–24",
+  overnight: "凌晨 00–07",
+};
+
 function recordMatchesFilter(record: ReadingEvidenceRecord, filter: HistoryFilter) {
   if (filter === "all") return true;
   if (filter === "words") return record.kind === "word" || record.kind === "phrase";
@@ -34,6 +53,7 @@ export function ReadingHistory({
   onOpenSource: (record: ReadingEvidenceRecord) => void | Promise<void>;
 }) {
   const [records, setRecords] = useState<ReadingEvidenceRecord[]>([]);
+  const [aiEvents, setAiEvents] = useState<AiPerformanceEvent[]>([]);
   const [timeSummary, setTimeSummary] = useState({ todayMs: 0, weekMs: 0 });
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const [query, setQuery] = useState("");
@@ -41,21 +61,37 @@ export function ReadingHistory({
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
-      const [nextRecords, slices] = await Promise.all([
+      const [nextRecords, slices, nextAiEvents] = await Promise.all([
         listReadingEvidence().catch(() => []),
         listReadingTimeSlices().catch(() => []),
+        listAiPerformanceEvents(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)).catch(() => []),
       ]);
       if (cancelled) return;
       setRecords(nextRecords);
+      setAiEvents(nextAiEvents);
       setTimeSummary(summarizeReadingTime(slices));
     };
     void refresh();
-    const unsubscribe = subscribeReadingEvidence(() => { void refresh(); });
+    const unsubscribeEvidence = subscribeReadingEvidence(() => { void refresh(); });
+    const unsubscribePerformance = subscribeAiPerformance(() => { void refresh(); });
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribeEvidence();
+      unsubscribePerformance();
     };
   }, []);
+
+  const aiSummary = useMemo(() => summarizeAiPerformance(aiEvents), [aiEvents]);
+
+  function exportAiPerformance() {
+    const data = JSON.stringify({ exportedAt: new Date().toISOString(), events: aiEvents }, null, 2);
+    const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `dawn-pdf-ai-performance-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 
   const visibleRecords = useMemo(() => {
     const normalizedQuery = query.normalize("NFKC").toLocaleLowerCase().trim();
@@ -78,6 +114,36 @@ export function ReadingHistory({
     <section className="reading-history-summary" aria-label="阅读时间（估算）">
       <div><small>今天</small><strong>{formatMinutes(timeSummary.todayMs)}</strong></div>
       <div><small>过去 7 天</small><strong>{formatMinutes(timeSummary.weekMs)}</strong></div>
+    </section>
+
+    <section className="ai-performance-summary" aria-label="PDF AI 性能（仅本机）">
+      <header>
+        <div><small>PDF AI · 仅本机</small><strong>过去 7 天</strong></div>
+        <button type="button" disabled={!aiEvents.length} onClick={exportAiPerformance}>导出 JSON</button>
+      </header>
+      {aiSummary.count ? <>
+        <div className="ai-performance-totals">
+          <div><small>请求</small><strong>{aiSummary.count}</strong></div>
+          <div><small>p50</small><strong>{formatDuration(aiSummary.p50Ms)}</strong></div>
+          <div><small>p95</small><strong>{formatDuration(aiSummary.p95Ms)}</strong></div>
+          <div><small>成功率</small><strong>{aiSummary.successRate == null ? "—" : `${(aiSummary.successRate * 100).toFixed(1)}%`}</strong></div>
+        </div>
+        <div className="ai-performance-periods">
+          {(Object.keys(periodLabels) as AiPerformancePeriod[]).map((period) => {
+            const summary = aiSummary.byPeriod[period];
+            return <div key={period}>
+              <span>{periodLabels[period]}</span>
+              <strong>{formatDuration(summary.p50Ms)}</strong>
+              <small>p95 {formatDuration(summary.p95Ms)} · n={summary.count}</small>
+            </div>;
+          })}
+        </div>
+        <footer>
+          <span>Worker p50 {formatDuration(aiSummary.workerP50Ms)}</span>
+          <span>Gemini p50 {formatDuration(aiSummary.providerP50Ms)}</span>
+          <span>Colo {aiSummary.colos.slice(0, 3).map((item) => `${item.colo} ${item.count}`).join(" · ") || "—"}</span>
+        </footer>
+      </> : <p>从下一次 PDF“简明英文”开始记录；不保存论文原文或回答。</p>}
     </section>
 
     <section className="reading-history-controls">

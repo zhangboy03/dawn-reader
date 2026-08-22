@@ -22,6 +22,22 @@
 .reading-history-summary > div { display: grid; gap: 7px; }
 .reading-history-summary small { color: #7e8c8f; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .11em; }
 .reading-history-summary strong { font: 500 clamp(25px, 4vw, 40px)/1 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.035em; }
+.ai-performance-summary { width: min(1040px, calc(100% - 40px)); margin: 24px auto 0; padding: 22px 0 24px; border-bottom: 1px solid #aab7b8; }
+.ai-performance-summary > header { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+.ai-performance-summary > header > div { display: grid; gap: 5px; }
+.ai-performance-summary small { color: #7e8c8f; font: 8px/1.3 "SFMono-Regular", monospace; letter-spacing: .08em; }
+.ai-performance-summary > header strong { font: 500 22px/1.1 "Iowan Old Style", Baskerville, Georgia, serif; }
+.ai-performance-summary button { min-height: 36px; padding: 0 11px; border: 1px solid #9eadae; border-radius: var(--radius-control); color: #42565d; background: transparent; font-size: 10px; }
+.ai-performance-summary button:disabled { opacity: .36; }
+.ai-performance-summary > p { margin: 20px 0 0; color: #758388; font: 11px/1.6 "Avenir Next", Avenir, sans-serif; }
+.ai-performance-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-top: 20px; }
+.ai-performance-totals > div { display: grid; gap: 6px; }
+.ai-performance-totals strong { font: 500 clamp(20px, 3vw, 30px)/1 "Iowan Old Style", Baskerville, Georgia, serif; }
+.ai-performance-periods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+.ai-performance-periods > div { display: grid; gap: 5px; padding-top: 12px; border-top: 1px solid rgba(158, 173, 174, .64); }
+.ai-performance-periods span { color: #65767b; font-size: 9px; }
+.ai-performance-periods strong { font: 500 17px/1.1 "Iowan Old Style", Baskerville, Georgia, serif; }
+.ai-performance-summary > footer { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 22px; color: #748287; font: 8px/1.4 "SFMono-Regular", monospace; }
 .reading-history-controls { width: min(1040px, calc(100% - 40px)); display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 22px auto 0; }
 .reading-history-controls > div { display: flex; gap: 4px; }
 .reading-history-controls button { min-height: 38px; padding: 0 14px; border: 0; border-bottom: 1px solid transparent; color: #748287; background: transparent; font-size: 10px; }
@@ -53,6 +69,8 @@
   .reading-history-topbar { grid-template-columns: auto 1fr; padding: 8px 14px; }
   .reading-history-topbar > div { justify-items: start; }
   .reading-history-summary { grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 32px; }
+  .ai-performance-totals, .ai-performance-periods { grid-template-columns: 1fr 1fr; }
+  .ai-performance-summary > header { align-items: start; }
   .reading-history-controls { align-items: stretch; flex-direction: column; gap: 14px; }
   .reading-history-controls input { width: 100%; }
   .reading-evidence-entry { grid-template-columns: 1fr; }
