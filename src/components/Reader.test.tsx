@@ -333,7 +333,15 @@ describe("Reader chrome", () => {
     fireEvent.pointerUp(rewrite, { pointerType: "mouse" });
 
     expect(await screen.findByText("not known or recognized")).not.toBeNull();
-    expect(screen.getByRole("region", { name: "继续解释：unfamiliar" })).not.toBeNull();
+    const drilldown = screen.getByRole("region", { name: "继续解释：unfamiliar" });
+    expect(drilldown).not.toBeNull();
+    expect(within(drilldown).queryByText("读音与词义")).toBeNull();
+    const nestedChineseDetail = within(drilldown).getByRole("button", { name: "中文详解" });
+    expect(nestedChineseDetail.className).toContain("reader-chinese-detail-action");
+    expect(nestedChineseDetail.className).toContain("rewrite-drilldown-chinese-action");
+    const assistCss = readFileSync("src/selection-assist.css", "utf8");
+    expect(assistCss).toMatch(/\.selection-assist-surface button\.reader-chinese-detail-action\s*\{[^}]*height:\s*30px;[^}]*border-radius:\s*999px;/s);
+    expect(assistCss).toMatch(/\.rewrite-drilldown-chinese-action\s*\{[^}]*margin-right:\s*39px;/s);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     const nestedRequest = JSON.parse(String((fetchSpy.mock.calls[1][1] as RequestInit).body));
     expect(nestedRequest.text).toBe("unfamiliar");

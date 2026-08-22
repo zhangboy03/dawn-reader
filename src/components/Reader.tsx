@@ -2654,11 +2654,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     : selectedKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
   const drilldownKind = selectionKind(drilldownSelected);
-  const drilldownTitle = drilldownMode === "chinese"
-    ? "中文详解"
-    : drilldownKind === "word" ? "读音与词义"
-    : drilldownKind === "phrase" ? "短语含义"
-    : "简明英文";
   const drilldownLoadingTitle = drilldownMode === "chinese"
     ? "正在生成中文解释…"
     : drilldownKind === "word" ? "正在查询读音与词义…"
@@ -2961,12 +2956,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
         {drilldownSelected && <section className={`rewrite-drilldown ${drilldownState === "error" ? "is-error" : ""}`} aria-label={`继续解释：${drilldownSelected}`}>
           <header>
-            <div>
-              <small>继续解释</small>
-              <strong>{drilldownTitle}</strong>
-            </div>
+            <small>继续解释</small>
             {drilldownMode === "english" && drilldownState === "complete" && <button
               type="button"
+              className="reader-chinese-detail-action rewrite-drilldown-chinese-action"
               onClick={requestDrilldownChineseDetail}
             >中文详解</button>}
           </header>
