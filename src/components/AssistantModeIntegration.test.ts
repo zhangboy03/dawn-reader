@@ -14,11 +14,13 @@ describe("reader-owned assistance mode", () => {
   it("uses the same direct mode control in EPUB and PDF readers", () => {
     const epub = readFileSync("src/components/Reader.tsx", "utf8");
     const pdf = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
+    const pdfCard = readFileSync("src/components/pdf/PdfSelectionCard.tsx", "utf8");
 
-    expect(epub).toContain("<AssistantModeToggle mode={assistantMode}");
-    expect(pdf).toContain("<AssistantModeToggle mode={assistantMode}");
-    expect(epub).toContain('className="assistant-mode-slot"');
-    expect(pdf).toContain('className="dawn-pdf-assistant-slot"');
+    expect(epub.match(/<AssistantModeToggle/g)).toHaveLength(1);
+    expect(pdf).not.toContain("AssistantModeToggle");
+    expect(pdfCard.match(/<AssistantModeToggle/g)).toHaveLength(1);
+    expect(epub).not.toContain("assistant-mode-slot");
+    expect(pdf).not.toContain("dawn-pdf-assistant-slot");
     expect(epub).toContain("loadBookAssistantModes()[source.id]");
     expect(epub).toContain("saveBookAssistantMode(source.id, next)");
     expect(pdf).toContain("saveBookAssistantMode(source.id, next)");

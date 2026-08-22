@@ -57,7 +57,7 @@ afterEach(() => {
 });
 
 describe("Reader chrome", () => {
-  it("changes the selection action with one reader-level button", () => {
+  it("keeps assistance choices out of the resting reader chrome", () => {
     render(<Reader
       source={{
         type: "text",
@@ -68,10 +68,8 @@ describe("Reader chrome", () => {
       onClose={() => undefined}
     />);
 
-    const rewrite = screen.getByRole("button", { name: "划线后：英文改写。点击切换：AI 提问" });
-    expect(rewrite.textContent).toContain("改写");
-    fireEvent.click(rewrite);
-    expect(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" }).textContent).toContain("提问");
+    expect(screen.queryByRole("group", { name: "划线辅助方式" })).toBeNull();
+    expect(screen.getByRole("button", { name: "阅读设置" })).not.toBeNull();
   });
 
   it("keeps EPUB navigation outside the reflowing reading stage", () => {

@@ -1218,8 +1218,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }
   }
 
-  function toggleAssistantMode() {
-    const next: BookAssistantMode = assistantMode === "rewrite" ? "ask" : "rewrite";
+  function changeAssistantMode(next: BookAssistantMode) {
+    if (next === assistantMode) return;
     setAssistantMode(next);
     if (source.type === "epub" && source.id) saveBookAssistantMode(source.id, next);
     setSettingsOpen(false);
@@ -2699,9 +2699,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           <button className={settings.pencilMode === "page" ? "active" : ""} aria-pressed={settings.pencilMode === "page"} onClick={() => setPencilMode("page")}>翻页</button>
           <button className={settings.pencilMode === "select" ? "active" : ""} aria-pressed={settings.pencilMode === "select"} onClick={() => setPencilMode("select")}>画词</button>
         </div>}
-        {selected
-          ? <span className="assistant-mode-slot" aria-hidden="true" />
-          : <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} />}
         {source.type === "epub" && <button
           className={`toc-button ${tocOpen ? "active" : ""}`}
           onClick={() => {
@@ -2912,7 +2909,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       ariaLabel={assistanceTitle}
       className={`reader-selection-assist ${assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${assistantMode === "ask" ? chatState : rewriteState} ${(assistantMode === "ask" ? chatState : rewriteState) === "error" ? "is-error" : ""}`}
       actions={<>
-        <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="selection-assist-mode-toggle" autoFocusTarget />
+        <AssistantModeToggle mode={assistantMode} onChange={changeAssistantMode} autoFocusTarget />
         {assistantMode === "rewrite" && assistanceMode === "english" && selectedKind === "word" && wordSpeechAvailable && <button
           type="button"
           className="reader-pronunciation-action"
@@ -2936,6 +2933,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       dragResetKey={`${selected}:${selectionAnchor.focusRect.left}:${selectionAnchor.focusRect.top}:${currentHref}`}
       maximumHeight={assistantMode === "ask" ? 620 : 440}
       minimumUsefulHeight={assistantMode === "ask" ? 156 : 164}
+      bodyEmpty={assistantMode === "ask" && chatMessages.length === 0 && chatState !== "error"}
       footer={assistantMode === "ask" ? <SelectionChatComposer
         draft={chatDraft}
         messages={chatMessages}

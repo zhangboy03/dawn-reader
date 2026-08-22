@@ -523,11 +523,6 @@ body:has(.onboarding), body:has(.test-screen) {
 .pencil-switch button { min-width: 48px; height: 30px; padding: 0 9px; border: 0; border-radius: 5px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
 .pencil-switch button:hover { color: var(--reader-chrome-ink); }
 .pencil-switch button.active { color: #fff8f2; background: var(--reader-control-active); }
-.assistant-mode-toggle { width: 44px; height: 40px; display: inline-grid; place-items: center; flex: none; padding: 0; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
-.assistant-mode-toggle > span { font: 650 10px/1 "Avenir Next", Avenir, sans-serif; }
-.assistant-mode-toggle:hover,
-.assistant-mode-toggle[data-mode="ask"] { border-color: var(--reader-control-active); color: var(--reader-control-active); }
-.assistant-mode-slot { width: 44px; height: 40px; flex: none; visibility: hidden; }
 .type-button { width: 40px; height: 40px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-ink); background: var(--reader-control); font: 600 13px "Iowan Old Style", serif; }
 .type-button:hover { border-color: var(--reader-control-active); color: var(--reader-control-active); }
 .toc-button { min-width: 64px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
@@ -707,6 +702,14 @@ body:has(.onboarding), body:has(.test-screen) {
 .assist-retry { min-height: 38px; margin-top: 10px; padding: 0 12px; border: 1px solid var(--reader-note-line); border-radius: 6px; color: var(--reader-note-ink); background: transparent; font-size: 11px; }
 .rewrite-wait { height: 30px; margin-top: 8px; display: flex; align-items: center; gap: 10px; color: #747f7d; font: italic 12px "Iowan Old Style", serif; }
 .rewrite-wait > i { width: 18px; border-top: 1px solid var(--accent); animation: waiting-line .8s ease-in-out infinite alternate; }
+.reader-selection-assist .selection-assist-header > strong,
+.pdf-selection-assist .selection-assist-header > strong { width: 1px; height: 1px; position: absolute; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.reader-selection-assist .selection-assist-actions,
+.pdf-selection-assist .selection-assist-actions { width: 100%; }
+.assistant-mode-switch { height: 44px; display: flex; align-items: stretch; margin-right: auto; }
+.assistant-mode-switch button { min-width: 50px !important; position: relative; padding: 0 9px !important; border: 0 !important; border-radius: 0 !important; color: var(--selection-assist-muted) !important; background: transparent !important; font-size: 10px !important; }
+.assistant-mode-switch button[aria-pressed="true"] { color: var(--selection-assist-accent-strong) !important; }
+.assistant-mode-switch button[aria-pressed="true"]::after { content: ""; width: 18px; position: absolute; right: 50%; bottom: 6px; border-top: 1px solid currentColor; transform: translateX(50%); }
 .chat-thread { margin: 0 -2px 0 0; padding-right: 7px; }
 .chat-message { padding: 0 0 13px; }
 .chat-message + .chat-message { padding-top: 13px; border-top: 1px solid var(--reader-note-line); }

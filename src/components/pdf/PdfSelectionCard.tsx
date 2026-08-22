@@ -26,7 +26,7 @@ export function PdfSelectionCard({
   onHighlight,
   onChinese,
   onRetryEnglish,
-  onModeToggle,
+  onModeChange,
   onChatDraftChange,
   onChatSubmit,
   onChatRetry,
@@ -52,7 +52,7 @@ export function PdfSelectionCard({
   onHighlight: () => void;
   onChinese: () => void;
   onRetryEnglish: () => void;
-  onModeToggle: () => void;
+  onModeChange: (mode: BookAssistantMode) => void;
   onChatDraftChange: (value: string) => void;
   onChatSubmit: () => void;
   onChatRetry: () => void;
@@ -87,7 +87,7 @@ export function PdfSelectionCard({
     ariaLabel={mode === "ask" ? "AI 提问" : "所选文字辅助"}
     className={`pdf-selection-assist ${mode === "ask" ? "ask-mode" : "rewrite-mode"} ${error ? "is-error" : ""}`}
     actions={<>
-      <AssistantModeToggle mode={mode} onToggle={onModeToggle} className="selection-assist-mode-toggle" autoFocusTarget />
+      <AssistantModeToggle mode={mode} onChange={onModeChange} autoFocusTarget />
       <button
         type="button"
         className={`pdf-highlight-action ${highlightState.phase === "saved" ? "is-saved" : ""}`}
@@ -114,6 +114,7 @@ export function PdfSelectionCard({
     dragResetKey={dragResetKey}
     maximumHeight={560}
     minimumUsefulHeight={mode === "ask" ? 156 : 184}
+    bodyEmpty={mode === "ask" && chat.messages.length === 0 && chat.state !== "error" && !highlightState.message}
     footer={mode === "ask" ? <SelectionChatComposer
       draft={chat.draft}
       messages={chat.messages}

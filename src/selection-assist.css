@@ -230,6 +230,14 @@
   padding: 14px 16px 16px;
 }
 
+.selection-assist-surface[data-body-empty="true"] .selection-assist-body {
+  display: none;
+}
+
+.selection-assist-surface[data-body-empty="true"] .selection-assist-footer {
+  border-top: 0;
+}
+
 .selection-assist-footer {
   flex: none;
   padding: 10px 12px max(10px, env(safe-area-inset-bottom));

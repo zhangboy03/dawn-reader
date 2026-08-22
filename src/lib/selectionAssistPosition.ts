@@ -25,7 +25,7 @@ export type SelectionAssistDragPosition = {
 };
 
 type PositionInput = {
-  anchor: Pick<SelectionAssistAnchor, "focusRect" | "focusPoint">;
+  anchor: Pick<SelectionAssistAnchor, "rects" | "focusRect" | "focusPoint">;
   popover: { width: number; naturalHeight: number };
   viewport: SelectionAssistViewport;
   safeArea?: SelectionAssistVisibleBounds | null;
@@ -45,6 +45,26 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 function finite(value: number, fallback: number) {
   return Number.isFinite(value) ? value : fallback;
+}
+
+function connectedSelectionVerticalBounds(anchor: PositionInput["anchor"]) {
+  let top = anchor.focusRect.top;
+  let bottom = anchor.focusRect.bottom;
+  const remaining = anchor.rects.filter((rect) => rect !== anchor.focusRect);
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (let index = remaining.length - 1; index >= 0; index -= 1) {
+      const rect = remaining[index];
+      const tolerance = Math.max(8, rect.height, anchor.focusRect.height) * 1.25;
+      if (rect.bottom < top - tolerance || rect.top > bottom + tolerance) continue;
+      top = Math.min(top, rect.top);
+      bottom = Math.max(bottom, rect.bottom);
+      remaining.splice(index, 1);
+      expanded = true;
+    }
+  }
+  return { top, bottom };
 }
 
 export function visualViewportRect(
@@ -155,8 +175,9 @@ export function selectionAssistPosition({
     });
   }
 
-  const availableAbove = Math.max(0, anchor.focusRect.top - gap - safe.top);
-  const availableBelow = Math.max(0, safe.bottom - anchor.focusRect.bottom - gap);
+  const selectionBounds = connectedSelectionVerticalBounds(anchor);
+  const availableAbove = Math.max(0, selectionBounds.top - gap - safe.top);
+  const availableBelow = Math.max(0, safe.bottom - selectionBounds.bottom - gap);
   const requiredHeight = Math.min(naturalHeight, minimumUsefulHeight);
   const preferred = preferredPlacement({
     anchor,
@@ -184,7 +205,7 @@ export function selectionAssistPosition({
     const height = Math.min(naturalHeight, maxHeight);
     return rounded({
       left,
-      top: side === "above" ? anchor.focusRect.top - gap - height : anchor.focusRect.bottom + gap,
+      top: side === "above" ? selectionBounds.top - gap - height : selectionBounds.bottom + gap,
       width,
       height,
       maxHeight,
