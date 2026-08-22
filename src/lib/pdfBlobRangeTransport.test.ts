@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createPdfBlobRangeTransport, LOCAL_PDF_RANGE_CHUNK_BYTES } from "./pdfBlobRangeTransport";
+import { createPdfBlobRangeTransport, LOCAL_PDF_MAX_CONCURRENT_RANGES, LOCAL_PDF_RANGE_CHUNK_BYTES } from "./pdfBlobRangeTransport";
 
 class FakeRangeTransport {
   chunks: Array<{ begin: number; chunk: Uint8Array | null }> = [];
@@ -36,6 +36,18 @@ describe("local PDF range transport", () => {
     transport.abort();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(transport.chunks).toEqual([]);
+  });
+
+  it("rejects invalid or truncated ranges instead of returning misleading bytes", async () => {
+    const transport = createPdfBlobRangeTransport(FakeRangeTransport, new Blob([new Uint8Array([1, 2, 3])]), "paper.pdf");
+    transport.requestDataRange(-1, 2);
+    transport.requestDataRange(2, 9);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(transport.chunks).toEqual([
+      { begin: 0, chunk: null },
+      { begin: 2, chunk: null },
+    ]);
+    expect(LOCAL_PDF_MAX_CONCURRENT_RANGES).toBe(4);
   });
 
   it("opens a real PDF through PDF.js without a whole-file data parameter", async () => {

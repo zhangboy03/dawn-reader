@@ -25,6 +25,7 @@ import {
 } from "../../lib/pdfLocator";
 import { createPdfViewerResizeController } from "../../lib/pdfViewerResize";
 import { createPdfBlobRangeTransport, LOCAL_PDF_RANGE_CHUNK_BYTES } from "../../lib/pdfBlobRangeTransport";
+import { isSuccessfulTargetPageRender } from "../../lib/pdfOpenCoordinator";
 import { selectionAssistAnchorFromPdfQuads } from "../../lib/pdfSelectionAssistAnchor";
 import {
   selectionAssistAnchorFromRects,
@@ -93,6 +94,7 @@ const PDF_APPEARANCE_OPTIONS = [
   { theme: "sepia", label: "暖纸" },
   { theme: "night", label: "夜读" },
 ] as const;
+const FIRST_PAINT_TIMEOUT_MS = 20_000;
 
 export function pdfSearchStatusLabel(query: string, phase: "idle" | "searching" | "done", current: number, total: number) {
   if (!query.trim()) return "";
@@ -204,6 +206,7 @@ export function PdfReader({ source, profile, onClose }: {
   const findControllerRef = useRef<any>(null);
   const eventBusRef = useRef<any>(null);
   const loadingTaskRef = useRef<any>(null);
+  const teardownRef = useRef<Promise<void>>(Promise.resolve());
   const passwordUpdateRef = useRef<((password: string) => void) | null>(null);
   const englishControllerRef = useRef<AbortController | null>(null);
   const chineseControllerRef = useRef<AbortController | null>(null);
@@ -214,6 +217,7 @@ export function PdfReader({ source, profile, onClose }: {
   const lastSearchQueryRef = useRef("");
   const selectionCaptureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredRef = useRef(false);
+  const openGenerationRef = useRef(0);
   const fitRef = useRef<PdfFitMode>("width");
   const scaleRef = useRef(1);
   const sidecarRef = useRef<PdfHighlightSidecar>(loadPdfHighlightSidecar(source.id));
@@ -221,6 +225,7 @@ export function PdfReader({ source, profile, onClose }: {
   if (legacyPdfThemeRef.current === undefined) legacyPdfThemeRef.current = loadLegacyPdfAppearanceTheme();
 
   const [status, setStatus] = useState<"loading" | "password" | "ready" | "error">("loading");
+  const [openAttempt, setOpenAttempt] = useState(0);
   const [failure, setFailure] = useState<LoadFailure | null>(null);
   const [passwordReason, setPasswordReason] = useState<"needed" | "incorrect">("needed");
   const [password, setPassword] = useState("");
@@ -383,7 +388,12 @@ export function PdfReader({ source, profile, onClose }: {
   }, [persistPosition]);
 
   useEffect(() => {
+    const generation = ++openGenerationRef.current;
     let cancelled = false;
+    let firstPaintSettled = false;
+    let targetPage: number | null = null;
+    let firstPaintTimer: ReturnType<typeof setTimeout> | null = null;
+    let ownedLoadingTask: any = null;
     let localEventBus: any = null;
     let supplementaryStarted = false;
     let supplementaryIdleId: number | null = null;
@@ -393,12 +403,32 @@ export function PdfReader({ source, profile, onClose }: {
       (localEventBus?.on ?? localEventBus?._on)?.call(localEventBus, name, handler);
       listeners.push([name, handler]);
     };
+    const armFirstPaintTimeout = () => {
+      if (firstPaintTimer) clearTimeout(firstPaintTimer);
+      firstPaintTimer = setTimeout(() => {
+        if (firstPaintSettled || cancelled || openGenerationRef.current !== generation) return;
+        if (document.hidden) {
+          armFirstPaintTimeout();
+          return;
+        }
+        firstPaintSettled = true;
+        setFailure({
+          kind: "unknown",
+          title: "PDF 页面显示超时。",
+          detail: "文件已经保留在书架中；可原位重试，或返回书架后再打开。",
+        });
+        setStatus("error");
+      }, FIRST_PAINT_TIMEOUT_MS);
+    };
 
     async function openPdf() {
       setStatus("loading");
       setFailure(null);
+      setPageFailures([]);
       restoredRef.current = false;
       try {
+        await teardownRef.current;
+        if (cancelled || openGenerationRef.current !== generation) return;
         const { pdfjsLib, viewerModule } = await preloadPdfRuntime();
         if (cancelled) return;
         pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -436,7 +466,7 @@ export function PdfReader({ source, profile, onClose }: {
         findControllerRef.current = findController;
 
         on("pagesinit", () => {
-          if (cancelled) return;
+          if (cancelled || openGenerationRef.current !== generation) return;
           const locator = loadPdfLocator(source.id);
           const initialFit = locator?.fit ?? "width";
           fitRef.current = initialFit;
@@ -444,16 +474,8 @@ export function PdfReader({ source, profile, onClose }: {
           if (initialFit === "page") pdfViewer.currentScaleValue = "page-fit";
           else if (initialFit === "custom" && locator?.scale) pdfViewer.currentScale = locator.scale;
           else pdfViewer.currentScaleValue = "page-width";
-          if (locator) pdfViewer.currentPageNumber = clamp(locator.pageIndex + 1, 1, pdfViewer.pagesCount);
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (locator) {
-              const pageView = pdfViewer._pages?.[locator.pageIndex];
-              if (pageView?.div) container.scrollTop = pageView.div.offsetTop + locator.offset * pageView.div.clientHeight;
-            }
-            restoredRef.current = true;
-            renderAllHighlights();
-            setStatus("ready");
-          }));
+          targetPage = locator ? clamp(locator.pageIndex + 1, 1, pdfViewer.pagesCount) : 1;
+          pdfViewer.currentPageNumber = targetPage;
         });
         on("pagesloaded", (event) => setPageCount(event.pagesCount ?? pdfViewer.pagesCount));
         on("pagechanging", (event) => {
@@ -482,7 +504,10 @@ export function PdfReader({ source, profile, onClose }: {
                 return content.items.some((item: any) => typeof item.str === "string" && item.str.trim());
               }));
               if (!cancelled) setNoSelectableText(samples.length > 0 && samples.every((value) => !value));
-            })();
+            })().catch(() => {
+              // Supplementary outline/text sampling is non-blocking and may be
+              // interrupted by a retry or close while PDF.js tears down transport.
+            });
           };
           if ("requestIdleCallback" in window) {
             supplementaryIdleId = window.requestIdleCallback(run, { timeout: 1_500 });
@@ -495,6 +520,69 @@ export function PdfReader({ source, profile, onClose }: {
           const page = event.pageNumber ?? event.source?.id;
           if (event.error && page) setPageFailures((current) => current.includes(page) ? current : [...current, page]);
           if (pdfDocumentRef.current) scheduleSupplementaryWork(pdfDocumentRef.current);
+          if (firstPaintSettled || cancelled || openGenerationRef.current !== generation) return;
+          if (page === targetPage && event.error) {
+            firstPaintSettled = true;
+            if (firstPaintTimer) clearTimeout(firstPaintTimer);
+            setFailure({
+              kind: "unknown",
+              title: "PDF 的目标页面未能显示。",
+              detail: "文件已经保留在书架中；可原位重试本次打开。",
+            });
+            setStatus("error");
+            return;
+          }
+          if (page !== targetPage || event.cssTransform || event.isDetailView) return;
+          const renderedTargetPage = targetPage;
+          const renderedPageView = event.source;
+          const renderedCanvas = renderedPageView?.canvas as HTMLCanvasElement | null | undefined;
+          const renderedViewport = renderedPageView?.viewport;
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (firstPaintSettled || cancelled || openGenerationRef.current !== generation) return;
+            const pageView = pdfViewer._pages?.[renderedTargetPage - 1];
+            const pageElement = pageView?.div as HTMLElement | null | undefined;
+            const pageBounds = pageElement?.getBoundingClientRect();
+            const canvasBounds = renderedCanvas?.getBoundingClientRect();
+            const containerBounds = container.getBoundingClientRect();
+            const pageVisible = Boolean(pageBounds
+              && pageBounds.width > 0
+              && pageBounds.height > 0
+              && pageBounds.right > containerBounds.left
+              && pageBounds.left < containerBounds.right
+              && pageBounds.bottom > containerBounds.top
+              && pageBounds.top < containerBounds.bottom);
+            const canvasVisible = Boolean(canvasBounds
+              && canvasBounds.width > 0
+              && canvasBounds.height > 0
+              && canvasBounds.right > containerBounds.left
+              && canvasBounds.left < containerBounds.right
+              && canvasBounds.bottom > containerBounds.top
+              && canvasBounds.top < containerBounds.bottom);
+            if (!isSuccessfulTargetPageRender({
+              generation,
+              currentGeneration: openGenerationRef.current,
+              targetPage: renderedTargetPage,
+              pageNumber: page ?? null,
+              error: event.error,
+              canvas: renderedCanvas,
+              cssTransform: Boolean(event.cssTransform),
+              isDetailView: Boolean(event.isDetailView),
+              canvasAttached: Boolean(renderedCanvas?.isConnected),
+              canvasVisible,
+              pageAttached: Boolean(pageElement?.isConnected && renderedCanvas && pageElement.contains(renderedCanvas)),
+              pageVisible,
+              layoutCurrent: pageView === renderedPageView && renderedPageView?.viewport === renderedViewport,
+            })) return;
+            firstPaintSettled = true;
+            if (firstPaintTimer) clearTimeout(firstPaintTimer);
+            const locator = loadPdfLocator(source.id);
+            if (locator && renderedTargetPage === clamp(locator.pageIndex + 1, 1, pdfViewer.pagesCount)) {
+              if (pageView?.div) container.scrollTop = pageView.div.offsetTop + locator.offset * pageView.div.clientHeight;
+            }
+            restoredRef.current = true;
+            renderAllHighlights();
+            setStatus("ready");
+          }));
         });
         on("updatefindmatchescount", (event) => setSearchCount({
           current: event.matchesCount?.current ?? 0,
@@ -520,6 +608,7 @@ export function PdfReader({ source, profile, onClose }: {
           useSystemFonts: false,
           stopAtErrors: false,
         });
+        ownedLoadingTask = loadingTask;
         loadingTaskRef.current = loadingTask;
         loadingTask.onPassword = (updatePassword: (password: string) => void, reason: number) => {
           passwordUpdateRef.current = updatePassword;
@@ -528,15 +617,13 @@ export function PdfReader({ source, profile, onClose }: {
           setStatus("password");
         };
         const pdfDocument = await loadingTask.promise;
-        if (cancelled) {
-          await pdfDocument.destroy();
-          return;
-        }
+        if (cancelled || openGenerationRef.current !== generation) return;
         pdfDocumentRef.current = pdfDocument;
         setPageCount(pdfDocument.numPages);
         linkService.setDocument(pdfDocument, null);
         findController.setDocument(pdfDocument);
         pdfViewer.setDocument(pdfDocument);
+        if (!firstPaintSettled) armFirstPaintTimeout();
       } catch (error) {
         if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
         setFailure(failureFor(error));
@@ -547,6 +634,7 @@ export function PdfReader({ source, profile, onClose }: {
     void openPdf();
     return () => {
       cancelled = true;
+      if (firstPaintTimer) clearTimeout(firstPaintTimer);
       englishControllerRef.current?.abort();
       chineseControllerRef.current?.abort();
       chatControllerRef.current?.abort();
@@ -560,16 +648,15 @@ export function PdfReader({ source, profile, onClose }: {
       pdfViewerRef.current?.cleanup?.();
       pdfViewerRef.current?.setDocument?.(null);
       linkServiceRef.current?.setDocument?.(null, null);
-      loadingTaskRef.current?.destroy?.();
-      pdfDocumentRef.current?.destroy?.();
-      loadingTaskRef.current = null;
+      teardownRef.current = Promise.resolve(ownedLoadingTask?.destroy?.()).catch(() => undefined);
+      if (loadingTaskRef.current === ownedLoadingTask) loadingTaskRef.current = null;
       pdfDocumentRef.current = null;
       pdfViewerRef.current = null;
       linkServiceRef.current = null;
       findControllerRef.current = null;
       eventBusRef.current = null;
     };
-  }, [persistPosition, renderAllHighlights, renderHighlightsForPage, schedulePersist, source.file, source.id]);
+  }, [openAttempt, persistPosition, renderAllHighlights, renderHighlightsForPage, schedulePersist, source.file, source.id]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -1071,7 +1158,7 @@ export function PdfReader({ source, profile, onClose }: {
   >
     <header className="dawn-pdf-toolbar" aria-label="PDF 工具栏">
       <div className="dawn-pdf-toolbar-group dawn-pdf-toolbar-start">
-        <button type="button" className="dawn-pdf-back" onClick={() => { persistPosition(); onClose(); }} aria-label="返回书架">
+        <button type="button" className="dawn-pdf-back" onClick={() => { if (restoredRef.current) persistPosition(); onClose(); }} aria-label="返回书架">
           <span aria-hidden="true">←</span><span>书架</span>
         </button>
         <button type="button" className="dawn-pdf-sidebar-toggle" aria-pressed={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>目录</button>
@@ -1202,7 +1289,7 @@ export function PdfReader({ source, profile, onClose }: {
       </form>
     </div>}
     {status === "error" && failure && <div className={`dawn-pdf-state error ${failure.kind}`} role="alert">
-      <h2>{failure.title}</h2><p>{failure.detail}</p><div><button type="button" onClick={onClose}>返回书架</button></div>
+      <h2>{failure.title}</h2><p>{failure.detail}</p><div><button type="button" onClick={onClose}>返回书架</button><button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>重试打开</button></div>
     </div>}
 
     {status === "ready" && (notice || noSelectableText || pageFailures.length > 0) && <div className="dawn-pdf-notices" aria-live="polite">

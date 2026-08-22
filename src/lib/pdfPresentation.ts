@@ -78,10 +78,8 @@ export async function extractPdfPresentation(blob: Blob): Promise<PdfPresentatio
       cover,
     };
   } finally {
-    if (typeof pdfDocument?.destroy === "function") {
-      await pdfDocument.destroy().catch(() => undefined);
-    } else if (typeof loadingTask.destroy === "function") {
-      await loadingTask.destroy().catch(() => undefined);
-    }
+    // The loading task owns the transport and worker; use one teardown owner
+    // rather than racing PDFDocumentProxy.destroy with loadingTask.destroy.
+    await loadingTask.destroy().catch(() => undefined);
   }
 }

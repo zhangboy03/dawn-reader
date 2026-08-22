@@ -77,3 +77,27 @@ describe("PDF appearance", () => {
     expect(css).not.toContain("hue-rotate(");
   });
 });
+
+describe("PDF open reliability", () => {
+  it("waits for the restored target page to paint instead of treating pagesinit as ready", () => {
+    const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
+    const pagesInit = source.slice(source.indexOf(`on("pagesinit"`), source.indexOf(`on("pagesloaded"`));
+
+    expect(pagesInit).not.toContain('setStatus("ready")');
+    expect(source).toContain("isSuccessfulTargetPageRender");
+    expect(source).toContain('on("pagerendered"');
+    expect(source).toContain('setStatus("ready")');
+  });
+
+  it("bounds first paint and offers an in-place retry", () => {
+    const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
+
+    expect(source).toContain("FIRST_PAINT_TIMEOUT_MS");
+    expect(source).toContain("PDF 页面显示超时。");
+    expect(source).toContain("重试打开");
+    expect(source).toContain("setOpenAttempt((attempt) => attempt + 1)");
+    expect(source).toContain("await teardownRef.current");
+    expect(source).toContain("teardownRef.current = Promise.resolve(ownedLoadingTask?.destroy?.())");
+    expect(source).toContain("if (restoredRef.current) persistPosition(); onClose();");
+  });
+});
