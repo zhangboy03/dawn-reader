@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Reader } from "./Reader";
 
@@ -132,6 +132,31 @@ describe("Reader chrome", () => {
 
     expect(outsidePress.defaultPrevented).toBe(true);
     expect(screen.queryByRole("dialog", { name: "阅读设置" })).toBeNull();
+  });
+
+  it("keeps the reading settings focused on font size and paper color", () => {
+    const view = render(<Reader
+      source={{
+        type: "text",
+        title: "Quiet appearance",
+        text: "A page with opinionated typography.",
+        assistantMode: "rewrite",
+      }}
+      profile={profile}
+      onClose={() => undefined}
+    />);
+
+    const appearance = within(view.container);
+    fireEvent.click(appearance.getByRole("button", { name: "阅读设置" }));
+
+    expect(appearance.getByRole("button", { name: "减小字号" })).not.toBeNull();
+    expect(appearance.getByRole("button", { name: "增大字号" })).not.toBeNull();
+    expect(appearance.getByRole("button", { name: "纸白" })).not.toBeNull();
+    expect(appearance.getByRole("button", { name: "暖褐" })).not.toBeNull();
+    expect(appearance.getByRole("button", { name: "夜读" })).not.toBeNull();
+    for (const retiredLabel of ["行距", "行长", "对齐", "段落", "排版", "位置"]) {
+      expect(appearance.queryByText(retiredLabel)).toBeNull();
+    }
   });
 
   it("uses an exclusive outside-press layer while selection help is open", async () => {

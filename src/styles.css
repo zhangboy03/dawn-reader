@@ -576,13 +576,14 @@ body:has(.onboarding), body:has(.test-screen) {
 .toc-empty { margin: 0; padding: 34px 22px; color: var(--reader-chrome-muted); font: 400 14px/1.6 "Iowan Old Style", Baskerville, Georgia, serif; }
 .reader-settings-layer { position: fixed; z-index: 30; inset: 0; }
 .reader-settings-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; cursor: default; }
-.reader-settings { position: absolute; top: calc(64px + env(safe-area-inset-top) - 8px); right: max(18px, env(safe-area-inset-right)); width: 304px; padding: 14px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-panel); color: var(--reader-chrome-ink); background: var(--reader-chrome); box-shadow: 0 24px 54px rgba(7, 14, 20, .22); }
-.reader-settings > div { display: grid; grid-template-columns: 62px repeat(3, 1fr); align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--reader-chrome-line); }
-.reader-settings > div.setting-two { grid-template-columns: 62px repeat(2, 1fr); }
+.reader-settings { position: absolute; top: calc(64px + env(safe-area-inset-top) - 8px); right: max(18px, env(safe-area-inset-right)); width: 244px; padding: 14px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-panel); color: var(--reader-chrome-ink); background: var(--reader-chrome); box-shadow: 0 24px 54px rgba(7, 14, 20, .22); }
+.reader-settings > div { display: grid; grid-template-columns: 52px repeat(3, 1fr); align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--reader-chrome-line); }
+.reader-settings > div.setting-font-size { grid-template-columns: 52px repeat(2, 1fr); }
 .reader-settings > div:last-child { border: 0; }
 .reader-settings small { color: var(--reader-chrome-muted); font-size: 9px; }
 .reader-settings button { min-height: 32px; border: 1px solid var(--reader-chrome-line); border-radius: 6px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
 .reader-settings button:hover, .reader-settings button.active { border-color: var(--reader-control-active); color: var(--reader-control-active); background: var(--reader-control); }
+.reader-settings button:disabled { border-color: var(--reader-chrome-line); color: var(--reader-chrome-muted); background: transparent; opacity: .38; cursor: default; }
 .reader-settings .theme-dot { width: 26px; height: 26px; min-height: 26px; justify-self: center; border-radius: 50%; }
 .theme-dot.swatch-paper { background: #f4f2ea; }
 .theme-dot.swatch-sepia { background: #e9dfc8; }
