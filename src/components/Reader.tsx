@@ -11,6 +11,7 @@ import type { BookSource } from "./Library";
 import type { ReaderProfile } from "../lib/storage";
 import {
   loadReaderSettings,
+  READER_FONT_SIZES,
   saveReaderSettings,
   type PencilMode,
   type ReaderSettings,
@@ -141,8 +142,6 @@ type TextAppearanceAnchor = {
   offset?: number;
   viewportTop: number;
 };
-
-const READER_FONT_SIZES = [17, 19, 21] as const;
 
 type EpubImageView = Omit<EpubImageTarget, "element">;
 type EpubEmbedView = Omit<EpubEmbedTarget, "element">;
@@ -712,7 +711,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       patch.fontSize
       || patch.lineHeight
       || patch.pageWidth
-      || patch.theme
       || patch.textAlign
       || patch.paragraphStyle
       || patch.typographyMode
@@ -1416,11 +1414,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     settings.fontSize,
     settings.lineHeight,
     settings.pageWidth,
-    settings.theme,
     settings.textAlign,
     settings.paragraphStyle,
     settings.typographyMode,
   ]);
+
+  useLayoutEffect(() => {
+    if (source.type !== "epub") return;
+    const renderer = epubNavigatorRef.current?.getActiveRenderer() as DawnEpubRenderer | null;
+    if (!renderer) return;
+    applyEpubTheme(renderer.rendition, settingsRef.current);
+    // Paper color does not change layout, so update the committed page before paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.theme, source.type]);
 
   useLayoutEffect(() => {
     if (source.type !== "text") return;
@@ -1441,7 +1447,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     settings.fontSize,
     settings.lineHeight,
     settings.pageWidth,
-    settings.theme,
     settings.textAlign,
     settings.paragraphStyle,
     settings.typographyMode,
@@ -2071,7 +2076,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           host.inert = state !== "active";
         },
         onCommit: publishCommit,
-        async prepareSlotForCommit() {
+        async prepareSlotForCommit(_slot, renderer) {
+          // A paper-color change can happen while another renderer is staging.
+          // Bring that page up to the current color before it becomes visible.
+          applyEpubTheme((renderer as DawnEpubRenderer).rendition, settingsRef.current);
           // The first RAF applies the ready layer; the second runs after one
           // browser paint with the old readable frame still above it.
           await nextAnimationFrame();
@@ -2559,11 +2567,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         />
         <div className="reader-settings" role="dialog" aria-modal="true" aria-label="阅读设置">
           <div className="setting-font-size">
-            <small>字号</small>
+            <small>字号 <output aria-live="polite">{settings.fontSize}</output></small>
             <button aria-label="减小字号" disabled={settings.fontSize === READER_FONT_SIZES[0]} onClick={() => adjustFontSize(-1)}>A−</button>
             <button aria-label="增大字号" disabled={settings.fontSize === READER_FONT_SIZES[READER_FONT_SIZES.length - 1]} onClick={() => adjustFontSize(1)}>A+</button>
           </div>
-          <div><small>纸色</small>{(["paper", "sepia", "night"] as const).map((theme, index) => <button className={`theme-dot swatch-${theme} ${settings.theme === theme ? "active" : ""}`} aria-label={["纸白", "暖褐", "夜读"][index]} key={theme} onClick={() => updateSettings({ theme })} />)}</div>
+          <div><small>纸色</small>{(["paper", "sepia", "night"] as const).map((theme, index) => <button type="button" className={`theme-dot swatch-${theme} ${settings.theme === theme ? "active" : ""}`} aria-label={["纸白", "暖褐", "夜读"][index]} aria-pressed={settings.theme === theme} key={theme} onClick={() => updateSettings({ theme })} />)}</div>
         </div>
       </div>}
     </header>

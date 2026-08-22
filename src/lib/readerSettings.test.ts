@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_READER_SETTINGS, normalizeReaderSettings } from "./readerSettings";
+import { DEFAULT_READER_SETTINGS, READER_FONT_SIZES, normalizeReaderSettings } from "./readerSettings";
 
 describe("reader settings", () => {
   it("migrates old settings to the Dawn typography defaults", () => {
@@ -24,5 +24,11 @@ describe("reader settings", () => {
       paragraphStyle: "book",
       typographyMode: "dawn",
     });
+  });
+
+  it("offers fine one-pixel font steps across the readable range", () => {
+    expect(READER_FONT_SIZES).toEqual([16, 17, 18, 19, 20, 21, 22, 23, 24]);
+    expect(normalizeReaderSettings({ fontSize: 22.4 }).fontSize).toBe(22);
+    expect(normalizeReaderSettings({ fontSize: 99 }).fontSize).toBe(24);
   });
 });
