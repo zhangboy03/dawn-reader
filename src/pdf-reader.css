@@ -177,20 +177,20 @@
 .dawn-pdf-appearance-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; cursor: default; }
 .dawn-pdf-appearance-panel {
   position: absolute;
-  top: 58px;
-  right: max(14px, env(safe-area-inset-right));
-  width: 134px;
-  padding: 12px 13px;
+  top: var(--pdf-appearance-anchor-y, 59px);
+  left: clamp(12px, calc(var(--pdf-appearance-anchor-x, 50vw) - 86px), calc(100vw - 184px));
+  width: 172px;
+  padding: 15px 16px;
   border: 1px solid var(--pdf-line);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--pdf-ink);
   background: var(--pdf-surface);
-  box-shadow: 0 22px 52px rgba(20, 29, 31, .24);
+  box-shadow: 0 12px 34px rgba(20, 29, 31, .18);
 }
-.dawn-pdf-appearance-row { display: grid; grid-template-columns: repeat(3, 28px); align-items: center; justify-content: center; gap: 10px; }
-.dawn-pdf-tone-dot { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 1px solid color-mix(in srgb, var(--pdf-line) 88%, black); border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 1px color-mix(in srgb, white 42%, transparent); }
+.dawn-pdf-appearance-row { display: grid; grid-template-columns: repeat(3, 30px); align-items: center; justify-content: center; gap: 16px; }
+.dawn-pdf-tone-dot { width: 30px; height: 30px; min-height: 30px; padding: 0; border: 1px solid color-mix(in srgb, var(--pdf-line) 88%, black); border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 1px color-mix(in srgb, white 42%, transparent); }
 .dawn-pdf-tone-dot:hover,
-.dawn-pdf-tone-dot[aria-pressed="true"] { border-color: var(--pdf-rust-strong); box-shadow: inset 0 0 0 1px color-mix(in srgb, white 42%, transparent), 0 0 0 2px var(--pdf-surface), 0 0 0 3px var(--pdf-rust-strong); }
+.dawn-pdf-tone-dot[aria-pressed="true"] { border-color: var(--pdf-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, white 42%, transparent), 0 0 0 2px var(--pdf-surface), 0 0 0 3px color-mix(in srgb, var(--pdf-ink) 56%, transparent); }
 .dawn-pdf-tone-dot:focus-visible { outline: 2px solid var(--pdf-rust-strong); outline-offset: 3px; }
 .dawn-pdf-tone-dot.tone-original { background: #fff; }
 .dawn-pdf-tone-dot.tone-warm { background: #e9dfc8; }
@@ -409,7 +409,6 @@
   .dawn-pdf-sidebar { width: min(292px, 82vw); box-shadow: 14px 0 34px rgba(24, 33, 38, .16); }
   .dawn-pdf-reader-body.sidebar-open .dawn-pdf-scroll { left: 0; }
   .dawn-pdf-viewer { padding-top: 20px; }
-  .dawn-pdf-appearance-panel { top: 104px; }
 }
 
 @media (max-width: 680px) {

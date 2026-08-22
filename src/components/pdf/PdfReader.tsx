@@ -198,6 +198,7 @@ export function PdfReader({ source, profile, onClose }: {
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const viewerElementRef = useRef<HTMLDivElement>(null);
+  const appearanceToggleRef = useRef<HTMLButtonElement>(null);
   const pdfDocumentRef = useRef<any>(null);
   const pdfViewerRef = useRef<any>(null);
   const linkServiceRef = useRef<any>(null);
@@ -262,6 +263,7 @@ export function PdfReader({ source, profile, onClose }: {
     return legacyTheme ? { ...current, theme: legacyTheme } : current;
   });
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [appearanceAnchor, setAppearanceAnchor] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => { sidecarRef.current = sidecar; }, [sidecar]);
   useEffect(() => { fitRef.current = fit; }, [fit]);
@@ -276,6 +278,28 @@ export function PdfReader({ source, profile, onClose }: {
       return next;
     });
   }, []);
+
+  const syncAppearanceAnchor = useCallback(() => {
+    const toggle = appearanceToggleRef.current;
+    if (!toggle) return;
+    const toggleBounds = toggle.getBoundingClientRect();
+    setAppearanceAnchor({
+      x: toggleBounds.left + toggleBounds.width / 2,
+      y: toggleBounds.bottom + 8,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    syncAppearanceAnchor();
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", syncAppearanceAnchor);
+    visualViewport?.addEventListener("resize", syncAppearanceAnchor);
+    return () => {
+      window.removeEventListener("resize", syncAppearanceAnchor);
+      visualViewport?.removeEventListener("resize", syncAppearanceAnchor);
+    };
+  }, [appearanceOpen, syncAppearanceAnchor]);
 
   const closeSelection = useCallback(() => {
     if (selectionCaptureTimerRef.current) clearTimeout(selectionCaptureTimerRef.current);
@@ -1084,6 +1108,7 @@ export function PdfReader({ source, profile, onClose }: {
         </div>
         <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="dawn-pdf-assistant-toggle" />
         <button
+          ref={appearanceToggleRef}
           type="button"
           className="dawn-pdf-appearance-toggle"
           aria-label="PDF 阅读外观"
@@ -1091,6 +1116,7 @@ export function PdfReader({ source, profile, onClose }: {
           aria-expanded={appearanceOpen}
           onClick={() => {
             setSearchOpen(false);
+            if (!appearanceOpen) syncAppearanceAnchor();
             setAppearanceOpen((open) => !open);
           }}
         >
@@ -1114,6 +1140,10 @@ export function PdfReader({ source, profile, onClose }: {
       <section
         id="pdf-appearance-panel"
         className="dawn-pdf-appearance-panel"
+        style={appearanceAnchor ? {
+          "--pdf-appearance-anchor-x": `${appearanceAnchor.x}px`,
+          "--pdf-appearance-anchor-y": `${appearanceAnchor.y}px`,
+        } as CSSProperties : undefined}
         role="dialog"
         aria-modal="true"
         aria-label="PDF 阅读外观"
