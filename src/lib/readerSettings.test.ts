@@ -10,16 +10,16 @@ describe("reader settings", () => {
     });
   });
 
-  it("maps a synced native line height to the nearest Web option", () => {
-    expect(normalizeReaderSettings({ lineHeight: 1.7 }).lineHeight).toBe(1.72);
-  });
-
-  it("rejects invalid typography settings", () => {
+  it("retires saved typography controls in favor of Dawn defaults", () => {
     expect(normalizeReaderSettings({
-      textAlign: "center",
-      paragraphStyle: "random",
-      typographyMode: "delete-publisher-css",
+      lineHeight: 1.9,
+      pageWidth: 860,
+      textAlign: "start",
+      paragraphStyle: "spaced",
+      typographyMode: "publisher",
     })).toMatchObject({
+      lineHeight: 1.55,
+      pageWidth: 760,
       textAlign: "justify",
       paragraphStyle: "book",
       typographyMode: "dawn",

@@ -23,43 +23,6 @@ struct SettingsView: View {
                         minimumLabel: "A",
                         maximumLabel: "A"
                     )
-                    appearanceSlider(
-                        title: "行距",
-                        value: $settings.readerLineHeight,
-                        range: 1.25 ... 1.9,
-                        step: 0.05,
-                        minimumLabel: "紧",
-                        maximumLabel: "松"
-                    )
-                    appearanceSlider(
-                        title: "页边距",
-                        value: $settings.readerPageMargins,
-                        range: 0.7 ... 1.6,
-                        step: 0.05,
-                        minimumLabel: "窄",
-                        maximumLabel: "宽"
-                    )
-
-                    Picker("对齐", selection: $settings.readerTextAlign) {
-                        ForEach(ReaderTextAlignOption.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("段落", selection: $settings.readerParagraphStyle) {
-                        ForEach(ReaderParagraphStyle.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("排版", selection: $settings.readerTypographyMode) {
-                        ForEach(ReaderTypographyMode.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
                 }
                 Section("Qwen") {
                     SecureField("API Key", text: $settings.apiKey)
@@ -96,7 +59,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
-                    Text("配对后同步书籍、阅读位置、主题、排版和 Apple Pencil 模式。百炼密钥不会上传。")
+                    Text("配对后同步书籍、阅读位置、字号、纸色和 Apple Pencil 模式。百炼密钥不会上传。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

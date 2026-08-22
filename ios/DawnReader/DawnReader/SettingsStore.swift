@@ -67,22 +67,22 @@ final class SettingsStore: ObservableObject {
     @Published var readerFontSize: Double {
         didSet { UserDefaults.standard.set(readerFontSize, forKey: Self.fontSizeKey) }
     }
-    @Published var readerLineHeight: Double {
+    @Published private(set) var readerLineHeight: Double {
         didSet { UserDefaults.standard.set(readerLineHeight, forKey: Self.lineHeightKey) }
     }
-    @Published var readerPageMargins: Double {
+    @Published private(set) var readerPageMargins: Double {
         didSet { UserDefaults.standard.set(readerPageMargins, forKey: Self.pageMarginsKey) }
     }
     @Published var readerTheme: ReaderThemeOption {
         didSet { UserDefaults.standard.set(readerTheme.rawValue, forKey: Self.themeKey) }
     }
-    @Published var readerTextAlign: ReaderTextAlignOption {
+    @Published private(set) var readerTextAlign: ReaderTextAlignOption {
         didSet { UserDefaults.standard.set(readerTextAlign.rawValue, forKey: Self.textAlignKey) }
     }
-    @Published var readerParagraphStyle: ReaderParagraphStyle {
+    @Published private(set) var readerParagraphStyle: ReaderParagraphStyle {
         didSet { UserDefaults.standard.set(readerParagraphStyle.rawValue, forKey: Self.paragraphStyleKey) }
     }
-    @Published var readerTypographyMode: ReaderTypographyMode {
+    @Published private(set) var readerTypographyMode: ReaderTypographyMode {
         didSet { UserDefaults.standard.set(readerTypographyMode.rawValue, forKey: Self.typographyModeKey) }
     }
     @Published var pencilMode: PencilMode {
@@ -110,12 +110,12 @@ final class SettingsStore: ObservableObject {
         let storedModel = defaults.string(forKey: modelKey)
         model = storedModel?.hasPrefix("deepseek-") == true ? "qwen3.7-flash" : storedModel ?? "qwen3.7-flash"
         readerFontSize = defaults.object(forKey: Self.fontSizeKey) as? Double ?? 1.0
-        readerLineHeight = defaults.object(forKey: Self.lineHeightKey) as? Double ?? 1.55
-        readerPageMargins = defaults.object(forKey: Self.pageMarginsKey) as? Double ?? 1.15
+        readerLineHeight = 1.55
+        readerPageMargins = 1.15
         readerTheme = ReaderThemeOption(rawValue: defaults.string(forKey: Self.themeKey) ?? "") ?? .paper
-        readerTextAlign = ReaderTextAlignOption(rawValue: defaults.string(forKey: Self.textAlignKey) ?? "") ?? .justify
-        readerParagraphStyle = ReaderParagraphStyle(rawValue: defaults.string(forKey: Self.paragraphStyleKey) ?? "") ?? .book
-        readerTypographyMode = ReaderTypographyMode(rawValue: defaults.string(forKey: Self.typographyModeKey) ?? "") ?? .dawn
+        readerTextAlign = .justify
+        readerParagraphStyle = .book
+        readerTypographyMode = .dawn
         pencilMode = PencilMode(rawValue: defaults.string(forKey: Self.pencilModeKey) ?? "") ?? .select
     }
 
@@ -187,13 +187,9 @@ final class SettingsStore: ObservableObject {
 
     func apply(cloudSettings: CloudReaderSettings) {
         if let value = cloudSettings.nativeFontScale { readerFontSize = min(max(value, 0.8), 1.4) }
-        if let value = cloudSettings.lineHeight { readerLineHeight = min(max(value, 1.25), 1.9) }
-        if let value = cloudSettings.nativePageMargins { readerPageMargins = min(max(value, 0.7), 1.6) }
         if let value = cloudSettings.theme.flatMap(ReaderThemeOption.init(rawValue:)) { readerTheme = value }
         if let value = cloudSettings.pencilMode.flatMap(PencilMode.init(rawValue:)) { pencilMode = value }
-        if let value = cloudSettings.textAlign.flatMap(ReaderTextAlignOption.init(rawValue:)) { readerTextAlign = value }
-        if let value = cloudSettings.paragraphStyle.flatMap(ReaderParagraphStyle.init(rawValue:)) { readerParagraphStyle = value }
-        if let value = cloudSettings.typographyMode.flatMap(ReaderTypographyMode.init(rawValue:)) { readerTypographyMode = value }
+        // Older clients still send layout fields; Dawn now owns those defaults automatically.
     }
 }
 

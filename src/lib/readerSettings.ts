@@ -45,13 +45,14 @@ export function normalizeReaderSettings(value: unknown): ReaderSettings {
   const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
     fontSize: nearest(raw.fontSize, [17, 19, 21] as const, DEFAULT_READER_SETTINGS.fontSize),
-    lineHeight: nearest(raw.lineHeight, [1.55, 1.72, 1.9] as const, DEFAULT_READER_SETTINGS.lineHeight),
-    pageWidth: nearest(raw.pageWidth, [660, 760, 860] as const, DEFAULT_READER_SETTINGS.pageWidth),
+    // Retain the fields for older synced clients, but keep layout decisions in Dawn's renderer.
+    lineHeight: DEFAULT_READER_SETTINGS.lineHeight,
+    pageWidth: DEFAULT_READER_SETTINGS.pageWidth,
     theme: option(raw.theme, ["paper", "sepia", "night"] as const, DEFAULT_READER_SETTINGS.theme),
     pencilMode: option(raw.pencilMode, ["page", "select"] as const, DEFAULT_READER_SETTINGS.pencilMode),
-    textAlign: option(raw.textAlign, ["justify", "start"] as const, DEFAULT_READER_SETTINGS.textAlign),
-    paragraphStyle: option(raw.paragraphStyle, ["book", "spaced"] as const, DEFAULT_READER_SETTINGS.paragraphStyle),
-    typographyMode: option(raw.typographyMode, ["dawn", "publisher"] as const, DEFAULT_READER_SETTINGS.typographyMode),
+    textAlign: DEFAULT_READER_SETTINGS.textAlign,
+    paragraphStyle: DEFAULT_READER_SETTINGS.paragraphStyle,
+    typographyMode: DEFAULT_READER_SETTINGS.typographyMode,
   };
 }
 
