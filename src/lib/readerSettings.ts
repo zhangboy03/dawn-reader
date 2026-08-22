@@ -6,8 +6,11 @@ export type ReaderTextAlign = "justify" | "start";
 export type ReaderParagraphStyle = "book" | "spaced";
 export type ReaderTypographyMode = "dawn" | "publisher";
 
+export const READER_FONT_SIZES = [16, 17, 18, 19, 20, 21, 22, 23, 24] as const;
+export type ReaderFontSize = typeof READER_FONT_SIZES[number];
+
 export type ReaderSettings = {
-  fontSize: 17 | 19 | 21;
+  fontSize: ReaderFontSize;
   lineHeight: 1.55 | 1.72 | 1.9;
   pageWidth: 660 | 760 | 860;
   theme: ReaderTheme;
@@ -44,7 +47,7 @@ function nearest<T extends number>(value: unknown, values: readonly T[], fallbac
 export function normalizeReaderSettings(value: unknown): ReaderSettings {
   const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
-    fontSize: nearest(raw.fontSize, [17, 19, 21] as const, DEFAULT_READER_SETTINGS.fontSize),
+    fontSize: nearest(raw.fontSize, READER_FONT_SIZES, DEFAULT_READER_SETTINGS.fontSize),
     // Retain the fields for older synced clients, but keep layout decisions in Dawn's renderer.
     lineHeight: DEFAULT_READER_SETTINGS.lineHeight,
     pageWidth: DEFAULT_READER_SETTINGS.pageWidth,

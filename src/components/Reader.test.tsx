@@ -3,10 +3,25 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { Reader } from "./Reader";
+import { configureClientAccountContext } from "../lib/clientAccountContext";
 
 const profile = { score: null, band: "未校准 · 平衡辅助", preset: "balanced" as const };
+const storageValues = new Map<string, string>();
+const testStorage: Storage = {
+  get length() { return storageValues.size; },
+  clear: () => storageValues.clear(),
+  getItem: (key) => storageValues.get(key) ?? null,
+  key: (index) => [...storageValues.keys()][index] ?? null,
+  removeItem: (key) => { storageValues.delete(key); },
+  setItem: (key, value) => { storageValues.set(key, value); },
+};
+
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: testStorage,
+});
 
 Object.defineProperty(window, "matchMedia", {
   configurable: true,
@@ -23,6 +38,17 @@ Object.defineProperty(globalThis, "ResizeObserver", {
     observe() {}
     disconnect() {}
   },
+});
+
+beforeEach(() => {
+  testStorage.clear();
+  configureClientAccountContext({
+    accountId: "reader-test",
+    environment: "beta",
+    canClaimLegacyLocalData: false,
+    role: "reader",
+    authKind: "dawn_session",
+  });
 });
 
 describe("Reader chrome", () => {
@@ -154,9 +180,32 @@ describe("Reader chrome", () => {
     expect(appearance.getByRole("button", { name: "纸白" })).not.toBeNull();
     expect(appearance.getByRole("button", { name: "暖褐" })).not.toBeNull();
     expect(appearance.getByRole("button", { name: "夜读" })).not.toBeNull();
+    expect(appearance.getByText("19", { selector: "output" })).not.toBeNull();
     for (const retiredLabel of ["行距", "行长", "对齐", "段落", "排版", "位置"]) {
       expect(appearance.queryByText(retiredLabel)).toBeNull();
     }
+
+    fireEvent.click(appearance.getByRole("button", { name: "增大字号" }));
+    expect(appearance.getByText("20", { selector: "output" })).not.toBeNull();
+
+    const night = appearance.getByRole("button", { name: "夜读" });
+    fireEvent.click(night);
+    expect(night.getAttribute("aria-pressed")).toBe("true");
+    expect(view.container.querySelector(".reader-theme-night .paper-night")).not.toBeNull();
+  });
+
+  it("changes paper color without a staged CSS fade or EPUB reflow", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const readerSource = readFileSync("src/components/Reader.tsx", "utf8");
+    const appearanceEffectStart = readerSource.indexOf('requestEpubReflow("appearance")');
+    const appearanceEffectEnd = readerSource.indexOf("useLayoutEffect", appearanceEffectStart);
+    const appearanceEffect = readerSource.slice(appearanceEffectStart, appearanceEffectEnd);
+
+    expect(css).not.toMatch(/\.reading-stage\s*\{[^}]*transition:\s*background-color/s);
+    expect(css).not.toMatch(/\.paper\s*\{[^}]*transition:\s*background-color/s);
+    expect(css).not.toMatch(/\.epub-frame\s*\{[^}]*transition:\s*background-color/s);
+    expect(readerSource).toContain("applyEpubTheme(renderer.rendition, settingsRef.current)");
+    expect(appearanceEffect).not.toContain("settings.theme");
   });
 
   it("uses an exclusive outside-press layer while selection help is open", async () => {

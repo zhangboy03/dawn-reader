@@ -581,6 +581,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .reader-settings > div.setting-font-size { grid-template-columns: 52px repeat(2, 1fr); }
 .reader-settings > div:last-child { border: 0; }
 .reader-settings small { color: var(--reader-chrome-muted); font-size: 9px; }
+.reader-settings output { color: var(--reader-chrome-ink); font: inherit; font-variant-numeric: tabular-nums; }
 .reader-settings button { min-height: 32px; border: 1px solid var(--reader-chrome-line); border-radius: 6px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
 .reader-settings button:hover, .reader-settings button.active { border-color: var(--reader-control-active); color: var(--reader-control-active); background: var(--reader-control); }
 .reader-settings button:disabled { border-color: var(--reader-chrome-line); color: var(--reader-chrome-muted); background: transparent; opacity: .38; cursor: default; }
@@ -589,7 +590,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .theme-dot.swatch-sepia { background: #e9dfc8; }
 .theme-dot.swatch-night { background: #1b1d1a; }
 
-.reading-stage { min-width: 0; min-height: 0; padding: 30px clamp(20px, 3vw, 48px) 48px; overflow: auto; background: #deddd6; transition: background-color .2s ease; }
+.reading-stage { min-width: 0; min-height: 0; padding: 30px clamp(20px, 3vw, 48px) 48px; overflow: auto; background: #deddd6; }
 .reading-stage.epub-stage { position: relative; display: block; padding: clamp(10px, 2.8vh, 30px) clamp(10px, 3vw, 48px); overflow: hidden; overscroll-behavior: none; }
 .reader-theme-sepia .reading-stage { background: #d8d0c1; }
 .reader-theme-night .reading-stage { background: #151713; }
@@ -602,7 +603,6 @@ body:has(.onboarding), body:has(.test-screen) {
   background: #f4f2ea;
   box-shadow: 0 24px 70px rgba(47, 66, 70, .18);
   user-select: text;
-  transition: background-color .18s ease, color .18s ease;
 }
 .paper-sepia { color: #342e25; background: #e9dfc8; }
 .paper-night { color: #b8b2a8; background: #1b1d1a; box-shadow: 0 24px 70px rgba(0, 0, 0, .34); }
@@ -618,7 +618,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .paper[data-dawn-typography-mode="publisher"] p { margin: 0 0 1.28em; }
 .paper ::selection { color: #172027; background: rgba(232, 131, 73, .36); }
 .paper-night .reading-columns { column-rule-color: rgba(163, 180, 183, .2); }
-.epub-frame { width: 100%; height: 100%; min-height: 0; position: relative; isolation: isolate; margin: auto; overflow: hidden; border-radius: 2px; background: #f4f2ea; box-shadow: 0 24px 70px rgba(47, 66, 70, .18); touch-action: pan-y pinch-zoom; overscroll-behavior: none; transition: background-color .18s ease; }
+.epub-frame { width: 100%; height: 100%; min-height: 0; position: relative; isolation: isolate; margin: auto; overflow: hidden; border-radius: 2px; background: #f4f2ea; box-shadow: 0 24px 70px rgba(47, 66, 70, .18); touch-action: pan-y pinch-zoom; overscroll-behavior: none; }
 .epub-renderer-slot { position: absolute; top: 0; left: 50%; transform: translateX(-50%) scale(var(--epub-slot-scale, 1)); transform-origin: top center; overflow: hidden; visibility: hidden; pointer-events: none; z-index: 0; }
 .epub-renderer-slot[data-epub-slot-state="staging"] { visibility: hidden; pointer-events: none; z-index: 1; }
 .epub-renderer-slot[data-epub-slot-state="ready"] { visibility: visible; pointer-events: none; z-index: 1; }
