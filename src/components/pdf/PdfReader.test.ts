@@ -38,6 +38,15 @@ describe("PDF appearance", () => {
     expect(source).toContain("PDF_APPEARANCE_OPTIONS.map");
   });
 
+  it("keeps the appearance panel visual-only while retaining accessible names", () => {
+    const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
+
+    expect(source).not.toContain(">整页外观<");
+    expect(source).not.toContain("<span>{label}</span>");
+    expect(source).toContain("aria-label={label}");
+    expect(source).toContain("dawn-pdf-tone-dot tone-${pdfAppearanceTone(theme)}");
+  });
+
   it("applies appearance after PDF.js rendering without changing its lifecycle", () => {
     const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
     const css = readFileSync("src/pdf-reader.css", "utf8");

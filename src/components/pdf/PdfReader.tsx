@@ -41,6 +41,17 @@ import {
   type SelectionAssistanceState,
   type SelectionContext,
 } from "../../lib/selectionAssistance";
+import {
+  loadBookAssistantModes,
+  saveBookAssistantMode,
+  type BookAssistantMode,
+} from "../../lib/bookAssistantMode";
+import type {
+  SelectionChatMessage,
+  SelectionChatSource,
+  SelectionChatState,
+} from "../selection-assist/SelectionChat";
+import { AssistantModeToggle } from "../AssistantModeToggle";
 import { PdfSelectionCard, type SelectionCardAnchor } from "./PdfSelectionCard";
 import "../../pdf-reader.css";
 
@@ -196,6 +207,7 @@ export function PdfReader({ source, profile, onClose }: {
   const passwordUpdateRef = useRef<((password: string) => void) | null>(null);
   const englishControllerRef = useRef<AbortController | null>(null);
   const chineseControllerRef = useRef<AbortController | null>(null);
+  const chatControllerRef = useRef<AbortController | null>(null);
   const selectionVersionRef = useRef(0);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -233,7 +245,13 @@ export function PdfReader({ source, profile, onClose }: {
     return messages.join(" ");
   });
   const [selection, setSelection] = useState<SelectionSnapshot | null>(null);
+  const [assistantMode, setAssistantMode] = useState<BookAssistantMode>(() => loadBookAssistantModes()[source.id] ?? "rewrite");
   const [assistance, setAssistance] = useState<SelectionAssistanceState>(initialSelectionAssistanceState);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatMessages, setChatMessages] = useState<SelectionChatMessage[]>([]);
+  const [chatState, setChatState] = useState<SelectionChatState>("idle");
+  const [chatError, setChatError] = useState("");
+  const [chatSources, setChatSources] = useState<SelectionChatSource[]>([]);
   const [highlightState, setHighlightState] = useState<{ phase: "idle" | "saving" | "saved" | "error"; message: string }>({ phase: "idle", message: "" });
   const [sidecar, setSidecar] = useState(sidecarRef.current);
   const [activeHighlight, setActiveHighlight] = useState<{ id: string; left: number; top: number } | null>(null);
@@ -264,9 +282,15 @@ export function PdfReader({ source, profile, onClose }: {
     selectionCaptureTimerRef.current = null;
     englishControllerRef.current?.abort();
     chineseControllerRef.current?.abort();
+    chatControllerRef.current?.abort();
     selectionVersionRef.current += 1;
     setSelection(null);
     setAssistance(initialSelectionAssistanceState);
+    setChatDraft("");
+    setChatMessages([]);
+    setChatState("idle");
+    setChatError("");
+    setChatSources([]);
     setHighlightState({ phase: "idle", message: "" });
     window.getSelection()?.removeAllRanges();
     scrollRef.current?.focus({ preventScroll: true });
@@ -1024,18 +1048,15 @@ export function PdfReader({ source, profile, onClose }: {
         aria-label="PDF 阅读外观"
         aria-description="暖纸和夜读只改变屏幕显示，不会修改 PDF 文件。"
       >
-        <small className="dawn-pdf-appearance-heading">整页外观</small>
-        <div className="dawn-pdf-appearance-row" role="group" aria-label="整页外观">
+        <div className="dawn-pdf-appearance-row" role="group" aria-label="PDF 阅读外观">
           {PDF_APPEARANCE_OPTIONS.map(({ theme, label }) => <button
             type="button"
-            className="dawn-pdf-appearance-option"
+            className={`dawn-pdf-tone-dot tone-${pdfAppearanceTone(theme)}`}
+            aria-label={label}
             aria-pressed={readerSettings.theme === theme}
             key={theme}
             onClick={() => updatePdfTheme(theme)}
-          >
-            <span className={`dawn-pdf-tone-dot tone-${pdfAppearanceTone(theme)}`} aria-hidden="true" />
-            <span>{label}</span>
-          </button>)}
+          />)}
         </div>
       </section>
     </div>}
