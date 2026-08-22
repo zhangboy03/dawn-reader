@@ -53,11 +53,13 @@ describe("PDF appearance", () => {
 
     expect(source).toContain("appearanceToggleRef");
     expect(source).toContain("toggleBounds.left + toggleBounds.width / 2");
-    expect(source).toContain("toggleBounds.bottom + 8");
+    expect(source).toContain("toggleBounds.bottom + 4");
     expect(source).toContain('"--pdf-appearance-anchor-x"');
     expect(source).toContain('"--pdf-appearance-anchor-y"');
-    expect(css).toContain("top: var(--pdf-appearance-anchor-y, 59px)");
-    expect(css).toContain("left: clamp(12px, calc(var(--pdf-appearance-anchor-x, 50vw) - 86px), calc(100vw - 184px))");
+    expect(css).toContain("top: var(--pdf-appearance-anchor-y, 55px)");
+    expect(css).toContain("left: clamp(12px, calc(var(--pdf-appearance-anchor-x, 50vw) - 80px), calc(100vw - 172px))");
+    expect(css).toContain("width: 160px");
+    expect(css).toContain("gap: 14px");
     expect(css).not.toContain(".dawn-pdf-appearance-panel { top: 104px; }");
   });
 
