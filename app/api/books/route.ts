@@ -21,11 +21,11 @@ export async function GET(request: Request) {
     addedAt: readerBooks.addedAt,
     updatedAt: readerBooks.updatedAt,
   }).from(readerBooks)
-    .where(eq(readerBooks.userId, user.userId))
+    .where(eq(readerBooks.userId, user.accountId))
     .orderBy(desc(readerBooks.updatedAt));
   const deletions = await getDb().select({ id: readerBookDeletions.bookId, deletedAt: readerBookDeletions.deletedAt })
     .from(readerBookDeletions)
-    .where(eq(readerBookDeletions.userId, user.userId));
+    .where(eq(readerBookDeletions.userId, user.accountId));
   return Response.json({ books, deletedBookIds: deletions.map((item) => item.id), deletedBooks: deletions });
 }
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   const [deletion] = await getDb().select({ deletedAt: readerBookDeletions.deletedAt })
     .from(readerBookDeletions)
     .where(and(
-      eq(readerBookDeletions.userId, user.userId),
+      eq(readerBookDeletions.userId, user.accountId),
       eq(readerBookDeletions.bookId, id),
     ))
     .limit(1);
@@ -63,11 +63,11 @@ export async function POST(request: Request) {
       }, { status: 409 });
     }
   }
-  await getBooksBucket().put(bookObjectKey(user.userId, id), file.stream(), {
+  await getBooksBucket().put(bookObjectKey(user.accountId, id), file.stream(), {
     httpMetadata: { contentType: "application/epub+zip" },
   });
   await getDb().insert(readerBooks).values({
-    userId: user.userId,
+    userId: user.accountId,
     id,
     title,
     fileName: file.name.slice(0, 500),
@@ -87,26 +87,26 @@ export async function POST(request: Request) {
   });
   if (deletion) {
     await getDb().delete(readerBookDeletions).where(and(
-      eq(readerBookDeletions.userId, user.userId),
+      eq(readerBookDeletions.userId, user.accountId),
       eq(readerBookDeletions.bookId, id),
     ));
   }
 
   if (contentHash) {
-    const candidates = await legacyBooksWithoutHash(user.userId, file.size);
+    const candidates = await legacyBooksWithoutHash(user.accountId, file.size);
     for (const candidate of candidates) {
       if (candidate.id === id || candidate.contentHash) continue;
-      const object = await getBooksBucket().get(bookObjectKey(user.userId, candidate.id));
+      const object = await getBooksBucket().get(bookObjectKey(user.accountId, candidate.id));
       if (!object) continue;
       const digest = await crypto.subtle.digest("SHA-256", await object.arrayBuffer());
       const candidateHash = [...new Uint8Array(digest)]
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("");
       if (candidateHash === contentHash) {
-        await mergeBookRecords(user.userId, id, candidate.id);
+        await mergeBookRecords(user.accountId, id, candidate.id);
       } else {
         await getDb().update(readerBooks).set({ contentHash: candidateHash }).where(and(
-          eq(readerBooks.userId, user.userId),
+          eq(readerBooks.userId, user.accountId),
           eq(readerBooks.id, candidate.id),
         ));
       }

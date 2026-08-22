@@ -1,3 +1,5 @@
+import { readerLocalStorage } from "./clientAccountContext";
+
 export const DAWN_YELLOW = "#ffed00" as const;
 export const PDF_HIGHLIGHT_SCHEMA_VERSION = 2 as const;
 
@@ -129,7 +131,7 @@ function quarantineInvalidSidecar(bookId: string, raw: string, storage: ReadStor
   }
 }
 
-export function loadPdfHighlightSidecar(bookId: string, storage: ReadStorage = localStorage) {
+export function loadPdfHighlightSidecar(bookId: string, storage: ReadStorage = readerLocalStorage()) {
   const key = pdfHighlightStorageKey(bookId);
   let raw: string | null = null;
   try {
@@ -156,7 +158,7 @@ export function loadPdfHighlightSidecar(bookId: string, storage: ReadStorage = l
   }
 }
 
-export function savePdfHighlightSidecar(sidecar: PdfHighlightSidecar, storage: WriteStorage = localStorage) {
+export function savePdfHighlightSidecar(sidecar: PdfHighlightSidecar, storage: WriteStorage = readerLocalStorage()) {
   const normalized = normalizePdfHighlightSidecar(sidecar, sidecar.bookId);
   if (!normalized) throw new Error("Invalid PDF highlight sidecar.");
   const next: PdfHighlightSidecar = { ...persistedSidecar(normalized), updatedAt: new Date().toISOString() };
@@ -179,7 +181,7 @@ function duplicateHighlight(left: PdfHighlight, right: PdfHighlight) {
     && left.quads.every((quad, index) => sameQuad(quad, right.quads[index]));
 }
 
-export function addPdfHighlight(bookId: string, highlight: PdfHighlight, storage: ReadStorage & WriteStorage = localStorage) {
+export function addPdfHighlight(bookId: string, highlight: PdfHighlight, storage: ReadStorage & WriteStorage = readerLocalStorage()) {
   const normalized = normalizePdfHighlight(highlight);
   if (!normalized) throw new Error("Invalid PDF highlight geometry.");
   const current = loadPdfHighlightSidecar(bookId, storage);
@@ -189,12 +191,12 @@ export function addPdfHighlight(bookId: string, highlight: PdfHighlight, storage
   return savePdfHighlightSidecar({ ...current, highlights: [...current.highlights, normalized] }, storage);
 }
 
-export function removePdfHighlight(bookId: string, highlightId: string, storage: ReadStorage & WriteStorage = localStorage) {
+export function removePdfHighlight(bookId: string, highlightId: string, storage: ReadStorage & WriteStorage = readerLocalStorage()) {
   const current = loadPdfHighlightSidecar(bookId, storage);
   return savePdfHighlightSidecar({ ...current, highlights: current.highlights.filter((highlight) => highlight.id !== highlightId) }, storage);
 }
 
-export function deletePdfHighlightSidecar(bookId: string, storage: Pick<Storage, "removeItem"> = localStorage) {
+export function deletePdfHighlightSidecar(bookId: string, storage: Pick<Storage, "removeItem"> = readerLocalStorage()) {
   storage.removeItem(pdfHighlightStorageKey(bookId));
   storage.removeItem(pdfHighlightQuarantineStorageKey(bookId));
 }

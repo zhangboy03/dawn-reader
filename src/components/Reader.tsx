@@ -32,6 +32,7 @@ import {
   positionAfterPagination,
   saveReadingPosition,
 } from "../lib/readingPosition";
+import { readerLocalStorage } from "../lib/clientAccountContext";
 import {
   ReadingActivityRecorder,
   readingEvidenceKind,
@@ -1463,7 +1464,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     let locationsGenerated = false;
     const mediaLayoutSignatures = new EpubLayoutSignatureTracker();
     const progressKey = `dawn-reader-progress:${source.id ?? source.file.name}`;
-    const localPosition = parseReadingPosition(localStorage.getItem(progressKey));
+    const localPosition = parseReadingPosition(readerLocalStorage().getItem(progressKey));
     const cloudPositionPromise = source.id && !referenceModeRef.current
       ? loadCloudProgress(source.id).catch(() => null)
       : Promise.resolve(null);

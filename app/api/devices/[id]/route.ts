@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const [device] = await getDb().update(readerDevices).set({ label }).where(and(
     eq(readerDevices.id, id),
-    eq(readerDevices.userId, user.userId),
+    eq(readerDevices.userId, user.accountId),
     isNull(readerDevices.revokedAt),
   )).returning({
     id: readerDevices.id,
@@ -32,7 +32,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { id } = await params;
   await getDb().update(readerDevices).set({ revokedAt: new Date().toISOString() }).where(and(
     eq(readerDevices.id, id),
-    eq(readerDevices.userId, user.userId),
+    eq(readerDevices.userId, user.accountId),
   ));
   return Response.json({ ok: true });
 }

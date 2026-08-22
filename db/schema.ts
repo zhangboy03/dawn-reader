@@ -1,4 +1,27 @@
-import { index, primaryKey, sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { index, primaryKey, sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const readerAccounts = sqliteTable("reader_accounts", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull().default("active"),
+  legacyLocalClaimAllowed: integer("legacy_local_claim_allowed", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const readerIdentities = sqliteTable("reader_identities", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  environment: text("environment").notNull(),
+  issuer: text("issuer").notNull(),
+  subject: text("subject").notNull(),
+  emailSnapshot: text("email_snapshot"),
+  linkedAt: text("linked_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_reader_identities_environment_issuer_subject")
+    .on(table.environment, table.issuer, table.subject),
+  index("idx_reader_identities_account").on(table.accountId),
+]);
 
 export const readerBooks = sqliteTable("reader_books", {
   userId: text("user_id").notNull(),

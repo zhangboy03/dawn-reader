@@ -1,3 +1,5 @@
+import { readerLocalStorage } from "./clientAccountContext";
+
 export const PDF_LOCATOR_VERSION = 1 as const;
 export type PdfFitMode = "width" | "page" | "custom";
 
@@ -52,7 +54,7 @@ export function pdfLocatorStorageKey(bookId: string) {
   return `dawn-reader-progress:${bookId}`;
 }
 
-export function loadPdfLocator(bookId: string, storage: Pick<Storage, "getItem"> = localStorage) {
+export function loadPdfLocator(bookId: string, storage: Pick<Storage, "getItem"> = readerLocalStorage()) {
   try {
     return normalizePdfLocator(storage.getItem(pdfLocatorStorageKey(bookId)));
   } catch {
@@ -60,11 +62,11 @@ export function loadPdfLocator(bookId: string, storage: Pick<Storage, "getItem">
   }
 }
 
-export function savePdfLocator(bookId: string, locator: PdfLocator, storage: Pick<Storage, "setItem"> = localStorage) {
+export function savePdfLocator(bookId: string, locator: PdfLocator, storage: Pick<Storage, "setItem"> = readerLocalStorage()) {
   storage.setItem(pdfLocatorStorageKey(bookId), serializePdfLocator(locator));
   return locator;
 }
 
-export function deletePdfLocator(bookId: string, storage: Pick<Storage, "removeItem"> = localStorage) {
+export function deletePdfLocator(bookId: string, storage: Pick<Storage, "removeItem"> = readerLocalStorage()) {
   storage.removeItem(pdfLocatorStorageKey(bookId));
 }

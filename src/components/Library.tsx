@@ -19,14 +19,12 @@ import {
   deleteCloudBook,
   downloadCloudBook,
   loadCloudLibrary,
-  saveCloudProgress,
   uploadCloudBook,
   type CloudBook,
 } from "../lib/cloudSync";
 import { deletePdfHighlightSidecar } from "../lib/pdfHighlights";
 import { deletePdfLocator } from "../lib/pdfLocator";
 import { isCloudEligiblePublication, publicationFormat, shelfFormatLabel, type PdfBookSource } from "../lib/publication";
-import { parseReadingPosition } from "../lib/readingPosition";
 import {
   loadBookAssistantModes,
   saveBookAssistantMode,
@@ -278,19 +276,6 @@ export function Library({ profile, onOpen, onRetest, onProfileChange, onOpenHist
         const visibleCloud = cloudLibrary.books.filter((book) => !deletedEverywhere.has(book.id));
         if (cancelled) return;
         setStoredBooks(mergeShelf(visibleLocal, visibleCloud));
-        const unsyncedEpubs = visibleLocal.filter((book) => (
-          isCloudEligiblePublication(book) && !visibleCloud.some((remote) => remote.id === book.id)
-        ));
-        if (unsyncedEpubs.length) {
-          setSyncState("syncing");
-          for (const book of unsyncedEpubs) {
-            await uploadCloudBook(book);
-            const localPosition = parseReadingPosition(localStorage.getItem(`dawn-reader-progress:${book.id}`));
-            if (localPosition) await saveCloudProgress(book.id, localPosition);
-          }
-          const refreshed = await loadCloudLibrary();
-          if (!cancelled) setStoredBooks(mergeShelf(visibleLocal, refreshed.books));
-        }
         if (!cancelled) setSyncState("ready");
       } catch {
         if (!cancelled) setSyncState("local");

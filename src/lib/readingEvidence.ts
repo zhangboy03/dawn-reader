@@ -1,6 +1,7 @@
 import { selectionKind, type SelectionKind } from "./selectionKind";
+import { accountDatabaseName } from "./clientAccountContext";
 
-const DB_NAME = "dawn-reader-evidence";
+const LEGACY_DB_NAME = "dawn-reader-evidence";
 const DB_VERSION = 1;
 const RECORDS_STORE = "lookup-records";
 const TIME_STORE = "reading-time";
@@ -57,9 +58,9 @@ export type ReadingTimeSummary = {
   weekMs: number;
 };
 
-function openEvidenceDatabase() {
+function openEvidenceDatabaseByName(databaseName: string) {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(databaseName, DB_VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(RECORDS_STORE)) {
@@ -76,6 +77,15 @@ function openEvidenceDatabase() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+function openEvidenceDatabase() {
+  return openEvidenceDatabaseByName(accountDatabaseName(LEGACY_DB_NAME, 2));
+}
+
+async function databaseExists(databaseName: string) {
+  if (typeof indexedDB.databases !== "function") return false;
+  return (await indexedDB.databases()).some((database) => database.name === databaseName);
 }
 
 function requestResult<T>(request: IDBRequest<T>) {
@@ -173,6 +183,45 @@ export async function listReadingEvidence() {
   const records = await requestResult(transaction.objectStore(RECORDS_STORE).getAll()) as ReadingEvidenceRecord[];
   database.close();
   return records.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+async function legacyEvidenceRecords() {
+  if (!await databaseExists(LEGACY_DB_NAME)) {
+    return { records: [] as ReadingEvidenceRecord[], slices: [] as ReadingTimeSlice[] };
+  }
+  const database = await openEvidenceDatabaseByName(LEGACY_DB_NAME);
+  if (!database.objectStoreNames.contains(RECORDS_STORE)) {
+    database.close();
+    return { records: [] as ReadingEvidenceRecord[], slices: [] as ReadingTimeSlice[] };
+  }
+  const stores = database.objectStoreNames.contains(TIME_STORE)
+    ? [RECORDS_STORE, TIME_STORE]
+    : [RECORDS_STORE];
+  const transaction = database.transaction(stores, "readonly");
+  const records = await requestResult(transaction.objectStore(RECORDS_STORE).getAll()) as ReadingEvidenceRecord[];
+  const slices = database.objectStoreNames.contains(TIME_STORE)
+    ? await requestResult(transaction.objectStore(TIME_STORE).getAll()) as ReadingTimeSlice[]
+    : [];
+  database.close();
+  return { records, slices };
+}
+
+export async function legacyReadingEvidenceCount() {
+  const legacy = await legacyEvidenceRecords();
+  return legacy.records.length + legacy.slices.length;
+}
+
+export async function claimLegacyReadingEvidence() {
+  const legacy = await legacyEvidenceRecords();
+  if (!legacy.records.length && !legacy.slices.length) return 0;
+  const database = await openEvidenceDatabase();
+  const transaction = database.transaction([RECORDS_STORE, TIME_STORE], "readwrite");
+  const finished = transactionFinished(transaction);
+  for (const record of legacy.records) transaction.objectStore(RECORDS_STORE).put(record);
+  for (const slice of legacy.slices) transaction.objectStore(TIME_STORE).put(slice);
+  await finished;
+  database.close();
+  return legacy.records.length + legacy.slices.length;
 }
 
 export async function deleteReadingEvidence(id: string) {

@@ -12,6 +12,7 @@ interface Env {
   AI_API_KEY?: string;
   AI_MODEL?: string;
   BRAVE_SEARCH_API_KEY?: string;
+  DAWN_ENVIRONMENT?: "beta" | "public";
   DB?: D1Database;
   BOOKS?: R2Bucket;
   IMAGES: {
