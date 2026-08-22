@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Reader } from "./Reader";
 import { configureClientAccountContext } from "../lib/clientAccountContext";
 
@@ -49,6 +49,10 @@ beforeEach(() => {
     role: "reader",
     authKind: "dawn_session",
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("Reader chrome", () => {
@@ -269,5 +273,71 @@ describe("Reader chrome", () => {
     fireEvent(backdrop, outsideRelease);
     expect(outsideRelease.defaultPrevented).toBe(true);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "简明英文" })).toBeNull());
+  });
+
+  it("lets the reader select a word inside an English rewrite for continued explanation", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        rewrite: "A more approachable sentence with unfamiliar wording.",
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        rewrite: "not known or recognized",
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    render(<Reader
+      source={{
+        type: "text",
+        title: "Selectable rewrite",
+        text: "The original sentence needs a simpler explanation.",
+        assistantMode: "rewrite",
+      }}
+      profile={profile}
+      onClose={() => undefined}
+    />);
+
+    const paragraph = screen.getByText("The original sentence needs a simpler explanation.");
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selectionRect = { left: 220, right: 420, top: 240, bottom: 270, width: 200, height: 30 };
+    const preservedRange = range.cloneRange();
+    const geometry = {
+      getClientRects: { value: () => [selectionRect] },
+      getBoundingClientRect: { value: () => selectionRect },
+    };
+    Object.defineProperties(preservedRange, {
+      ...geometry,
+      cloneRange: { value: () => preservedRange },
+    });
+    Object.defineProperties(range, {
+      ...geometry,
+      cloneRange: { value: () => preservedRange },
+    });
+    const stage = paragraph.closest<HTMLElement>(".reading-stage")!;
+    Object.defineProperty(stage, "getBoundingClientRect", {
+      value: () => ({ left: 0, right: 1024, top: 64, bottom: 700, width: 1024, height: 636 }),
+    });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    fireEvent.pointerUp(paragraph, { pointerType: "mouse", clientX: 420, clientY: 260 });
+
+    const rewrite = await screen.findByText("A more approachable sentence with unfamiliar wording.");
+    expect(rewrite.getAttribute("data-selectable-rewrite")).not.toBeNull();
+    const rewriteText = rewrite.firstChild!;
+    const wordStart = rewrite.textContent!.indexOf("unfamiliar");
+    const nestedRange = document.createRange();
+    nestedRange.setStart(rewriteText, wordStart);
+    nestedRange.setEnd(rewriteText, wordStart + "unfamiliar".length);
+    selection.removeAllRanges();
+    selection.addRange(nestedRange);
+    fireEvent.pointerUp(rewrite, { pointerType: "mouse" });
+
+    expect(await screen.findByText("not known or recognized")).not.toBeNull();
+    expect(screen.getByRole("region", { name: "继续解释：unfamiliar" })).not.toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const nestedRequest = JSON.parse(String((fetchSpy.mock.calls[1][1] as RequestInit).body));
+    expect(nestedRequest.text).toBe("unfamiliar");
+    expect(nestedRequest.context.before).toContain("approachable sentence with");
+    expect(nestedRequest.context.after).toContain("wording");
   });
 });
