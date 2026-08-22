@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createEvent, fireEvent, render, screen } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Reader } from "./Reader";
 
@@ -134,7 +134,7 @@ describe("Reader chrome", () => {
     expect(screen.queryByRole("dialog", { name: "阅读设置" })).toBeNull();
   });
 
-  it("uses an exclusive outside-press layer while selection help is open", () => {
+  it("uses an exclusive outside-press layer while selection help is open", async () => {
     render(<Reader
       source={{
         type: "text",
@@ -149,20 +149,45 @@ describe("Reader chrome", () => {
     const paragraph = screen.getByText("A selected phrase stays on the current page.");
     const range = document.createRange();
     range.selectNodeContents(paragraph);
-    Object.defineProperty(range, "getBoundingClientRect", {
-      value: () => ({ left: 220, right: 420, top: 240, bottom: 270, width: 200, height: 30 }),
+    const selectionRect = { left: 220, right: 420, top: 240, bottom: 270, width: 200, height: 30 };
+    const preservedRange = range.cloneRange();
+    const geometry = {
+      getClientRects: { value: () => [selectionRect] },
+      getBoundingClientRect: { value: () => selectionRect },
+    };
+    Object.defineProperties(preservedRange, {
+      ...geometry,
+      cloneRange: { value: () => preservedRange },
+    });
+    Object.defineProperties(range, {
+      ...geometry,
+      // Reader intentionally retains a clone. Keep the controlled jsdom
+      // geometry on that retained range so the first shared layout can settle.
+      cloneRange: { value: () => preservedRange },
+    });
+    const stage = paragraph.closest<HTMLElement>(".reading-stage")!;
+    Object.defineProperty(stage, "getBoundingClientRect", {
+      value: () => ({ left: 0, right: 1024, top: 64, bottom: 700, width: 1024, height: 636 }),
     });
     const selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
-    fireEvent.mouseUp(paragraph);
+    fireEvent.pointerUp(paragraph, { pointerType: "mouse", clientX: 420, clientY: 260 });
 
-    expect(screen.getByRole("dialog", { name: "简明英文" })).not.toBeNull();
-    const backdrop = screen.getAllByRole("button", { name: "关闭解释" })[0];
-    const outsidePress = createEvent.pointerDown(backdrop);
+    // The production surface is deliberately hidden from paint and the
+    // accessibility tree until its first collision-safe layout is committed.
+    // Await that visible state rather than asserting during initialization.
+    const dialog = await screen.findByRole("dialog", { name: "简明英文" });
+    expect(dialog.getAttribute("aria-hidden")).not.toBe("true");
+    const backdrop = document.querySelector<HTMLElement>("[data-selection-assist-dismiss-layer]")!;
+    const outsidePress = createEvent.pointerDown(backdrop, { pointerId: 3 });
     fireEvent(backdrop, outsidePress);
 
     expect(outsidePress.defaultPrevented).toBe(true);
-    expect(screen.queryByRole("dialog", { name: "简明英文" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "简明英文" })).not.toBeNull();
+    const outsideRelease = createEvent.pointerUp(backdrop, { pointerId: 3 });
+    fireEvent(backdrop, outsideRelease);
+    expect(outsideRelease.defaultPrevented).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "简明英文" })).toBeNull());
   });
 });

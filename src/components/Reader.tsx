@@ -18,10 +18,14 @@ import {
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { selectionKind } from "../lib/selectionKind";
 import {
-  selectionAssistPosition,
-  type SelectionAssistPosition,
-  type SelectionBounds,
-} from "../lib/selectionAssistPosition";
+  selectionAssistAnchorFromRange,
+  type SelectionAssistAnchor,
+  type SelectionAssistDirection,
+  type SelectionAssistPoint,
+  type SelectionAssistVisibleBounds,
+} from "../lib/selectionAssistAnchor";
+import { visualViewportRect } from "../lib/selectionAssistPosition";
+import { SelectionAssistSurface } from "./selection-assist/SelectionAssistSurface";
 import {
   latestReadingPosition,
   parseReadingPosition,
@@ -93,7 +97,8 @@ type ChatState = "idle" | "loading" | "error";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ChatSource = { title: string; url: string };
 type AutoSaveState = "idle" | "pending" | "saved" | "error";
-type SelectionAnchor = SelectionBounds;
+type SelectionAnchor = SelectionAssistAnchor;
+type SelectionEndpoint = { document: Document; point: SelectionAssistPoint };
 type SelectionEvidenceContext = {
   id: string;
   text: string;
@@ -265,6 +270,58 @@ function normalize(text: string) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function currentVisualBounds(): SelectionAssistVisibleBounds {
+  const viewport = visualViewportRect(window.visualViewport, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  return {
+    left: viewport.left,
+    top: viewport.top,
+    right: viewport.left + viewport.width,
+    bottom: viewport.top + viewport.height,
+  };
+}
+
+function intersectVisibleBounds(
+  first: SelectionAssistVisibleBounds,
+  second: SelectionAssistVisibleBounds,
+): SelectionAssistVisibleBounds {
+  const left = Math.max(first.left, second.left);
+  const top = Math.max(first.top, second.top);
+  return {
+    left,
+    top,
+    right: Math.max(left, Math.min(first.right, second.right)),
+    bottom: Math.max(top, Math.min(first.bottom, second.bottom)),
+  };
+}
+
+function iframeSelectionAssistTransform(iframe: HTMLElement, rect = iframe.getBoundingClientRect()) {
+  const layoutWidth = iframe.offsetWidth || iframe.clientWidth || rect.width || 1;
+  const layoutHeight = iframe.offsetHeight || iframe.clientHeight || rect.height || 1;
+  const scale = {
+    x: rect.width > 0 && layoutWidth > 0 ? rect.width / layoutWidth : 1,
+    y: rect.height > 0 && layoutHeight > 0 ? rect.height / layoutHeight : 1,
+  };
+  const offset = {
+    x: rect.left + iframe.clientLeft * scale.x,
+    y: rect.top + iframe.clientTop * scale.y,
+  };
+  const contentWidth = (iframe.clientWidth || layoutWidth) * scale.x;
+  const contentHeight = (iframe.clientHeight || layoutHeight) * scale.y;
+  return {
+    offset,
+    scale,
+    bounds: {
+      left: offset.x,
+      top: offset.y,
+      right: offset.x + contentWidth,
+      bottom: offset.y + contentHeight,
+    },
+  };
+}
+
 function closestTextBlock(node: Node | null) {
   const element = node?.nodeType === 1 ? node as Element : node?.parentElement;
   return element?.closest<HTMLElement>("p, li, blockquote, h1, h2, h3, h4, h5, h6") ?? null;
@@ -351,15 +408,16 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const embedDialogRef = useRef<HTMLDialogElement>(null);
   const embedReturnFocusRef = useRef<HTMLElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const selectionAssistRef = useRef<HTMLElement>(null);
   const tocPanelRef = useRef<HTMLElement>(null);
   const settingsRef = useRef<ReaderSettings>(loadReaderSettings());
   const selectedKeyRef = useRef("");
   const selectionInputRef = useRef<ReaderInputKind>("mouse");
+  const selectionRangeRef = useRef<Range | null>(null);
+  const selectionEndpointRef = useRef<SelectionEndpoint | null>(null);
+  const selectionDirectionRef = useRef<SelectionAssistDirection>("unknown");
   const [displayTitle, setDisplayTitle] = useState(source.title);
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
-  const [assistPosition, setAssistPosition] = useState<SelectionAssistPosition | null>(null);
   const [rewrite, setRewrite] = useState("");
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
   const [assistanceMode, setAssistanceMode] = useState<AssistanceMode>("english");
@@ -972,7 +1030,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectedEvidenceRef.current = evidence;
     setPendingEvidence(null);
     setAutoSaveState("idle");
-    setAssistPosition(null);
+    selectionDirectionRef.current = anchor.direction;
     setSelected(text);
     setSelectionAnchor(anchor);
     setAssistanceMode("english");
@@ -1097,17 +1155,31 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       );
       signalReadingActivity("selection", observationId);
     }
-    const rect = range.getBoundingClientRect();
     const iframe = contents.document.defaultView?.frameElement as HTMLElement | null;
-    const frameRect = iframe?.getBoundingClientRect();
-    const top = (frameRect?.top ?? 0) + rect.top;
-    const bottom = (frameRect?.top ?? 0) + rect.bottom;
+    const transform = iframe ? iframeSelectionAssistTransform(iframe) : null;
+    const offset = transform?.offset ?? { x: 0, y: 0 };
+    const scale = transform?.scale ?? { x: 1, y: 1 };
+    const pendingEndpoint = selectionEndpointRef.current;
+    const localEndpoint = pendingEndpoint && pendingEndpoint.document === contents.document
+      ? pendingEndpoint.point
+      : null;
+    const visibleBounds = transform
+      ? intersectVisibleBounds(currentVisualBounds(), transform.bounds)
+      : currentVisualBounds();
+    const anchor = selectionAssistAnchorFromRange(range, {
+      selection,
+      offset,
+      scale,
+      endpoint: localEndpoint ? {
+        x: localEndpoint.x * scale.x + offset.x,
+        y: localEndpoint.y * scale.y + offset.y,
+      } : null,
+      visibleBounds,
+    });
+    if (!anchor) return;
+    selectionRangeRef.current = range.cloneRange();
     const context = contextFromDomSelection(selection);
-    beginSelection(text, {
-      x: (frameRect?.left ?? 0) + rect.left + rect.width / 2,
-      top,
-      bottom,
-    }, context, {
+    beginSelection(text, anchor, context, {
       id: observationId,
       text,
       context,
@@ -1117,6 +1189,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         percentage: pageProgress,
       },
     });
+    // This coordinate is tied to the current visual viewport. It is useful for
+    // the initial rect choice only; retaining it would mis-anchor after scroll
+    // or reflow, so later updates rely on the selection's logical direction.
+    selectionEndpointRef.current = null;
   }
 
   function scheduleEpubSelection(contents: any, delay = 320) {
@@ -1428,20 +1504,24 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       if (!cfiRange) return;
       try {
         const range = renderer.rendition.getRange(cfiRange) as Range | null;
-        const rect = range?.getBoundingClientRect();
-        const iframe = range?.startContainer.ownerDocument?.defaultView?.frameElement as HTMLElement | null;
-        const iframeRect = iframe?.getBoundingClientRect();
-        if (range && rect && iframeRect) {
-          const selection = range.startContainer.ownerDocument.defaultView?.getSelection();
+        const ownerDocument = range?.startContainer.ownerDocument;
+        const iframe = ownerDocument?.defaultView?.frameElement as HTMLElement | null;
+        if (range && ownerDocument && iframe) {
+          const selection = ownerDocument.defaultView?.getSelection();
           selection?.removeAllRanges();
           selection?.addRange(range);
+          const transform = iframeSelectionAssistTransform(iframe);
           selectedContentsRef.current = renderer.rendition.getContents?.()
-            ?.find((contents: any) => contents?.document === range.startContainer.ownerDocument) ?? null;
-          setSelectionAnchor({
-            x: iframeRect.left + rect.left + rect.width / 2,
-            top: iframeRect.top + rect.top,
-            bottom: iframeRect.top + rect.bottom,
+            ?.find((contents: any) => contents?.document === ownerDocument) ?? null;
+          selectionRangeRef.current = range;
+          const anchor = selectionAssistAnchorFromRange(range, {
+            direction: selectionDirectionRef.current,
+            offset: transform.offset,
+            scale: transform.scale,
+            visibleBounds: intersectVisibleBounds(currentVisualBounds(), transform.bounds),
           });
+          if (anchor) setSelectionAnchor(anchor);
+          readingStageRef.current?.dispatchEvent(new Event("selectionassistlayout"));
         }
       } catch {
         // Keep the existing selection and assistance position if the range cannot be rebuilt.
@@ -1656,6 +1736,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
         const onPointerDown = (event: PointerEvent) => {
           progressInteractionPendingRef.current = true;
+          selectionEndpointRef.current = { document, point: { x: event.clientX, y: event.clientY } };
           progressSessionDirtyRef.current = true;
           const kind = pointerInputKind(event.pointerType);
           selectionInputRef.current = kind;
@@ -1683,6 +1764,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         const onPointerUp = (event: PointerEvent) => {
           const gesture = gestureRef.current;
           if (!gesture || gesture.pointerId !== event.pointerId) return;
+          selectionEndpointRef.current = { document, point: { x: event.clientX, y: event.clientY } };
           completeGesture(contents, event.clientX, event.clientY);
         };
         const onPointerCancel = (event: PointerEvent) => {
@@ -1731,6 +1813,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           const gesture = gestureRef.current;
           const touch = event.changedTouches[0];
           if (!gesture || !touch) return;
+          selectionEndpointRef.current = { document, point: { x: touch.clientX, y: touch.clientY } };
           if (gesture.kind === "pen" && gesture.mode === "select") event.stopPropagation();
           completeGesture(contents, touch.clientX, touch.clientY);
         };
@@ -1741,7 +1824,10 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           progressInteractionPendingRef.current = true;
           progressSessionDirtyRef.current = true;
         };
-        const onKeyDown = (event: KeyboardEvent) => handlePageKey(event);
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (event.shiftKey || event.key.startsWith("Arrow")) selectionEndpointRef.current = null;
+          handlePageKey(event);
+        };
 
         document.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
         document.addEventListener("pointermove", onPointerMove, { capture: true, passive: false });
@@ -2079,7 +2165,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
-  function captureSelection() {
+  function captureSelection(endpoint: SelectionAssistPoint | null = null) {
     if (source.type !== "text") return;
     const selection = window.getSelection();
     const text = selection?.toString().trim() ?? "";
@@ -2087,15 +2173,27 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const range = selection.getRangeAt(0);
     const paragraph = closestTextBlock(range.startContainer)?.closest<HTMLElement>(".reader-paragraph");
     const paragraphIndex = Number(paragraph?.dataset.paragraphIndex ?? -1);
-    const rect = range.getBoundingClientRect();
+    const stageRect = readingStageRef.current?.getBoundingClientRect();
+    const visibleBounds = stageRect
+      ? intersectVisibleBounds(currentVisualBounds(), {
+        left: stageRect.left,
+        top: stageRect.top,
+        right: stageRect.right,
+        bottom: stageRect.bottom,
+      })
+      : currentVisualBounds();
+    const anchor = selectionAssistAnchorFromRange(range, {
+      selection,
+      endpoint,
+      visibleBounds,
+    });
+    if (!anchor) return;
+    selectionRangeRef.current = range.cloneRange();
+    selectionEndpointRef.current = null;
     const context = contextFromParagraphs(textParagraphs, paragraphIndex, text);
     const observationId = crypto.randomUUID();
     signalReadingActivity("selection", observationId);
-    beginSelection(text, {
-      x: rect.left + rect.width / 2,
-      top: rect.top,
-      bottom: rect.bottom,
-    }, context, {
+    beginSelection(text, anchor, context, {
       id: observationId,
       text,
       context,
@@ -2120,9 +2218,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectedContextRef.current = null;
     selectedEvidenceRef.current = null;
     selectedKeyRef.current = "";
+    selectionRangeRef.current = null;
+    selectionEndpointRef.current = null;
+    selectionDirectionRef.current = "unknown";
     setSelected("");
     setSelectionAnchor(null);
-    setAssistPosition(null);
     setRewrite("");
     setRewriteState("idle");
     setAssistanceMode("english");
@@ -2228,65 +2328,105 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     signalReadingActivity("continue-from-reference");
   }
 
-  function dismissSelectionOnly(event: ReactPointerEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    gestureRef.current = null;
-    stageGestureRef.current = null;
-    clearSelection();
+  function currentSelectionAssistAnchor() {
+    const range = selectionRangeRef.current;
+    if (!range) return selectionAnchor;
+    const ownerDocument = range.startContainer.ownerDocument ?? document;
+    if ("isConnected" in range.commonAncestorContainer && !range.commonAncestorContainer.isConnected) {
+      return null;
+    }
+    const iframe = ownerDocument.defaultView?.frameElement as HTMLElement | null;
+    const transform = iframe ? iframeSelectionAssistTransform(iframe) : null;
+    const offset = transform?.offset ?? { x: 0, y: 0 };
+    const scale = transform?.scale ?? { x: 1, y: 1 };
+    let visibleBounds = currentVisualBounds();
+    if (transform) {
+      visibleBounds = intersectVisibleBounds(visibleBounds, transform.bounds);
+    } else {
+      const stage = readingStageRef.current?.getBoundingClientRect();
+      if (stage) {
+        visibleBounds = intersectVisibleBounds(visibleBounds, {
+          left: stage.left,
+          top: stage.top,
+          right: stage.right,
+          bottom: stage.bottom,
+        });
+      }
+    }
+    return selectionAssistAnchorFromRange(range, {
+      selection: ownerDocument.getSelection(),
+      direction: selectionDirectionRef.current,
+      offset,
+      scale,
+      visibleBounds,
+    });
   }
 
-  useLayoutEffect(() => {
-    const element = selectionAssistRef.current;
-    if (!selectionAnchor || !element) return;
-
-    const updatePosition = () => {
-      const compactLayout = window.matchMedia("(max-width: 720px)").matches;
-      if (compactLayout) {
-        const maxHeight = source.assistantMode === "ask" ? 620 : 420;
-        setAssistPosition({
-          left: window.innerWidth / 2,
-          top: 0,
-          maxHeight: Math.min(maxHeight, Math.max(0, window.innerHeight - 86)),
-          placement: "below",
-        });
-        return;
-      }
-
-      const card = element.getBoundingClientRect();
-      const topbarBottom = document.querySelector<HTMLElement>(".reader-topbar")?.getBoundingClientRect().bottom ?? 64;
-      const bottombarTop = document.querySelector<HTMLElement>(".reader-bottombar")?.getBoundingClientRect().top ?? window.innerHeight;
-      const positioned = selectionAssistPosition({
-        anchor: selectionAnchor,
-        popover: { width: card.width, height: card.height },
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        safeArea: {
-          top: topbarBottom + 12,
-          bottom: bottombarTop - 12,
-        },
-      });
-      const next = {
-        ...positioned,
-        maxHeight: Math.min(positioned.maxHeight, source.assistantMode === "ask" ? 540 : 420),
-      };
-      setAssistPosition((current) => current
-        && current.left === next.left
-        && current.top === next.top
-        && current.maxHeight === next.maxHeight
-        && current.placement === next.placement
-        ? current
-        : next);
+  function readerAssistBoundary(): SelectionAssistVisibleBounds {
+    const visual = currentVisualBounds();
+    const stage = readingStageRef.current?.getBoundingClientRect();
+    const topbarBottom = document.querySelector<HTMLElement>(".reader-topbar")?.getBoundingClientRect().bottom
+      ?? visual.top;
+    const bottombarTop = document.querySelector<HTMLElement>(".reader-bottombar")?.getBoundingClientRect().top
+      ?? visual.bottom;
+    const readerBounds = {
+      left: stage?.left ?? visual.left,
+      top: Math.max(stage?.top ?? visual.top, topbarBottom + 8),
+      right: stage?.right ?? visual.right,
+      bottom: Math.min(stage?.bottom ?? visual.bottom, bottombarTop - 8),
     };
+    return intersectVisibleBounds(visual, readerBounds);
+  }
 
-    updatePosition();
-    const observer = new ResizeObserver(updatePosition);
-    observer.observe(element);
-    window.addEventListener("resize", updatePosition);
+  function readerAssistEventTargets() {
+    const ownerDocument = selectionRangeRef.current?.startContainer.ownerDocument;
+    return [
+      readingStageRef.current,
+      epubRef.current,
+      ownerDocument,
+      ownerDocument?.defaultView,
+    ];
+  }
+
+  useEffect(() => {
+    if (!selected || source.type !== "epub" || epubNavigationBusy) return;
+    const cfi = selectedCfiRef.current;
+    const rendition = renditionRef.current;
+    if (!cfi || !rendition?.getRange) return;
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(() => {
+      void Promise.resolve(rendition.getRange(cfi)).then((range: Range | null) => {
+        if (cancelled || !range || !range.startContainer.isConnected) return;
+        selectionRangeRef.current = range;
+        const contents = rendition.getContents?.()
+          ?.find((item: any) => item?.document === range.startContainer.ownerDocument);
+        if (contents) selectedContentsRef.current = contents;
+        const next = currentSelectionAssistAnchor();
+        if (next) setSelectionAnchor(next);
+        range.startContainer.ownerDocument?.dispatchEvent(new Event("selectionassistlayout"));
+        readingStageRef.current?.dispatchEvent(new Event("selectionassistlayout"));
+      }).catch(() => undefined);
+    });
     return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updatePosition);
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
     };
-  }, [selectionAnchor, source.assistantMode]);
+    // Re-resolve the CFI after every layout/reflow-affecting change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selected,
+    source.type,
+    epubNavigationBusy,
+    epubContentReady,
+    currentHref,
+    settings.fontSize,
+    settings.lineHeight,
+    settings.pageWidth,
+    settings.theme,
+    settings.textAlign,
+    settings.paragraphStyle,
+    settings.typographyMode,
+  ]);
 
   function closeImageView() {
     imageDialogRef.current?.close();
@@ -2337,12 +2477,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     "--reader-line-height": settings.lineHeight,
     "--reader-page-width": `${readingWidth}px`,
   } as CSSProperties;
-  const anchorStyle = selectionAnchor ? {
-    left: `${assistPosition?.left ?? selectionAnchor.x}px`,
-    top: `${assistPosition?.top ?? selectionAnchor.bottom + 12}px`,
-    maxHeight: assistPosition ? `${assistPosition.maxHeight}px` : undefined,
-    visibility: assistPosition ? "visible" : "hidden",
-  } as CSSProperties : undefined;
   const selectedKind = selectionKind(selected);
   const assistanceTitle = source.assistantMode === "ask"
     ? "问这段内容"
@@ -2356,6 +2490,26 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     : selectedKind === "word" ? "正在查询读音与词义…"
     : selectedKind === "phrase" ? "正在解释短语…"
     : "正在生成简明英文…";
+  const assistLayoutKey = [
+    source.assistantMode,
+    assistanceMode,
+    rewriteState,
+    rewrite.length,
+    chatState,
+    chatMessages.length,
+    chatMessages.reduce((total, message) => total + message.content.length, 0),
+    chatSources.length,
+    chatDraft.length,
+    selectionAnchor?.focusIndex ?? -1,
+    selectionAnchor?.focusRect.left ?? -1,
+    selectionAnchor?.focusRect.top ?? -1,
+    settings.fontSize,
+    settings.lineHeight,
+    settings.pageWidth,
+    currentHref,
+    epubContentReady ? 1 : 0,
+    epubNavigationBusy ? 1 : 0,
+  ].join(":");
 
   return <div data-dawn-reading-surface="book" className={`reader-shell ${source.type === "epub" ? "reader-shell-epub" : ""} reader-theme-${settings.theme}`}>
     <header className="reader-topbar">
@@ -2442,10 +2596,14 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         data-dawn-paragraph-style={settings.paragraphStyle}
         data-dawn-text-align={settings.textAlign}
         data-dawn-typography-mode={settings.typographyMode}
-        onMouseUp={captureSelection}
         onPointerUp={(event) => {
-        if (event.pointerType === "pen" && settings.pencilMode === "select") captureSelection();
-      }}>
+          const acceptsPointer = event.pointerType === "mouse"
+            || (event.pointerType === "pen" && settings.pencilMode === "select");
+          if (acceptsPointer) captureSelection({ x: event.clientX, y: event.clientY });
+        }}
+        onKeyUp={(event) => {
+          if (event.shiftKey || event.key.startsWith("Arrow")) captureSelection();
+        }}>
         <h1>{displayTitle}</h1>
         <div className="reading-columns">
           {textParagraphs.map((paragraph, index) => <p className="reader-paragraph" data-paragraph-index={index} key={index}>{paragraph}</p>)}
@@ -2558,69 +2716,63 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       />
     </dialog>}
 
-    {selected && selectionAnchor && <button
-      className="selection-assist-backdrop"
-      type="button"
-      aria-label="关闭解释"
-      onPointerDown={dismissSelectionOnly}
-      onClick={clearSelection}
-    />}
-
-    {selected && selectionAnchor && <aside
-      ref={selectionAssistRef}
-      className={`selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${assistPosition?.placement ?? "below"} ${source.assistantMode === "ask" ? chatState : rewriteState}`}
-      style={anchorStyle}
-      role="dialog"
-      aria-label={assistanceTitle}
-      onPointerDown={(event) => event.stopPropagation()}
+    {selected && selectionAnchor && <SelectionAssistSurface
+      title={assistanceTitle}
+      ariaLabel={assistanceTitle}
+      className={`reader-selection-assist ${source.assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${source.assistantMode === "ask" ? chatState : rewriteState} ${(source.assistantMode === "ask" ? chatState : rewriteState) === "error" ? "is-error" : ""}`}
+      actions={<>
+        {source.assistantMode === "ask" && <small className="chat-capability">局部上下文{searchAvailable ? " · 可联网" : ""}</small>}
+        {source.assistantMode === "rewrite" && assistanceMode === "english" && rewriteState === "complete" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
+      </>}
+      onDismiss={clearSelection}
+      getAnchor={currentSelectionAssistAnchor}
+      getBoundary={readerAssistBoundary}
+      getBoundaryElement={() => readingStageRef.current}
+      getEventTargets={readerAssistEventTargets}
+      returnFocus={() => readingStageRef.current}
+      layoutKey={assistLayoutKey}
+      maximumHeight={source.assistantMode === "ask" ? 620 : 440}
+      minimumUsefulHeight={source.assistantMode === "ask" ? 260 : 164}
+      footer={source.assistantMode === "ask" ? <form className="chat-compose" onSubmit={submitQuestion}>
+        <textarea
+          data-selection-assist-autofocus
+          aria-label="向 AI 提问"
+          placeholder={chatMessages.length ? "继续问…" : searchAvailable ? "问这段内容，必要时搜索…" : "你想弄懂什么？"}
+          rows={2}
+          value={chatDraft}
+          onChange={(event) => setChatDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
+        <button type="submit" disabled={!chatDraft.trim() || chatState === "loading"} aria-label="发送问题">↑</button>
+      </form> : undefined}
     >
-      <header>
-        <span>{assistanceTitle}</span>
-        <div>
-          {source.assistantMode === "ask" && <small className="chat-capability">局部上下文{searchAvailable ? " · 可联网" : ""}</small>}
-          {source.assistantMode === "rewrite" && assistanceMode === "english" && rewriteState === "complete" && <button type="button" onClick={requestChineseDetail}>中文详解</button>}
-          <button className="assist-close" type="button" aria-label="关闭解释" onClick={clearSelection}>×</button>
-        </div>
-      </header>
       {source.assistantMode === "rewrite" ? <div role="status" aria-live="polite">
-          {rewrite ? <p className="rewrite-result">{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
-          {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
-        </div> : <div className="selection-chat">
-          <div className="chat-selection"><span>选中</span><p>{selected}</p></div>
-          {chatMessages.length > 0 && <div className="chat-thread" aria-live="polite">
-            {chatMessages.map((message, index) => <div className={`chat-message ${message.role}`} key={`${message.role}-${index}`}>
-              <small>{message.role === "user" ? "你" : "AI"}</small>
-              <p>{message.content}</p>
-            </div>)}
-            {chatState === "loading" && <div className="chat-thinking"><i /><span>{searchAvailable ? "正在阅读，必要时搜索…" : "正在结合上下文思考…"}</span></div>}
-            {chatSources.length > 0 && <div className="chat-sources">
-              <small>来源</small>
-              {chatSources.map((item, index) => <a href={item.url} target="_blank" rel="noreferrer" key={item.url}>[{index + 1}] {item.title}</a>)}
-            </div>}
-            <div ref={chatEndRef} />
+        {rewrite ? <p className="rewrite-result">{rewrite}</p> : <div className="rewrite-wait"><i /><span>{loadingTitle}</span></div>}
+        {rewriteState === "error" && <button className="assist-retry" type="button" onClick={retryAssistance}>重试</button>}
+      </div> : <div className="selection-chat">
+        <div className="chat-selection"><span>选中</span><p>{selected}</p></div>
+        {chatMessages.length > 0 && <div className="chat-thread" aria-live="polite">
+          {chatMessages.map((message, index) => <div className={`chat-message ${message.role}`} key={`${message.role}-${index}`}>
+            <small>{message.role === "user" ? "你" : "AI"}</small>
+            <p>{message.content}</p>
+          </div>)}
+          {chatState === "loading" && <div className="chat-thinking"><i /><span>{searchAvailable ? "正在阅读，必要时搜索…" : "正在结合上下文思考…"}</span></div>}
+          {chatSources.length > 0 && <div className="chat-sources">
+            <small>来源</small>
+            {chatSources.map((item, index) => <a href={item.url} target="_blank" rel="noreferrer" key={item.url}>[{index + 1}] {item.title}</a>)}
           </div>}
-          {chatState === "error" && <div className="chat-error" role="alert"><span>{chatError}</span><button type="button" onClick={() => {
-            const last = chatMessages.at(-1);
-            if (last?.role === "user") void sendQuestion(last.content, chatMessages.slice(0, -1));
-          }}>重试</button></div>}
-          <form className="chat-compose" onSubmit={submitQuestion}>
-            <textarea
-              autoFocus
-              aria-label="向 AI 提问"
-              placeholder={chatMessages.length ? "继续问…" : searchAvailable ? "问这段内容，必要时搜索…" : "你想弄懂什么？"}
-              rows={2}
-              value={chatDraft}
-              onChange={(event) => setChatDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-            />
-            <button type="submit" disabled={!chatDraft.trim() || chatState === "loading"} aria-label="发送问题">↑</button>
-          </form>
+          <div ref={chatEndRef} />
         </div>}
-    </aside>}
+        {chatState === "error" && <div className="chat-error" role="alert"><span>{chatError}</span><button type="button" onClick={() => {
+          const last = chatMessages.at(-1);
+          if (last?.role === "user") void sendQuestion(last.content, chatMessages.slice(0, -1));
+        }}>重试</button></div>}
+      </div>}
+    </SelectionAssistSurface>}
   </div>;
 }
