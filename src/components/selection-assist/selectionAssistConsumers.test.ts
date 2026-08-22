@@ -56,4 +56,12 @@ describe("shared selection-assistance consumers", () => {
     expect(shared).toContain('aria-modal={compact ? true : undefined}');
     expect(shared).toContain('aria-hidden="true"');
   });
+
+  it("shares one title-bar drag behavior while preserving action controls", () => {
+    expect(shared).toContain("data-selection-assist-drag-handle");
+    expect(shared).toContain('event.pointerType !== "mouse"');
+    expect(shared).toContain('.closest(".selection-assist-actions")');
+    expect(css).toMatch(/\.selection-assist-header\s*\{[\s\S]*?cursor:\s*grab;/);
+    expect(css).toContain('[data-dragging="true"]');
+  });
 });

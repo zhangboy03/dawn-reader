@@ -18,6 +18,7 @@ export function PdfSelectionCard({
   onRetryEnglish,
   onClose,
   layoutKey = 0,
+  dragResetKey = 0,
 }: {
   anchor: SelectionCardAnchor;
   getAnchor?: () => SelectionAssistAnchor | null;
@@ -32,6 +33,7 @@ export function PdfSelectionCard({
   onRetryEnglish: () => void;
   onClose: () => void;
   layoutKey?: string | number;
+  dragResetKey?: string | number;
 }) {
   const showChinese = state.english.phase === "success" || state.chinese.phase !== "idle";
   const error = state.english.phase === "error" || state.chinese.phase === "error" || highlightState.phase === "error";
@@ -75,6 +77,7 @@ export function PdfSelectionCard({
     getBoundaryElement={getBoundaryElement}
     returnFocus={returnFocus}
     layoutKey={contentLayoutKey}
+    dragResetKey={dragResetKey}
     maximumHeight={560}
     minimumUsefulHeight={184}
   >

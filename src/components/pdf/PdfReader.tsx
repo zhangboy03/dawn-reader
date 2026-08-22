@@ -1027,6 +1027,7 @@ export function PdfReader({ source, profile, onClose }: {
       getEventTargets={pdfAssistEventTargets}
       returnFocus={() => scrollRef.current}
       layoutKey={`${selection.pageIndex}:${pageNumber}:${scale}:${fit}:${sidebarOpen ? 1 : 0}`}
+      dragResetKey={selectionVersionRef.current}
       state={assistance}
       highlightState={highlightState}
       onHighlight={addHighlight}

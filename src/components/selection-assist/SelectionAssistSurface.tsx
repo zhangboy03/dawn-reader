@@ -1,12 +1,19 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import type { SelectionAssistAnchor, SelectionAssistVisibleBounds } from "../../lib/selectionAssistAnchor";
+import {
+  clampSelectionAssistDragPosition,
+  visualViewportRect,
+  type SelectionAssistDragPosition,
+} from "../../lib/selectionAssistPosition";
 import { useSelectionAssistSurface } from "./useSelectionAssistSurface";
 import "../../selection-assist.css";
 
@@ -25,6 +32,7 @@ type SelectionAssistSurfaceProps = {
   returnFocus?: () => HTMLElement | null;
   className?: string;
   layoutKey?: string | number;
+  dragResetKey?: string | number;
   width?: number;
   maximumHeight?: number;
   minimumUsefulHeight?: number;
@@ -55,6 +63,7 @@ export function SelectionAssistSurface({
   returnFocus,
   className = "",
   layoutKey = 0,
+  dragResetKey = 0,
   width = 420,
   maximumHeight = 560,
   minimumUsefulHeight = 176,
@@ -67,7 +76,15 @@ export function SelectionAssistSurface({
   const returnTargetRef = useRef<HTMLElement | null>(null);
   const didFocusRef = useRef(false);
   const outsidePointerRef = useRef<number | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    origin: SelectionAssistDragPosition;
+  } | null>(null);
   const dismissedRef = useRef(false);
+  const [manualPosition, setManualPosition] = useState<SelectionAssistDragPosition | null>(null);
+  const [dragging, setDragging] = useState(false);
   const { surfaceRef, position, compact } = useSelectionAssistSurface({
     open,
     getAnchor,
@@ -111,6 +128,39 @@ export function SelectionAssistSurface({
     window.requestAnimationFrame(() => target?.focus({ preventScroll: true }));
   }, [compact, focusOnOpen, position, surfaceRef]);
 
+  useLayoutEffect(() => {
+    dragRef.current = null;
+    setDragging(false);
+    setManualPosition(null);
+  }, [dragResetKey]);
+
+  const clampDraggedPosition = (next: SelectionAssistDragPosition) => {
+    const surface = surfaceRef.current;
+    if (!surface) return next;
+    const rect = surface.getBoundingClientRect();
+    return clampSelectionAssistDragPosition({
+      position: next,
+      surface: {
+        width: rect.width || position?.width || width,
+        height: rect.height || position?.height || minimumUsefulHeight,
+      },
+      viewport: visualViewportRect(window.visualViewport, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+      safeArea: getBoundary?.() ?? null,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!manualPosition || dragging) return;
+    setManualPosition((current) => {
+      if (!current) return current;
+      const next = clampDraggedPosition(current);
+      return next.left === current.left && next.top === current.top ? current : next;
+    });
+  }, [dragging, layoutKey, position?.height, position?.maxHeight, position?.width]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -135,8 +185,8 @@ export function SelectionAssistSurface({
 
   if (!open) return null;
   const style = {
-    left: position?.left,
-    top: position?.top,
+    left: manualPosition?.left ?? position?.left,
+    top: manualPosition?.top ?? position?.top,
     // Give the first unconstrained measurement the intended line-wrapping
     // width. CSS still clamps it to the visual viewport on compact screens.
     width: position?.width ?? width,
@@ -167,6 +217,41 @@ export function SelectionAssistSurface({
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* capture may already be released */ }
     dismiss();
   };
+  const onDragPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.pointerType !== "mouse" || event.button !== 0 || !position) return;
+    if ((event.target as Element | null)?.closest(".selection-assist-actions")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const origin = clampDraggedPosition(manualPosition ?? { left: position.left, top: position.top });
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin,
+    };
+    setManualPosition(origin);
+    setDragging(true);
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* pointer capture is an optimization */ }
+  };
+  const onDragPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setManualPosition(clampDraggedPosition({
+      left: drag.origin.left + event.clientX - drag.startX,
+      top: drag.origin.top + event.clientY - drag.startY,
+    }));
+  };
+  const finishDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = null;
+    setDragging(false);
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* capture may already be released */ }
+  };
 
   return <>
     <div
@@ -196,13 +281,23 @@ export function SelectionAssistSurface({
       aria-hidden={!active || undefined}
       data-placement={placement}
       data-strategy={position?.strategy}
+      data-position-mode={manualPosition ? "manual" : "auto"}
+      data-dragging={dragging || undefined}
       onPointerDown={containInternalPointer}
       onPointerUp={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
       onTouchMove={(event) => event.stopPropagation()}
     >
-      <header className="selection-assist-header" data-selection-assist-header>
+      <header
+        className="selection-assist-header"
+        data-selection-assist-header
+        data-selection-assist-drag-handle
+        onPointerDown={onDragPointerDown}
+        onPointerMove={onDragPointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
         <strong id={titleId}>{title}</strong>
         <div className="selection-assist-actions">
           {actions}

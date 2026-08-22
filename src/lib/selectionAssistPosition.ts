@@ -19,6 +19,11 @@ export type SelectionAssistViewport = {
   height: number;
 };
 
+export type SelectionAssistDragPosition = {
+  left: number;
+  top: number;
+};
+
 type PositionInput = {
   anchor: Pick<SelectionAssistAnchor, "focusRect" | "focusPoint">;
   popover: { width: number; naturalHeight: number };
@@ -72,6 +77,28 @@ export function intersectSelectionAssistBounds(
   const right = clamp(Math.min(viewportRight - edgeMargin, requested.right - edgeMargin), left, viewportRight);
   const bottom = clamp(Math.min(viewportBottom - edgeMargin, requested.bottom - edgeMargin), top, viewportBottom);
   return { left, top, right, bottom };
+}
+
+export function clampSelectionAssistDragPosition({
+  position,
+  surface,
+  viewport,
+  safeArea,
+  edgeMargin = 12,
+}: {
+  position: SelectionAssistDragPosition;
+  surface: { width: number; height: number };
+  viewport: SelectionAssistViewport;
+  safeArea?: SelectionAssistVisibleBounds | null;
+  edgeMargin?: number;
+}): SelectionAssistDragPosition {
+  const safe = intersectSelectionAssistBounds(viewport, safeArea, edgeMargin);
+  const width = Math.max(0, finite(surface.width, 0));
+  const height = Math.max(0, finite(surface.height, 0));
+  return {
+    left: Math.round(clamp(position.left, safe.left, safe.right - width) * 100) / 100,
+    top: Math.round(clamp(position.top, safe.top, safe.bottom - height) * 100) / 100,
+  };
 }
 
 function preferredPlacement(
