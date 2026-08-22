@@ -31,10 +31,10 @@ describe("shared selection-assistance consumers", () => {
     expect(hook).toContain("viewport.width <= compactBreakpoint");
   });
 
-  it("reacts to the PDF experiment tone without remounting the shared shell", () => {
-    expect(pdfReader).toContain("loadPdfAppearanceExperiment");
-    expect(pdfReader).toContain('appearance.tone === "original" ? "paper"');
-    expect(pdfReader).toContain("reader-theme-${selectionAssistTheme}");
+  it("reacts to the shared PDF reading theme without remounting the shared shell", () => {
+    expect(pdfReader).toContain("loadReaderSettings");
+    expect(pdfReader).toContain("readerSettings.theme");
+    expect(pdfReader).toContain("reader-theme-${readerSettings.theme}");
     expect(css).toContain(".dawn-pdf-reader-shell.reader-theme-sepia .selection-assist-surface");
     expect(css).toContain(".dawn-pdf-reader-shell.reader-theme-night .selection-assist-surface");
   });

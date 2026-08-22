@@ -14,19 +14,19 @@ describe("pdfSearchStatusLabel", () => {
   });
 });
 
-describe("PDF appearance comparison", () => {
-  it("keeps both candidate treatments available against the same three tones", () => {
+describe("PDF appearance", () => {
+  it("keeps the final menu focused on the three shared reading tones", () => {
     const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
 
-    expect(source).toContain('data-pdf-treatment={appearance.treatment}');
-    expect(source).toContain('data-pdf-appearance={appearance.tone}');
-    expect(source).toContain('(["surroundings", "page"] as const)');
-    expect(source).toContain('(["original", "warm", "night"] as const)');
-    expect(source).toContain("只改变页面周围，PDF 保持原样。");
-    expect(source).toContain("暖纸和夜读会调整屏幕显示，不修改 PDF 文件；原色可一键还原。");
+    expect(source).toContain("data-pdf-appearance={appearanceTone}");
+    expect(source).not.toContain("data-pdf-treatment");
+    expect(source).not.toContain("处理方式");
+    expect(source).toContain('(["paper", "sepia", "night"] as const)');
+    expect(source).toContain("saveReaderSettings(next)");
+    expect(source).toContain("saveCloudState({ settings: next })");
   });
 
-  it("does not couple the temporary comparison state to PDF.js rendering", () => {
+  it("applies appearance after PDF.js rendering without changing its lifecycle", () => {
     const source = readFileSync("src/components/pdf/PdfReader.tsx", "utf8");
     const css = readFileSync("src/pdf-reader.css", "utf8");
 
