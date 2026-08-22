@@ -40,7 +40,7 @@ import {
   type SelectionChatState,
 } from "./selection-assist/SelectionChat";
 import { AssistantModeToggle } from "./AssistantModeToggle";
-import { saveBookAssistantMode, type BookAssistantMode } from "../lib/bookAssistantMode";
+import { loadBookAssistantModes, saveBookAssistantMode, type BookAssistantMode } from "../lib/bookAssistantMode";
 import {
   latestReadingPosition,
   parseReadingPosition,
@@ -399,6 +399,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const referenceModeRef = useRef(Boolean(source.initialCfi));
   const activityRecorderRef = useRef<ReadingActivityRecorder | null>(null);
   const rewriteAbortRef = useRef<AbortController | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const drilldownAbortRef = useRef<AbortController | null>(null);
   const epubResizeFrameRef = useRef<number | null>(null);
   const epubViewportStabilityRef = useRef(new EpubViewportStability(2));
@@ -435,7 +436,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const selectionEndpointRef = useRef<SelectionEndpoint | null>(null);
   const selectionDirectionRef = useRef<SelectionAssistDirection>("unknown");
   const [displayTitle, setDisplayTitle] = useState(source.title);
-  const [assistantMode, setAssistantMode] = useState<BookAssistantMode>(source.assistantMode);
+  const [assistantMode, setAssistantMode] = useState<BookAssistantMode>(() => (
+    source.type === "epub" && source.id ? loadBookAssistantModes()[source.id] ?? "rewrite" : "rewrite"
+  ));
   const [selected, setSelected] = useState("");
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
   const [rewrite, setRewrite] = useState("");
@@ -450,7 +453,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [chatMessages, setChatMessages] = useState<SelectionChatMessage[]>([]);
   const [chatState, setChatState] = useState<SelectionChatState>("idle");
   const [chatError, setChatError] = useState("");
-  const [chatSources, setChatSources] = useState<SelectionChatSource[]>([]);
   const [wordSpeechAvailable, setWordSpeechAvailable] = useState(false);
   const [pendingEvidence, setPendingEvidence] = useState<ReadingEvidenceDraft | null>(null);
   const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
@@ -491,6 +493,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
 
   useEffect(() => () => {
     rewriteAbortRef.current?.abort();
+    chatAbortRef.current?.abort();
     drilldownAbortRef.current?.abort();
   }, []);
 
@@ -1132,6 +1135,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     context: RewriteContext,
     evidence: SelectionEvidenceContext,
   ) {
+    chatAbortRef.current?.abort();
     resetRewriteDrilldown();
     selectedContextRef.current = context;
     selectedEvidenceRef.current = evidence;
@@ -1145,7 +1149,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    setChatSources([]);
     if (assistantMode === "rewrite") void requestRewrite(text, context, "english");
   }
 
@@ -1178,10 +1181,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setChatDraft("");
     setChatState("loading");
     setChatError("");
-    setChatSources([]);
-    rewriteAbortRef.current?.abort();
+    chatAbortRef.current?.abort();
     const controller = new AbortController();
-    rewriteAbortRef.current = controller;
+    chatAbortRef.current = controller;
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -1201,8 +1203,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       } | null;
       if (!response.ok || !data?.answer?.trim()) throw new Error(data?.error ?? "没有收到回答。");
       const completedAnswer = data.answer.trim();
-      setChatMessages([...outgoing, { role: "assistant", content: completedAnswer }]);
-      setChatSources(data.sources ?? []);
+      setChatMessages([...outgoing, { role: "assistant", content: completedAnswer, sources: data.sources ?? [] }]);
       setChatState("idle");
       queueEvidence(evidence, {
         mode: "chat",
@@ -1227,6 +1228,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     const context = selectedContextRef.current;
     if (!selected || !context) return;
     rewriteAbortRef.current?.abort();
+    chatAbortRef.current?.abort();
     resetRewriteDrilldown();
     setRewrite("");
     setRewriteState("idle");
@@ -1235,7 +1237,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    setChatSources([]);
     if (next === "rewrite") void requestRewrite(selected, context, "english");
   }
 
@@ -2374,6 +2375,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     selectionTimerRef.current = null;
     rewriteAbortRef.current?.abort();
     rewriteAbortRef.current = null;
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
     resetRewriteDrilldown();
     window.getSelection()?.removeAllRanges();
     selectedContentsRef.current?.window?.getSelection()?.removeAllRanges();
@@ -2397,7 +2400,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    setChatSources([]);
     setPendingEvidence(null);
     setAutoSaveState("idle");
   }
@@ -2674,7 +2676,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     chatState,
     chatMessages.length,
     chatMessages.reduce((total, message) => total + message.content.length, 0),
-    chatSources.length,
+    chatMessages.reduce((total, message) => total + (message.sources?.length ?? 0), 0),
     chatDraft.length,
     selectionAnchor?.focusIndex ?? -1,
     selectionAnchor?.focusRect.left ?? -1,
@@ -2697,7 +2699,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           <button className={settings.pencilMode === "page" ? "active" : ""} aria-pressed={settings.pencilMode === "page"} onClick={() => setPencilMode("page")}>翻页</button>
           <button className={settings.pencilMode === "select" ? "active" : ""} aria-pressed={settings.pencilMode === "select"} onClick={() => setPencilMode("select")}>画词</button>
         </div>}
-        <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} />
+        {selected
+          ? <span className="assistant-mode-slot" aria-hidden="true" />
+          : <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} />}
         {source.type === "epub" && <button
           className={`toc-button ${tocOpen ? "active" : ""}`}
           onClick={() => {
@@ -2908,6 +2912,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       ariaLabel={assistanceTitle}
       className={`reader-selection-assist ${assistantMode === "ask" ? "ask-mode" : "rewrite-mode"} ${assistantMode === "ask" ? chatState : rewriteState} ${(assistantMode === "ask" ? chatState : rewriteState) === "error" ? "is-error" : ""}`}
       actions={<>
+        <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="selection-assist-mode-toggle" autoFocusTarget />
         {assistantMode === "rewrite" && assistanceMode === "english" && selectedKind === "word" && wordSpeechAvailable && <button
           type="button"
           className="reader-pronunciation-action"
@@ -2967,7 +2972,6 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         messages={chatMessages}
         state={chatState}
         error={chatError}
-        sources={chatSources}
         onRetry={() => {
           const last = chatMessages.at(-1);
           if (last?.role === "user") void sendQuestion(last.content, chatMessages.slice(0, -1));

@@ -523,10 +523,11 @@ body:has(.onboarding), body:has(.test-screen) {
 .pencil-switch button { min-width: 48px; height: 30px; padding: 0 9px; border: 0; border-radius: 5px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
 .pencil-switch button:hover { color: var(--reader-chrome-ink); }
 .pencil-switch button.active { color: #fff8f2; background: var(--reader-control-active); }
-.assistant-mode-toggle { width: 40px; height: 40px; display: inline-grid; place-items: center; padding: 0; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
-.assistant-mode-toggle > span { font: 650 11px/1 "Avenir Next", Avenir, sans-serif; }
+.assistant-mode-toggle { width: 44px; height: 40px; display: inline-grid; place-items: center; flex: none; padding: 0; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
+.assistant-mode-toggle > span { font: 650 10px/1 "Avenir Next", Avenir, sans-serif; }
 .assistant-mode-toggle:hover,
 .assistant-mode-toggle[data-mode="ask"] { border-color: var(--reader-control-active); color: var(--reader-control-active); }
+.assistant-mode-slot { width: 44px; height: 40px; flex: none; visibility: hidden; }
 .type-button { width: 40px; height: 40px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-ink); background: var(--reader-control); font: 600 13px "Iowan Old Style", serif; }
 .type-button:hover { border-color: var(--reader-control-active); color: var(--reader-control-active); }
 .toc-button { min-width: 64px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
@@ -707,25 +708,24 @@ body:has(.onboarding), body:has(.test-screen) {
 .rewrite-wait { height: 30px; margin-top: 8px; display: flex; align-items: center; gap: 10px; color: #747f7d; font: italic 12px "Iowan Old Style", serif; }
 .rewrite-wait > i { width: 18px; border-top: 1px solid var(--accent); animation: waiting-line .8s ease-in-out infinite alternate; }
 .chat-thread { margin: 0 -2px 0 0; padding-right: 7px; }
-.chat-message { position: relative; padding: 0 0 13px 17px; border-left: 1px solid var(--reader-note-line); }
-.chat-message::before { content: ""; position: absolute; top: 4px; left: -3px; width: 5px; height: 5px; border-radius: 50%; background: var(--reader-note-line); }
-.chat-message.assistant::before { background: var(--accent); }
+.chat-message { padding: 0 0 13px; }
+.chat-message + .chat-message { padding-top: 13px; border-top: 1px solid var(--reader-note-line); }
 .chat-message small { display: block; margin-bottom: 4px; color: var(--reader-chrome-muted); font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .05em; }
 .chat-message p { min-height: 0; margin: 0; color: var(--reader-note-ink); font: 400 14px/1.55 "Iowan Old Style", Baskerville, Georgia, serif; white-space: pre-wrap; }
 .chat-message.user p { color: var(--reader-chrome-muted); }
-.chat-thinking { min-height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 0 12px 17px; border-left: 1px solid var(--reader-note-line); color: var(--reader-chrome-muted); font: italic 11px "Iowan Old Style", serif; }
+.chat-thinking { min-height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 0 12px; color: var(--reader-chrome-muted); font: italic 11px "Iowan Old Style", serif; }
 .chat-thinking i { width: 16px; border-top: 1px solid var(--accent); animation: waiting-line .8s ease-in-out infinite alternate; }
-.chat-sources { display: grid; gap: 5px; margin: 2px 0 12px 17px; padding-top: 10px; border-top: 1px solid var(--reader-note-line); }
+.chat-sources { display: grid; gap: 5px; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--reader-note-line); }
 .chat-sources small { color: var(--reader-chrome-muted); font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .06em; }
-.chat-sources a { overflow: hidden; color: var(--reader-control-active); font-size: 10px; line-height: 1.35; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.chat-sources a { overflow-wrap: anywhere; color: var(--reader-control-active); font-size: 10px; line-height: 1.45; text-decoration: none; }
 .chat-sources a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .chat-error { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; color: #8d443a; font-size: 10px; }
 .chat-error button { min-height: 30px; padding: 0 9px; border: 1px solid #bd8d84; border-radius: 6px; color: #8d443a; background: transparent; font-size: 9px; }
-.chat-compose { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: end; gap: 8px; }
+.chat-compose { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .chat-compose textarea { width: 100%; min-height: 52px; max-height: 104px; resize: vertical; padding: 10px 11px; border: 1px solid var(--reader-note-line); border-radius: 8px; color: var(--reader-note-ink); background: color-mix(in srgb, var(--reader-note) 82%, white); font-size: 12px; line-height: 1.45; }
 .reader-theme-night .chat-compose textarea { background: #1d1f1b; }
 .chat-compose textarea::placeholder { color: var(--reader-chrome-muted); }
-.chat-compose button { width: 44px; height: 44px; border: 1px solid var(--reader-control-active); border-radius: 50%; color: #fff8f2; background: var(--reader-control-active); font-size: 17px; }
+.chat-compose button { min-width: 52px; height: 44px; padding: 0 12px; border: 1px solid var(--reader-control-active); border-radius: 8px; color: #fff8f2; background: var(--reader-control-active); font-size: 10px; }
 .chat-compose button:disabled { border-color: var(--reader-note-line); color: var(--reader-chrome-muted); background: transparent; opacity: .55; }
 
 @keyframes waiting-line { from { width: 7px; opacity: .45; } to { width: 22px; opacity: 1; } }
