@@ -7,7 +7,7 @@ import {
   randomCredential,
   safeReturnPath,
   sessionCookie,
-} from "./dawnAuth";
+} from "./dawnAuthPrimitives";
 
 describe("Dawn invitation and session primitives", () => {
   beforeEach(() => {
