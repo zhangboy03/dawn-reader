@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import type { ReaderProfile } from "../../lib/storage";
-import { loadReaderSettings } from "../../lib/readerSettings";
+import {
+  loadPdfAppearanceExperiment,
+  pdfAppearancePageFilter,
+  savePdfAppearanceExperiment,
+  type PdfAppearanceExperiment,
+} from "../../lib/pdfAppearanceExperiment";
 import {
   DAWN_YELLOW,
   addPdfHighlight,
@@ -228,11 +233,21 @@ export function PdfReader({ source, profile, onClose }: {
   const [highlightState, setHighlightState] = useState<{ phase: "idle" | "saving" | "saved" | "error"; message: string }>({ phase: "idle", message: "" });
   const [sidecar, setSidecar] = useState(sidecarRef.current);
   const [activeHighlight, setActiveHighlight] = useState<{ id: string; left: number; top: number } | null>(null);
+  const [appearance, setAppearance] = useState<PdfAppearanceExperiment>(loadPdfAppearanceExperiment);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
 
   useEffect(() => { sidecarRef.current = sidecar; }, [sidecar]);
   useEffect(() => { fitRef.current = fit; }, [fit]);
   useEffect(() => { scaleRef.current = scale; }, [scale]);
   useEffect(() => { setPageInput(String(pageNumber)); }, [pageNumber]);
+
+  const updateAppearance = useCallback((patch: Partial<PdfAppearanceExperiment>) => {
+    setAppearance((current) => {
+      const next = { ...current, ...patch };
+      try { savePdfAppearanceExperiment(next); } catch { /* Keep the visible experiment usable. */ }
+      return next;
+    });
+  }, []);
 
   const closeSelection = useCallback(() => {
     if (selectionCaptureTimerRef.current) clearTimeout(selectionCaptureTimerRef.current);
@@ -704,8 +719,8 @@ export function PdfReader({ source, profile, onClose }: {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !selection && (sidebarOpen || searchOpen || activeHighlight)) {
-        setSidebarOpen(false); setSearchOpen(false); setActiveHighlight(null);
+      if (event.key === "Escape" && !selection && (sidebarOpen || searchOpen || appearanceOpen || activeHighlight)) {
+        setSidebarOpen(false); setSearchOpen(false); setAppearanceOpen(false); setActiveHighlight(null);
       }
     };
     const onPointer = (event: PointerEvent) => {
@@ -718,7 +733,7 @@ export function PdfReader({ source, profile, onClose }: {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointer, true);
     };
-  }, [activeHighlight, searchOpen, selection, sidebarOpen]);
+  }, [activeHighlight, appearanceOpen, searchOpen, selection, sidebarOpen]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -924,9 +939,15 @@ export function PdfReader({ source, profile, onClose }: {
 
   const scaleLabel = fit === "custom" ? `${Math.round(scale * 100)}%` : fit === "width" ? "适合宽度" : "适合页面";
   const failurePagesLabel = useMemo(() => [...pageFailures].sort((a, b) => a - b).join("、"), [pageFailures]);
-  const selectionAssistTheme = useMemo(() => loadReaderSettings().theme, []);
+  const selectionAssistTheme = appearance.tone === "original" ? "paper" : appearance.tone === "warm" ? "sepia" : "night";
 
-  return <main data-dawn-reading-surface="pdf" className={`dawn-pdf-reader-shell reader-theme-${selectionAssistTheme}`}>
+  return <main
+    data-dawn-reading-surface="pdf"
+    data-pdf-appearance={appearance.tone}
+    data-pdf-treatment={appearance.treatment}
+    className={`dawn-pdf-reader-shell reader-theme-${selectionAssistTheme}`}
+    style={{ "--pdf-page-filter": pdfAppearancePageFilter(appearance) } as CSSProperties}
+  >
     <header className="dawn-pdf-toolbar" aria-label="PDF 工具栏">
       <div className="dawn-pdf-toolbar-group dawn-pdf-toolbar-start">
         <button type="button" className="dawn-pdf-back" onClick={() => { persistPosition(); onClose(); }} aria-label="返回书架">
@@ -958,10 +979,57 @@ export function PdfReader({ source, profile, onClose }: {
           <button type="button" className="dawn-pdf-fit" title={scaleLabel} aria-label={`当前缩放：${scaleLabel}`} onClick={() => setViewerFit(fit === "width" ? "page" : "width")}>{fit === "page" ? "适合页面" : "适合宽度"}</button>
           <button type="button" aria-label="放大" disabled={scale >= MAX_SCALE && fit === "custom"} onClick={() => zoom(1.1)}>＋</button>
         </div>
-        <button type="button" className="dawn-pdf-search-toggle" aria-pressed={searchOpen} disabled={noSelectableText} onClick={() => setSearchOpen((open) => !open)}>搜索</button>
+        <button
+          type="button"
+          className="dawn-pdf-appearance-toggle"
+          aria-label="PDF 外观对比"
+          aria-expanded={appearanceOpen}
+          onClick={() => {
+            setSearchOpen(false);
+            setAppearanceOpen((open) => !open);
+          }}
+        >Aa</button>
+        <button type="button" className="dawn-pdf-search-toggle" aria-pressed={searchOpen} disabled={noSelectableText} onClick={() => {
+          setAppearanceOpen(false);
+          setSearchOpen((open) => !open);
+        }}>搜索</button>
         <button type="button" className="dawn-pdf-download" onClick={downloadOriginal}>下载原文件</button>
       </div>
     </header>
+
+    {appearanceOpen && <div className="dawn-pdf-appearance-layer">
+      <button
+        type="button"
+        className="dawn-pdf-appearance-backdrop"
+        aria-label="关闭 PDF 外观对比"
+        onClick={() => setAppearanceOpen(false)}
+      />
+      <section className="dawn-pdf-appearance-panel" role="dialog" aria-modal="true" aria-label="PDF 外观对比">
+        <div className="dawn-pdf-appearance-row treatment" role="group" aria-label="处理方式">
+          <small>处理</small>
+          {(["surroundings", "page"] as const).map((treatment) => <button
+            type="button"
+            key={treatment}
+            aria-pressed={appearance.treatment === treatment}
+            onClick={() => updateAppearance({ treatment })}
+          >{treatment === "surroundings" ? "环境" : "页面"}</button>)}
+        </div>
+        <div className="dawn-pdf-appearance-row tones" role="group" aria-label="显示色调">
+          <small>色调</small>
+          {(["original", "warm", "night"] as const).map((tone) => <button
+            type="button"
+            className={`dawn-pdf-tone-dot tone-${tone}`}
+            aria-label={{ original: "原色", warm: "暖纸", night: "夜读" }[tone]}
+            aria-pressed={appearance.tone === tone}
+            key={tone}
+            onClick={() => updateAppearance({ tone })}
+          />)}
+        </div>
+        <p>{appearance.treatment === "surroundings"
+          ? "只改变页面周围，PDF 保持原样。"
+          : "暖纸和夜读会调整屏幕显示，不修改 PDF 文件；原色可一键还原。"}</p>
+      </section>
+    </div>}
 
     {searchOpen && <section className="dawn-pdf-searchbar" role="search">
       <input
