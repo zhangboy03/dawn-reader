@@ -78,6 +78,11 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 const LARGE_FILE_BYTES = 100 * 1024 * 1024;
 const SEARCH_DEBOUNCE_MS = 250;
+const PDF_APPEARANCE_OPTIONS = [
+  { theme: "paper", label: "原色" },
+  { theme: "sepia", label: "暖纸" },
+  { theme: "night", label: "夜读" },
+] as const;
 
 export function pdfSearchStatusLabel(query: string, phase: "idle" | "searching" | "done", current: number, total: number) {
   if (!query.trim()) return "";
@@ -987,12 +992,15 @@ export function PdfReader({ source, profile, onClose }: {
           type="button"
           className="dawn-pdf-appearance-toggle"
           aria-label="PDF 阅读外观"
+          aria-controls="pdf-appearance-panel"
           aria-expanded={appearanceOpen}
           onClick={() => {
             setSearchOpen(false);
             setAppearanceOpen((open) => !open);
           }}
-        >Aa</button>
+        >
+          <span className="dawn-pdf-appearance-icon" aria-hidden="true" />
+        </button>
         <button type="button" className="dawn-pdf-search-toggle" aria-pressed={searchOpen} disabled={noSelectableText} onClick={() => {
           setAppearanceOpen(false);
           setSearchOpen((open) => !open);
@@ -1009,22 +1017,25 @@ export function PdfReader({ source, profile, onClose }: {
         onClick={() => setAppearanceOpen(false)}
       />
       <section
+        id="pdf-appearance-panel"
         className="dawn-pdf-appearance-panel"
         role="dialog"
         aria-modal="true"
         aria-label="PDF 阅读外观"
         aria-description="暖纸和夜读只改变屏幕显示，不会修改 PDF 文件。"
       >
-        <div className="dawn-pdf-appearance-row tones" role="group" aria-label="纸色">
-          <small>纸色</small>
-          {(["paper", "sepia", "night"] as const).map((theme) => <button
+        <small className="dawn-pdf-appearance-heading">整页外观</small>
+        <div className="dawn-pdf-appearance-row" role="group" aria-label="整页外观">
+          {PDF_APPEARANCE_OPTIONS.map(({ theme, label }) => <button
             type="button"
-            className={`dawn-pdf-tone-dot tone-${pdfAppearanceTone(theme)}`}
-            aria-label={{ paper: "原色", sepia: "暖纸", night: "夜读" }[theme]}
+            className="dawn-pdf-appearance-option"
             aria-pressed={readerSettings.theme === theme}
             key={theme}
             onClick={() => updatePdfTheme(theme)}
-          />)}
+          >
+            <span className={`dawn-pdf-tone-dot tone-${pdfAppearanceTone(theme)}`} aria-hidden="true" />
+            <span>{label}</span>
+          </button>)}
         </div>
       </section>
     </div>}
