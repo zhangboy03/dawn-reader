@@ -5,6 +5,7 @@ declare module "cloudflare:workers" {
 interface DawnReaderRuntimeEnv extends Record<string, unknown> {
   DB?: D1Database;
   BOOKS?: R2Bucket;
+  DAWN_ENVIRONMENT?: "beta" | "public";
 }
 
 declare var __DAWN_READER_ENV__: DawnReaderRuntimeEnv | undefined;

@@ -1,3 +1,5 @@
+import { readerLocalStorage } from "./clientAccountContext";
+
 export type ReaderTheme = "paper" | "sepia" | "night";
 export type PencilMode = "page" | "select";
 export type ReaderTextAlign = "justify" | "start";
@@ -55,12 +57,12 @@ export function normalizeReaderSettings(value: unknown): ReaderSettings {
 
 export function loadReaderSettings(): ReaderSettings {
   try {
-    return normalizeReaderSettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}"));
+    return normalizeReaderSettings(JSON.parse(readerLocalStorage().getItem(SETTINGS_KEY) ?? "{}"));
   } catch {
     return DEFAULT_READER_SETTINGS;
   }
 }
 
 export function saveReaderSettings(settings: ReaderSettings | unknown) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizeReaderSettings(settings)));
+  readerLocalStorage().setItem(SETTINGS_KEY, JSON.stringify(normalizeReaderSettings(settings)));
 }

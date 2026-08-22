@@ -1,3 +1,5 @@
+import { readerLocalStorage } from "./clientAccountContext";
+
 export type EpubPageNumber = {
   current: number;
   total: number;
@@ -26,14 +28,14 @@ export function parseCachedEpubLocations(raw: string | null) {
   }
 }
 
-export function loadCachedEpubLocations(bookId: string, storage: Pick<Storage, "getItem"> = localStorage) {
+export function loadCachedEpubLocations(bookId: string, storage: Pick<Storage, "getItem"> = readerLocalStorage()) {
   return parseCachedEpubLocations(storage.getItem(epubLocationCacheKey(bookId)));
 }
 
 export function saveCachedEpubLocations(
   bookId: string,
   locations: string[],
-  storage: Pick<Storage, "setItem"> = localStorage,
+  storage: Pick<Storage, "setItem"> = readerLocalStorage(),
 ) {
   if (locations.length < 2) return false;
   try {
@@ -46,7 +48,7 @@ export function saveCachedEpubLocations(
 
 export function deleteCachedEpubLocations(
   bookId: string,
-  storage: Pick<Storage, "removeItem"> = localStorage,
+  storage: Pick<Storage, "removeItem"> = readerLocalStorage(),
 ) {
   storage.removeItem(epubLocationCacheKey(bookId));
 }

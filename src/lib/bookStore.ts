@@ -1,7 +1,8 @@
 import { hasPdfSignature, publicationFormatFromFile } from "./publication";
 import type { PdfPresentation } from "./pdfPresentation";
+import { accountDatabaseName } from "./clientAccountContext";
 
-const DB_NAME = "dawn-reader-library";
+const LEGACY_DB_NAME = "dawn-reader-library";
 const STORE_NAME = "books";
 const RECENCY_STORE_NAME = "book-recency";
 const DB_VERSION = 2;
@@ -40,9 +41,9 @@ export async function publicationContentHash(blob: Blob) {
 
 export const epubContentHash = publicationContentHash;
 
-function openLibrary() {
+function openLibraryByName(databaseName: string) {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(databaseName, DB_VERSION);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME, { keyPath: "id" });
@@ -54,6 +55,15 @@ function openLibrary() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+function openLibrary() {
+  return openLibraryByName(accountDatabaseName(LEGACY_DB_NAME, 3));
+}
+
+async function databaseExists(databaseName: string) {
+  if (typeof indexedDB.databases !== "function") return false;
+  return (await indexedDB.databases()).some((database) => database.name === databaseName);
 }
 
 function requestResult<T>(request: IDBRequest<T>) {
@@ -217,6 +227,42 @@ export async function listStoredBooks() {
     ...record,
     lastOpenedAt: openedById.get(record.id) ?? record.lastOpenedAt,
   })));
+}
+
+async function legacyLibraryRecords() {
+  if (!await databaseExists(LEGACY_DB_NAME)) return { books: [] as StoredBook[], recency: [] as StoredBookRecency[] };
+  const database = await openLibraryByName(LEGACY_DB_NAME);
+  if (!database.objectStoreNames.contains(STORE_NAME)) {
+    database.close();
+    return { books: [] as StoredBook[], recency: [] as StoredBookRecency[] };
+  }
+  const stores = database.objectStoreNames.contains(RECENCY_STORE_NAME)
+    ? [STORE_NAME, RECENCY_STORE_NAME]
+    : [STORE_NAME];
+  const transaction = database.transaction(stores, "readonly");
+  const books = await requestResult(transaction.objectStore(STORE_NAME).getAll()) as StoredBook[];
+  const recency = database.objectStoreNames.contains(RECENCY_STORE_NAME)
+    ? await requestResult(transaction.objectStore(RECENCY_STORE_NAME).getAll()) as StoredBookRecency[]
+    : [];
+  database.close();
+  return { books, recency };
+}
+
+export async function legacyStoredBookCount() {
+  return (await legacyLibraryRecords()).books.length;
+}
+
+export async function claimLegacyStoredBooks() {
+  const legacy = await legacyLibraryRecords();
+  if (!legacy.books.length && !legacy.recency.length) return 0;
+  const database = await openLibrary();
+  const transaction = database.transaction([STORE_NAME, RECENCY_STORE_NAME], "readwrite");
+  const finished = transactionFinished(transaction);
+  for (const book of legacy.books) transaction.objectStore(STORE_NAME).put(book);
+  for (const recency of legacy.recency) transaction.objectStore(RECENCY_STORE_NAME).put(recency);
+  await finished;
+  database.close();
+  return legacy.books.length;
 }
 
 export async function markStoredBookOpened(bookId: string, openedAt = new Date().toISOString()) {

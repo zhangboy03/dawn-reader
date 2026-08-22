@@ -8,9 +8,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const { id } = await params;
-  const book = await bookForUser(user.userId, id);
+  const book = await bookForUser(user.accountId, id);
   if (!book) return Response.json({ error: "Book not found." }, { status: 404 });
-  const object = await getBooksBucket().get(bookObjectKey(user.userId, id));
+  const object = await getBooksBucket().get(bookObjectKey(user.accountId, id));
   if (!object) return Response.json({ error: "Book file not found." }, { status: 404 });
   return new Response(object.body, {
     headers: {

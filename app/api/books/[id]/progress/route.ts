@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const { id } = await params;
-  if (!await bookForUser(user.userId, id)) {
+  if (!await bookForUser(user.accountId, id)) {
     return Response.json({ error: "Book not found." }, { status: 404 });
   }
   const [position] = await getDb().select({
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     percentage: readingProgress.percentage,
     updatedAt: readingProgress.updatedAt,
   }).from(readingProgress).where(and(
-    eq(readingProgress.userId, user.userId),
+    eq(readingProgress.userId, user.accountId),
     eq(readingProgress.bookId, id),
   )).limit(1);
   return Response.json({ position: position ?? null });
@@ -29,7 +29,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const { id } = await params;
-  if (!await bookForUser(user.userId, id)) {
+  if (!await bookForUser(user.accountId, id)) {
     return Response.json({ error: "Book not found." }, { status: 404 });
   }
   const input = await request.json() as {
@@ -50,14 +50,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     : null;
   const percentage = Math.round(input.percentage);
   const [existing] = await getDb().select().from(readingProgress).where(and(
-    eq(readingProgress.userId, user.userId),
+    eq(readingProgress.userId, user.accountId),
     eq(readingProgress.bookId, id),
   )).limit(1);
   if (existing && existing.updatedAt > requestedAt) {
     return Response.json({ position: existing, applied: false });
   }
   await getDb().insert(readingProgress).values({
-    userId: user.userId,
+    userId: user.accountId,
     bookId: id,
     cfi,
     nativeLocator,
@@ -69,9 +69,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   });
   // DELETE may race with a last progress write from an already-open reader.
   // Re-check ownership and remove the late write instead of reviving state.
-  if (!await bookForUser(user.userId, id)) {
+  if (!await bookForUser(user.accountId, id)) {
     await getDb().delete(readingProgress).where(and(
-      eq(readingProgress.userId, user.userId),
+      eq(readingProgress.userId, user.accountId),
       eq(readingProgress.bookId, id),
     ));
     return Response.json({ error: "Book was deleted while progress was syncing." }, { status: 409 });

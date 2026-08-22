@@ -20,9 +20,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const db = getDb();
   const deletedAt = new Date().toISOString();
   await deleteBookResources({
-    deleteObject: () => getBooksBucket().delete(bookObjectKey(user.userId, id)),
+    deleteObject: () => getBooksBucket().delete(bookObjectKey(user.accountId, id)),
     rememberDeletion: async () => { await db.insert(readerBookDeletions).values({
-      userId: user.userId,
+      userId: user.accountId,
       bookId: id,
       deletedAt,
     }).onConflictDoUpdate({
@@ -30,11 +30,11 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
       set: { deletedAt },
     }); },
     deleteRecord: async () => { await db.delete(readerBooks).where(and(
-      eq(readerBooks.userId, user.userId),
+      eq(readerBooks.userId, user.accountId),
       eq(readerBooks.id, id),
     )); },
     deleteProgress: async () => { await db.delete(readingProgress).where(and(
-      eq(readingProgress.userId, user.userId),
+      eq(readingProgress.userId, user.accountId),
       eq(readingProgress.bookId, id),
     )); },
   });

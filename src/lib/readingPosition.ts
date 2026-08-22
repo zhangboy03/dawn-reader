@@ -1,3 +1,5 @@
+import { readerLocalStorage } from "./clientAccountContext";
+
 export type ReadingPosition = {
   cfi: string | null;
   percentage: number;
@@ -61,6 +63,6 @@ export function parseReadingPosition(raw: string | null): ReadingPosition | null
 
 export function saveReadingPosition(key: string, position: ReadingPosition) {
   const next = { ...position, updatedAt: position.updatedAt ?? new Date().toISOString() };
-  localStorage.setItem(key, JSON.stringify(next));
+  readerLocalStorage().setItem(key, JSON.stringify(next));
   return next;
 }

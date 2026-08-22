@@ -4,6 +4,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "../db";
 import { readerDevices } from "../db/schema";
 import { bearerDeviceToken, hashDeviceToken } from "../src/server/deviceAuth";
+import {
+  resolveDeviceReaderAccount,
+  resolveReaderAccount,
+  type ResolvedReaderAccount,
+} from "../src/server/readerAccount";
 
 export type ChatGPTUser = {
   userId: string;
@@ -43,17 +48,47 @@ export async function requireChatGPTUser(returnTo = "/") {
 
 export async function isAuthorizedReaderRequest() {
   if (process.env.NODE_ENV === "development") return true;
-  return Boolean(await getChatGPTUser());
+  const user = await getChatGPTUser();
+  return Boolean(user && await resolveReaderAccount({
+    issuer: "openai_sites",
+    subject: user.userId,
+    email: user.email,
+  }));
 }
 
 export type ReaderIdentity =
-  | { userId: string; kind: "chatgpt" }
-  | { userId: string; kind: "device"; deviceId: string };
+  | (ResolvedReaderAccount & { kind: "chatgpt" })
+  | (ResolvedReaderAccount & { kind: "device"; deviceId: string });
+
+export async function requireReaderAccount(returnTo = "/reader") {
+  const user = await requireChatGPTUser(returnTo);
+  const account = await resolveReaderAccount({
+    issuer: "openai_sites",
+    subject: user.userId,
+    email: user.email,
+  });
+  if (!account) throw new Error("Reader account is unavailable.");
+  return account;
+}
 
 export async function getReaderIdentity(request: Request): Promise<ReaderIdentity | null> {
   const chatGPTUser = await getChatGPTUser();
-  if (chatGPTUser) return { userId: chatGPTUser.userId, kind: "chatgpt" };
-  if (process.env.NODE_ENV === "development") return { userId: "local-development", kind: "chatgpt" };
+  if (chatGPTUser) {
+    const account = await resolveReaderAccount({
+      issuer: "openai_sites",
+      subject: chatGPTUser.userId,
+      email: chatGPTUser.email,
+    });
+    return account ? { ...account, kind: "chatgpt" } : null;
+  }
+  if (process.env.NODE_ENV === "development") {
+    const account = await resolveReaderAccount({
+      issuer: "openai_sites",
+      subject: "local-development",
+      email: "local@dawn-reader.test",
+    });
+    return account ? { ...account, kind: "chatgpt" } : null;
+  }
 
   const token = bearerDeviceToken(request);
   if (!token) return null;
@@ -68,7 +103,8 @@ export async function getReaderIdentity(request: Request): Promise<ReaderIdentit
     .set({ lastUsedAt: new Date().toISOString() })
     .where(eq(readerDevices.id, device.id))
     .catch(() => undefined);
-  return { userId: device.userId, kind: "device", deviceId: device.id };
+  const account = await resolveDeviceReaderAccount(device.userId);
+  return account ? { ...account, kind: "device", deviceId: device.id } : null;
 }
 
 function safeDecodeURIComponent(value: string): string | null {

@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const user = await getReaderIdentity(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const [state] = await getDb().select().from(readerState)
-    .where(eq(readerState.userId, user.userId)).limit(1);
+    .where(eq(readerState.userId, user.accountId)).limit(1);
   return Response.json({
     profile: parseJson(state?.profileJson ?? null),
     settings: parseJson(state?.settingsJson ?? null),
@@ -28,7 +28,7 @@ export async function PUT(request: Request) {
   const input = await request.json() as { profile?: unknown; settings?: unknown };
   const now = new Date().toISOString();
   const [existing] = await getDb().select().from(readerState)
-    .where(eq(readerState.userId, user.userId)).limit(1);
+    .where(eq(readerState.userId, user.accountId)).limit(1);
   const profileJson = input.profile === undefined
     ? existing?.profileJson ?? null
     : JSON.stringify(input.profile);
@@ -42,7 +42,7 @@ export async function PUT(request: Request) {
     );
 
   await getDb().insert(readerState).values({
-    userId: user.userId,
+    userId: user.accountId,
     profileJson,
     settingsJson,
     updatedAt: now,

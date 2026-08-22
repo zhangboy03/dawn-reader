@@ -15,7 +15,7 @@ export async function GET() {
     createdAt: readerDevices.createdAt,
     lastUsedAt: readerDevices.lastUsedAt,
   }).from(readerDevices).where(and(
-    eq(readerDevices.userId, user.userId),
+    eq(readerDevices.userId, user.accountId),
     isNull(readerDevices.revokedAt),
   )).orderBy(desc(readerDevices.createdAt));
   return Response.json({ devices });
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const id = crypto.randomUUID();
   await getDb().insert(readerDevices).values({
     id,
-    userId: user.userId,
+    userId: user.accountId,
     tokenHash: await hashDeviceToken(token),
     label,
     createdAt: now,

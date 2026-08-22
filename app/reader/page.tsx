@@ -1,9 +1,9 @@
 import App from "../../src/App";
-import { requireChatGPTUser } from "../chatgpt-auth";
+import { requireReaderAccount } from "../chatgpt-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReaderPage() {
-  await requireChatGPTUser("/reader");
-  return <App />;
+  const account = await requireReaderAccount("/reader");
+  return <App accountContext={account} />;
 }
