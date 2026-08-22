@@ -3,6 +3,7 @@ import {
   EpubAnchorNotVisibleError,
   EpubLayoutSignatureTracker,
   EpubNavigator,
+  EpubPresentationNotVisibleError,
   EpubViewportStability,
   epubAnchorClientRects,
   epubContentRectIsVisible,
@@ -30,6 +31,7 @@ type Config = {
   displayGate?: Deferred<void>;
   prepareGate?: Deferred<void>;
   visible?: boolean;
+  presentable?: boolean;
   visibleSequence?: boolean[];
   visibilityGates?: Array<Deferred<void> | undefined>;
   focused?: boolean;
@@ -97,6 +99,10 @@ class FakeRenderer implements EpubRenderer {
     const sequenced = this.config.visibleSequence?.shift();
     if (sequenced !== undefined) return sequenced;
     return this.config.visible ?? pageFromTarget(cfi) === this.page;
+  }
+
+  async isPresentable() {
+    return this.config.presentable ?? true;
   }
 
   hasFocus() {
@@ -470,7 +476,6 @@ describe("EpubNavigator atomic rendering", () => {
       "next",
       "prev",
       "snapshot",
-      "visible:epubcfi(/6/28)",
     ]);
     expect(result.commits).toHaveLength(2);
     expect(result.commits[1]).toMatchObject({
@@ -504,7 +509,6 @@ describe("EpubNavigator atomic rendering", () => {
       "next",
       "next",
       "snapshot",
-      "visible:epubcfi(/6/29)",
     ]);
     expect(result.commits.at(-1)).toMatchObject({
       cause: "page-turn",
@@ -529,10 +533,10 @@ describe("EpubNavigator atomic rendering", () => {
     await result.navigator.whenIdle();
 
     expect(result.renderers[1].renderer.operations.slice(-4)).toEqual([
+      "snapshot",
       "visible:epubcfi(/6/27)",
       "next",
       "snapshot",
-      "visible:epubcfi(/6/28)",
     ]);
     expect(result.commits.at(-1)).toMatchObject({
       cause: "page-turn",
@@ -570,7 +574,6 @@ describe("EpubNavigator atomic rendering", () => {
       "next",
       "prev",
       "snapshot",
-      "visible:epubcfi(/6/28)",
     ]);
     expect(result.commits.at(-1)).toMatchObject({
       cause: "page-turn",
@@ -635,7 +638,6 @@ describe("EpubNavigator atomic rendering", () => {
       "visible:epubcfi(/6/29)",
       "prev",
       "snapshot",
-      "visible:epubcfi(/6/28)",
     ]);
     expect(result.commits.at(-1)).toMatchObject({
       cause: "page-turn",
@@ -885,7 +887,6 @@ describe("EpubNavigator atomic rendering", () => {
     expect(result.renderers[1].renderer.operations).toEqual([
       "display:start",
       "snapshot",
-      "visible:epubcfi(/6/0)",
     ]);
     expect(result.commits[0]).toMatchObject({
       cause: "initial",
@@ -911,13 +912,65 @@ describe("EpubNavigator atomic rendering", () => {
     expect(result.renderers[1].renderer.operations).toEqual([
       "display:start",
       "snapshot",
-      "visible:epubcfi(/6/0)",
     ]);
     expect(result.commits[0]).toMatchObject({
       cause: "initial",
       anchor: "epubcfi(/6/0)",
       locator: { cfi: "epubcfi(/6/0)" },
     });
+  });
+
+  it("commits an image-only publication start through presentation without claiming an exact restore", async () => {
+    const result = harness();
+    result.navigator.initialize({
+      config: { name: "image-cover", visible: false, presentable: true },
+      anchor: null,
+      validateAnchor: false,
+      allowStartFallback: true,
+    });
+    await result.navigator.whenIdle();
+
+    expect(result.commits).toHaveLength(1);
+    expect(result.commits[0]).toMatchObject({
+      cause: "initial",
+      anchor: "epubcfi(/6/0)",
+      exactAnchorValidated: false,
+    });
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("uses one fresh publication-start renderer when a saved CFI fails the late commit check", async () => {
+    const result = harness();
+    result.navigator.initialize({
+      config: { name: "late-start-fallback", visibleSequence: [true, false], presentable: true },
+      anchor: "epubcfi(/6/27)",
+      validateAnchor: true,
+      allowStartFallback: true,
+    });
+    await result.navigator.whenIdle();
+
+    expect(result.renderers).toHaveLength(2);
+    expect(result.renderers[0].renderer.destroyed).toBe(true);
+    expect(result.renderers[1].renderer.operations[0]).toBe("display:start");
+    expect(result.commits[0]).toMatchObject({
+      cause: "initial",
+      anchor: "epubcfi(/6/0)",
+      exactAnchorValidated: false,
+    });
+  });
+
+  it("reports a typed presentation failure instead of committing a blank publication start", async () => {
+    const result = harness();
+    result.navigator.initialize({
+      config: { name: "blank-start", presentable: false },
+      anchor: null,
+      validateAnchor: false,
+      allowStartFallback: true,
+    });
+    await result.navigator.whenIdle();
+
+    expect(result.commits).toHaveLength(0);
+    expect((result.errors[0] as { error: unknown }).error).toBeInstanceOf(EpubPresentationNotVisibleError);
   });
 
   it("keeps the old frame when an exact destination CFI is not visible", async () => {
