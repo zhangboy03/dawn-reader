@@ -252,7 +252,6 @@ export function PdfReader({ source, profile, onClose }: {
   const [chatMessages, setChatMessages] = useState<SelectionChatMessage[]>([]);
   const [chatState, setChatState] = useState<SelectionChatState>("idle");
   const [chatError, setChatError] = useState("");
-  const [chatSources, setChatSources] = useState<SelectionChatSource[]>([]);
   const [highlightState, setHighlightState] = useState<{ phase: "idle" | "saving" | "saved" | "error"; message: string }>({ phase: "idle", message: "" });
   const [sidecar, setSidecar] = useState(sidecarRef.current);
   const [activeHighlight, setActiveHighlight] = useState<{ id: string; left: number; top: number } | null>(null);
@@ -314,7 +313,6 @@ export function PdfReader({ source, profile, onClose }: {
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    setChatSources([]);
     setHighlightState({ phase: "idle", message: "" });
     window.getSelection()?.removeAllRanges();
     scrollRef.current?.focus({ preventScroll: true });
@@ -724,7 +722,6 @@ export function PdfReader({ source, profile, onClose }: {
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    setChatSources([]);
     if (assistantMode === "rewrite") void requestEnglish(snapshot, version);
     else setAssistance(initialSelectionAssistanceState);
   }, [assistantMode, closeSelection, requestEnglish]);
@@ -886,7 +883,6 @@ export function PdfReader({ source, profile, onClose }: {
     setChatDraft("");
     setChatState("loading");
     setChatError("");
-    setChatSources([]);
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -906,8 +902,7 @@ export function PdfReader({ source, profile, onClose }: {
       } | null;
       if (!response.ok || !data?.answer?.trim()) throw new Error(data?.error ?? "没有收到回答。");
       if (selectionVersionRef.current !== version) return;
-      setChatMessages([...outgoing, { role: "assistant", content: data.answer.trim() }]);
-      setChatSources(data.sources ?? []);
+      setChatMessages([...outgoing, { role: "assistant", content: data.answer.trim(), sources: data.sources ?? [] }]);
       setChatState("idle");
     } catch (error) {
       if (controller.signal.aborted || selectionVersionRef.current !== version) return;
@@ -929,7 +924,6 @@ export function PdfReader({ source, profile, onClose }: {
     setChatMessages([]);
     setChatState("idle");
     setChatError("");
-    setChatSources([]);
     setAssistance(initialSelectionAssistanceState);
     if (next === "rewrite" && selection) void requestEnglish(selection, selectionVersionRef.current);
   }, [assistantMode, requestEnglish, selection, source.id]);
@@ -1107,7 +1101,9 @@ export function PdfReader({ source, profile, onClose }: {
           <button type="button" className="dawn-pdf-fit" title={scaleLabel} aria-label={`当前缩放：${scaleLabel}`} onClick={() => setViewerFit(fit === "width" ? "page" : "width")}>{fit === "page" ? "适合页面" : "适合宽度"}</button>
           <button type="button" aria-label="放大" disabled={scale >= MAX_SCALE && fit === "custom"} onClick={() => zoom(1.1)}>＋</button>
         </div>
-        <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="dawn-pdf-assistant-toggle" />
+        {selection
+          ? <span className="dawn-pdf-assistant-slot" aria-hidden="true" />
+          : <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="dawn-pdf-assistant-toggle" />}
         <button
           ref={appearanceToggleRef}
           type="button"
@@ -1235,12 +1231,12 @@ export function PdfReader({ source, profile, onClose }: {
         messages: chatMessages,
         state: chatState,
         error: chatError,
-        sources: chatSources,
       }}
       highlightState={highlightState}
       onHighlight={addHighlight}
       onChinese={() => void requestChinese()}
       onRetryEnglish={() => void requestEnglish(selection, selectionVersionRef.current)}
+      onModeToggle={toggleAssistantMode}
       onChatDraftChange={setChatDraft}
       onChatSubmit={() => void sendQuestion(chatDraft)}
       onChatRetry={() => {

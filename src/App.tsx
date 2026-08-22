@@ -12,7 +12,6 @@ import { listStoredBooks, storedBookFile } from "./lib/bookStore";
 import { loadCloudState, saveCloudState } from "./lib/cloudSync";
 import { type ReadingEvidenceRecord } from "./lib/readingEvidence";
 import { saveReaderSettings } from "./lib/readerSettings";
-import { loadBookAssistantModes } from "./lib/bookAssistantMode";
 import { parseReadingPosition } from "./lib/readingPosition";
 import { loadProfile, saveProfile, type ReaderProfile } from "./lib/storage";
 import {
@@ -123,7 +122,6 @@ export default function App({ accountContext }: { accountContext: ClientAccountC
       id: record.bookId,
       title: book.title,
       file: storedBookFile(book),
-      assistantMode: loadBookAssistantModes()[record.bookId] ?? "rewrite",
       initialCfi: record.anchor.cfi,
       referenceReturnCfi: returnPosition?.cfi ?? null,
       returnToHistory: true,

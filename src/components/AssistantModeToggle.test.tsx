@@ -14,9 +14,9 @@ describe("AssistantModeToggle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "划线后：英文改写。点击切换：AI 提问" }));
     expect(onToggle).toHaveBeenCalledOnce();
-    expect(screen.getByText("英")).toBeInTheDocument();
+    expect(screen.getByText("改写")).toBeInTheDocument();
 
     rerender(<AssistantModeToggle mode="ask" onToggle={onToggle} />);
-    expect(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" })).toHaveTextContent("问");
+    expect(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" })).toHaveTextContent("提问");
   });
 });

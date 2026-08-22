@@ -1,12 +1,12 @@
 import type { SelectionAssistAnchor, SelectionAssistVisibleBounds } from "../../lib/selectionAssistAnchor";
 import { canRequestChinese, type SelectionAssistanceState } from "../../lib/selectionAssistance";
 import type { BookAssistantMode } from "../../lib/bookAssistantMode";
+import { AssistantModeToggle } from "../AssistantModeToggle";
 import { SelectionAssistSurface } from "../selection-assist/SelectionAssistSurface";
 import {
   SelectionChatBody,
   SelectionChatComposer,
   type SelectionChatMessage,
-  type SelectionChatSource,
   type SelectionChatState,
 } from "../selection-assist/SelectionChat";
 
@@ -26,6 +26,7 @@ export function PdfSelectionCard({
   onHighlight,
   onChinese,
   onRetryEnglish,
+  onModeToggle,
   onChatDraftChange,
   onChatSubmit,
   onChatRetry,
@@ -46,12 +47,12 @@ export function PdfSelectionCard({
     messages: SelectionChatMessage[];
     state: SelectionChatState;
     error: string;
-    sources: SelectionChatSource[];
   };
   highlightState: { phase: "idle" | "saving" | "saved" | "error"; message: string };
   onHighlight: () => void;
   onChinese: () => void;
   onRetryEnglish: () => void;
+  onModeToggle: () => void;
   onChatDraftChange: (value: string) => void;
   onChatSubmit: () => void;
   onChatRetry: () => void;
@@ -77,7 +78,7 @@ export function PdfSelectionCard({
     chat.state,
     chat.messages.length,
     chat.messages.reduce((total, message) => total + message.content.length, 0),
-    chat.sources.length,
+    chat.messages.reduce((total, message) => total + (message.sources?.length ?? 0), 0),
     chat.draft.length,
   ].join(":");
 
@@ -86,6 +87,7 @@ export function PdfSelectionCard({
     ariaLabel={mode === "ask" ? "AI 提问" : "所选文字辅助"}
     className={`pdf-selection-assist ${mode === "ask" ? "ask-mode" : "rewrite-mode"} ${error ? "is-error" : ""}`}
     actions={<>
+      <AssistantModeToggle mode={mode} onToggle={onModeToggle} className="selection-assist-mode-toggle" autoFocusTarget />
       <button
         type="button"
         className={`pdf-highlight-action ${highlightState.phase === "saved" ? "is-saved" : ""}`}
@@ -144,7 +146,6 @@ export function PdfSelectionCard({
         messages={chat.messages}
         state={chat.state}
         error={chat.error}
-        sources={chat.sources}
         onRetry={onChatRetry}
       />
       {highlightState.message && <p className={`pdf-selection-feedback ${highlightState.phase}`}>{highlightState.message}</p>}

@@ -15,7 +15,7 @@ const anchor: SelectionAssistAnchor = {
   direction: "forward",
   strategy: "direction",
 };
-const emptyChat = { draft: "", messages: [], state: "idle" as const, error: "", sources: [] };
+const emptyChat = { draft: "", messages: [], state: "idle" as const, error: "" };
 
 class Observer {
   observe() {}
@@ -49,6 +49,7 @@ describe("PDF selection card", () => {
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
+      onModeToggle={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -67,6 +68,7 @@ describe("PDF selection card", () => {
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
+      onModeToggle={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -88,6 +90,7 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
+      onModeToggle={() => undefined}
       onChatDraftChange={() => undefined}
       onChatSubmit={() => undefined}
       onChatRetry={() => undefined}
@@ -101,6 +104,7 @@ describe("PDF selection card", () => {
 
   it("keeps question mode quiet until the reader types and never repeats the selected passage", () => {
     const onSubmit = vi.fn();
+    const onModeToggle = vi.fn();
     const { rerender } = render(<PdfSelectionCard
       anchor={anchor}
       mode="ask"
@@ -110,6 +114,7 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
+      onModeToggle={onModeToggle}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
@@ -120,7 +125,9 @@ describe("PDF selection card", () => {
     expect(screen.getByPlaceholderText("输入你想问的问题…")).toBeInTheDocument();
     expect(screen.queryByText("选中")).not.toBeInTheDocument();
     expect(screen.queryByText("局部上下文")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "发送问题" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" }));
+    expect(onModeToggle).toHaveBeenCalledOnce();
 
     rerender(<PdfSelectionCard
       anchor={anchor}
@@ -131,12 +138,38 @@ describe("PDF selection card", () => {
       onHighlight={() => undefined}
       onChinese={() => undefined}
       onRetryEnglish={() => undefined}
+      onModeToggle={onModeToggle}
       onChatDraftChange={() => undefined}
       onChatSubmit={onSubmit}
       onChatRetry={() => undefined}
       onClose={() => undefined}
     />);
-    fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(onSubmit).toHaveBeenCalledOnce();
+
+    rerender(<PdfSelectionCard
+      anchor={anchor}
+      mode="ask"
+      state={{ english: { phase: "idle", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
+      chat={{
+        ...emptyChat,
+        messages: [
+          { role: "user", content: "这和上一段有什么关系？" },
+          { role: "assistant", content: "这里延续了上一段的区分。", sources: [{ title: "Primary source", url: "https://example.com/source" }] },
+        ],
+      }}
+      highlightState={{ phase: "idle", message: "" }}
+      onHighlight={() => undefined}
+      onChinese={() => undefined}
+      onRetryEnglish={() => undefined}
+      onModeToggle={onModeToggle}
+      onChatDraftChange={() => undefined}
+      onChatSubmit={onSubmit}
+      onChatRetry={() => undefined}
+      onClose={() => undefined}
+    />);
+    expect(screen.getByText("问题")).toBeInTheDocument();
+    expect(screen.getByText("回答")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "来源" })).toContainElement(screen.getByRole("link", { name: "[1] Primary source" }));
   });
 });

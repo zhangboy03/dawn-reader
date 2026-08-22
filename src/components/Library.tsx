@@ -25,17 +25,12 @@ import {
 import { deletePdfHighlightSidecar } from "../lib/pdfHighlights";
 import { deletePdfLocator } from "../lib/pdfLocator";
 import { isCloudEligiblePublication, publicationFormat, shelfFormatLabel, type PdfBookSource } from "../lib/publication";
-import {
-  loadBookAssistantModes,
-  type BookAssistantMode,
-} from "../lib/bookAssistantMode";
 import { DeviceSync } from "./DeviceSync";
 
 export type BookSource = (
   { type: "text"; title: string; text: string }
   | { type: "epub"; id?: string; title: string; file: File }
 ) & {
-  assistantMode: BookAssistantMode;
   initialCfi?: string | null;
   referenceReturnCfi?: string | null;
   returnToHistory?: boolean;
@@ -227,7 +222,6 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
-  const [bookAssistantModes] = useState(loadBookAssistantModes);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -363,7 +357,7 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
           if (supported.length === 1 && !alreadyKnown) {
             singleBookToOpen = format === "pdf"
               ? { type: "pdf", id: stored.id, title: stored.title, file }
-              : { type: "epub", id: stored.id, title: stored.title, file, assistantMode: bookAssistantModes[stored.id] ?? "rewrite" };
+              : { type: "epub", id: stored.id, title: stored.title, file };
           }
         } else {
           importedCount += 1;
@@ -372,7 +366,6 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
               type: "text",
               title: file.name.replace(/\.(txt|md|markdown)$/i, ""),
               text: await file.text(),
-              assistantMode: "rewrite",
             };
           }
         }
@@ -422,7 +415,6 @@ export function Library({ profile, role, authKind, onOpen, onRetest, onProfileCh
           id: book.id,
           title: book.title,
           file,
-          assistantMode: bookAssistantModes[book.id] ?? "rewrite",
         });
       }
     } catch (error) {

@@ -63,16 +63,15 @@ describe("Reader chrome", () => {
         type: "text",
         title: "Two quiet modes",
         text: "A paragraph that can be rewritten or discussed.",
-        assistantMode: "rewrite",
       }}
       profile={profile}
       onClose={() => undefined}
     />);
 
     const rewrite = screen.getByRole("button", { name: "划线后：英文改写。点击切换：AI 提问" });
-    expect(rewrite.textContent).toContain("英");
+    expect(rewrite.textContent).toContain("改写");
     fireEvent.click(rewrite);
-    expect(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" }).textContent).toContain("问");
+    expect(screen.getByRole("button", { name: "划线后：AI 提问。点击切换：英文改写" }).textContent).toContain("提问");
   });
 
   it("keeps EPUB navigation outside the reflowing reading stage", () => {
@@ -81,7 +80,6 @@ describe("Reader chrome", () => {
         type: "epub",
         title: "A Stable Page",
         file: {} as File,
-        assistantMode: "rewrite",
       }}
       profile={profile}
       onClose={() => undefined}
@@ -170,7 +168,6 @@ describe("Reader chrome", () => {
         type: "text",
         title: "Quiet settings",
         text: "A paragraph that should stay where it is.",
-        assistantMode: "rewrite",
       }}
       profile={profile}
       onClose={() => undefined}
@@ -193,7 +190,6 @@ describe("Reader chrome", () => {
         type: "text",
         title: "Quiet appearance",
         text: "A page with opinionated typography.",
-        assistantMode: "rewrite",
       }}
       profile={profile}
       onClose={() => undefined}
@@ -243,7 +239,6 @@ describe("Reader chrome", () => {
         type: "text",
         title: "Quiet selection",
         text: "A selected phrase stays on the current page.",
-        assistantMode: "rewrite",
       }}
       profile={profile}
       onClose={() => undefined}
@@ -308,7 +303,6 @@ describe("Reader chrome", () => {
         type: "text",
         title: "Selectable rewrite",
         text: "The original sentence needs a simpler explanation.",
-        assistantMode: "rewrite",
       }}
       profile={profile}
       onClose={() => undefined}
