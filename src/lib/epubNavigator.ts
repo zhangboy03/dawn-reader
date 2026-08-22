@@ -24,6 +24,8 @@ export interface EpubRenderer {
   turn(direction: EpubTurnDirection): Promise<EpubLocator>;
   snapshot(): Promise<EpubLocator>;
   isAnchorVisible(cfi: string): Promise<boolean>;
+  /** True when the staged publication resource has meaningful visible content. */
+  isPresentable(): Promise<boolean>;
   /** True when keyboard/accessibility focus currently lives in this renderer's browsing context. */
   hasFocus?(): boolean;
   /** Restore browsing-context focus after an atomic renderer swap without scrolling the host page. */
@@ -51,6 +53,8 @@ export type EpubCommit = {
   locator: EpubLocator;
   /** Stable source anchor used for exact persistence; page lists remain display-only. */
   anchor: string | null;
+  /** True only when the requested exact source anchor was validated in this layout. */
+  exactAnchorValidated: boolean;
   cause: EpubNavigationCause;
   userInitiated: boolean;
   atomic: boolean;
@@ -105,6 +109,13 @@ export class EpubAnchorNotVisibleError extends Error {
   constructor(readonly cfi: string) {
     super(`EPUB anchor is not visible after layout: ${cfi}`);
     this.name = "EpubAnchorNotVisibleError";
+  }
+}
+
+export class EpubPresentationNotVisibleError extends Error {
+  constructor() {
+    super("EPUB resource has no meaningful visible presentation after layout.");
+    this.name = "EpubPresentationNotVisibleError";
   }
 }
 
@@ -583,6 +594,7 @@ export class EpubNavigator<Config> {
         renderer: active.renderer,
         locator,
         anchor: locator.cfi,
+        exactAnchorValidated: true,
         cause: "page-turn",
         userInitiated: true,
         atomic: false,
@@ -658,6 +670,7 @@ export class EpubNavigator<Config> {
         ? request.target
         : null;
       let commitAnchor: string | null = null;
+      let exactAnchorValidated = false;
       while (true) {
         while (transition.appliedTurns < transition.turns.length) {
           const direction = transition.turns[transition.appliedTurns];
@@ -674,6 +687,12 @@ export class EpubNavigator<Config> {
           : request.kind === "navigate"
             ? (exactNavigationTarget ?? locator.cfi)
             : (effectiveAnchor ?? locator.cfi);
+        const exactAnchorToValidate = request.validateAnchor
+          && validationCfi
+          && !usedStartFallback
+          && transition.turns.length === 0
+          ? validationCfi
+          : null;
 
         // Expose the validated replacement underneath the old frame and allow
         // it to paint before the swap. This avoids making a visibility-hidden
@@ -690,10 +709,33 @@ export class EpubNavigator<Config> {
         // first settled snapshot and the actual paint. Revalidate the exact
         // commit anchor at the swap boundary while the old readable frame is
         // still on top; a late layout shift can therefore never become visible.
-        if (commitAnchor) {
-          const visible = await renderer.isAnchorVisible(commitAnchor);
+        if (exactAnchorToValidate) {
+          const visible = await renderer.isAnchorVisible(exactAnchorToValidate);
           if (this.isStale(transition)) return this.abandonTransition(transition);
-          if (!visible) throw new EpubAnchorNotVisibleError(commitAnchor);
+          if (!visible) {
+            if (request.allowStartFallback && target) {
+              // A late layout shift can invalidate a saved startup CFI after the
+              // first display check. Rebuild a fresh renderer at publication start;
+              // never reuse the partially mutated candidate or call this fallback
+              // recursively.
+              this.options.setSlotState(slot, "staging");
+              this.safeDestroy(renderer);
+              transition.renderer = null;
+              usedStartFallback = true;
+              transition.appliedTurns = 0;
+              renderer = await this.options.createRenderer(slot, request.config);
+              transition.renderer = renderer;
+              if (this.isStale(transition)) return this.abandonTransition(transition);
+              locator = await renderer.display(undefined);
+              continue;
+            }
+            throw new EpubAnchorNotVisibleError(exactAnchorToValidate);
+          }
+          exactAnchorValidated = true;
+        } else {
+          const presentable = await renderer.isPresentable();
+          if (this.isStale(transition)) return this.abandonTransition(transition);
+          if (!presentable) throw new EpubPresentationNotVisibleError();
         }
         if (transition.appliedTurns < transition.turns.length) {
           this.options.setSlotState(slot, "staging");
@@ -719,6 +761,7 @@ export class EpubNavigator<Config> {
           renderer,
           locator,
           anchor: commitAnchor,
+          exactAnchorValidated,
           cause: transition.turns.length ? "page-turn" : request.cause,
           userInitiated,
           atomic: true,

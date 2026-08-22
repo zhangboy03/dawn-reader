@@ -109,6 +109,10 @@ describe("Reader chrome", () => {
     expect(readerSource).toContain("iframe?.focus({ preventScroll: true })");
     expect(readerSource).not.toContain('annotations.highlight(cfiRange');
     expect(readerSource).toContain("selection?.addRange(range)");
+    expect(readerSource).toContain("电子书未能打开");
+    expect(readerSource).toContain("原文件和已保存的阅读位置都没有被修改");
+    expect(readerSource).toContain("setEpubOpenAttempt((attempt) => attempt + 1)");
+    expect(css).toMatch(/\.epub-resume-status\.is-error\s*\{[^}]*pointer-events:\s*auto/);
   });
 
   it("uses a dynamic viewport shell without fixing the document body", () => {

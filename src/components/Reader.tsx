@@ -97,6 +97,10 @@ import {
   applyEpubTypographyDocument,
   normalizePublicationLanguage,
 } from "../lib/epubTypography";
+import {
+  epubDocumentIsPresentable,
+  settleEpubResourcesWithinLease,
+} from "../lib/epubPresentation";
 
 type RewriteState = "idle" | "loading" | "complete" | "error";
 type AssistanceMode = "english" | "chinese";
@@ -411,6 +415,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const selectionTimerRef = useRef<number | null>(null);
   const hlsInstancesRef = useRef<Set<{ destroy: () => void }>>(new Set());
   const epubMediaCleanupRef = useRef<Set<() => void>>(new Set());
+  const startupExactRestoreRef = useRef(false);
   const imageDialogRef = useRef<HTMLDialogElement>(null);
   const imageReturnFocusRef = useRef<HTMLElement | null>(null);
   const embedDialogRef = useRef<HTMLDialogElement>(null);
@@ -444,6 +449,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   const [locationsReady, setLocationsReady] = useState(false);
   const [epubContentReady, setEpubContentReady] = useState(source.type !== "epub");
   const [epubNavigationBusy, setEpubNavigationBusy] = useState(source.type === "epub");
+  const [epubOpenFailure, setEpubOpenFailure] = useState<string | null>(null);
+  const [epubOpenAttempt, setEpubOpenAttempt] = useState(0);
   const [epubCommittedShellWidth, setEpubCommittedShellWidth] = useState<number | null>(null);
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings);
   settingsRef.current = settings;
@@ -1482,6 +1489,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     setLocationsReady(false);
     setEpubContentReady(false);
     setEpubNavigationBusy(true);
+    setEpubOpenFailure(null);
+    startupExactRestoreRef.current = false;
     setPageNumber(null);
     setTocLoaded(false);
     setTocItems([]);
@@ -1581,6 +1590,8 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         pendingEpubAppearanceAnchorRef.current = null;
       }
       setEpubContentReady(true);
+      setEpubOpenFailure(null);
+      if (commit.cause === "initial") startupExactRestoreRef.current = commit.exactAnchorValidated;
       restoreSelectionOnRenderer(renderer);
 
       if (commit.userInitiated && exactAnchor && !referenceModeRef.current) {
@@ -1600,6 +1611,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       host.style.height = `${config.size.height}px`;
       host.style.setProperty("--epub-slot-scale", "1");
       let destroyed = false;
+      const resourceLeaseController = new AbortController();
       let lastLocator: EpubLocator | null = null;
       const contentLayoutSignatures = new Set<string>();
       const rendererMediaCleanup = new Set<() => void>();
@@ -1954,7 +1966,11 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             ...Array.from(document.querySelectorAll<HTMLVideoElement>("video"), waitForLocalVideoMetadata),
           ];
         });
-        await Promise.allSettled([...fontReadiness, ...mediaReadiness]);
+        await settleEpubResourcesWithinLease(
+          [...fontReadiness, ...mediaReadiness],
+          resourceLeaseController.signal,
+        );
+        if (destroyed || resourceLeaseController.signal.aborted) throw new DOMException("EPUB renderer was superseded.", "AbortError");
         await nextAnimationFrame();
         await nextAnimationFrame();
         await Promise.resolve(rendition.reportLocation?.());
@@ -2008,6 +2024,15 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
           return settleLayout();
         },
         isAnchorVisible,
+        async isPresentable() {
+          const hostRect = host.getBoundingClientRect();
+          const contents = rendition.getContents?.() ?? [];
+          return contents.some((item: any) => {
+            const document = item?.document as Document | undefined;
+            const iframe = document?.defaultView?.frameElement as HTMLElement | null;
+            return Boolean(document && iframe && epubDocumentIsPresentable(document, iframe.getBoundingClientRect(), hostRect));
+          });
+        },
         hasFocus() {
           const ownerDocument = host.ownerDocument;
           return Array.from(host.querySelectorAll<HTMLIFrameElement>("iframe"))
@@ -2022,6 +2047,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         destroy() {
           if (destroyed) return;
           destroyed = true;
+          resourceLeaseController.abort();
           contentLayoutSignatures.clear();
           for (const cleanup of [...rendererMediaCleanup]) cleanup();
           rendererMediaCleanup.clear();
@@ -2106,6 +2132,9 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         onError(failure) {
           epubViewportStabilityRef.current.markRejected();
           if (!cancelled && !failure.retainedReadableFrame) setEpubContentReady(false);
+          if (!cancelled && !failure.retainedReadableFrame) {
+            setEpubOpenFailure(failure.error instanceof Error ? failure.error.message : "电子书未能打开。");
+          }
           console.error("EPUB navigation failed", failure.error);
         },
       });
@@ -2130,7 +2159,12 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
       frameResizeObserver.observe(frameElement);
 
       await navigator.whenIdle();
-      if (cancelled || !navigator.getActiveRenderer()) return;
+      if (cancelled) return;
+      if (!navigator.getActiveRenderer()) {
+        setEpubNavigationBusy(false);
+        setEpubOpenFailure((current) => current ?? "电子书没有可显示的页面。");
+        return;
+      }
 
       if (!locationsGenerated) {
         await book.locations.generate(EPUB_LOCATION_BREAK);
@@ -2147,7 +2181,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         setPageProgress(percentage);
         updatePageNumber(exactAnchor);
         if (exactAnchor) latestRelocatedPositionRef.current = { cfi: exactAnchor, percentage };
-        if (exactAnchor && savedPosition && !referenceModeRef.current && !progressSessionDirtyRef.current) {
+        if (exactAnchor && savedPosition && startupExactRestoreRef.current && !referenceModeRef.current && !progressSessionDirtyRef.current) {
           // Upgrade legacy percentage-only or normalized startup positions to
           // the validated exact CFI without making startup look like newer
           // cross-device reading activity.
@@ -2166,6 +2200,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     }).catch((error) => {
       if (!cancelled) {
         setEpubNavigationBusy(false);
+        setEpubOpenFailure(error instanceof Error ? error.message : "电子书初始化失败。");
         console.error("EPUB initialization failed", error);
       }
     });
@@ -2196,7 +2231,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
     };
     // The navigator owns rendition replacement; appearance changes do not rebuild the Book.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  }, [source, epubOpenAttempt]);
 
   function captureSelection(endpoint: SelectionAssistPoint | null = null) {
     if (source.type !== "text") return;
@@ -2658,7 +2693,19 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
             data-epub-slot="1"
           />
         </div>
-        {!epubContentReady && <div className="epub-resume-status" role="status">正在恢复阅读位置…</div>}
+        {!epubContentReady && (epubOpenFailure
+          ? <section className="epub-resume-status is-error" role="alert" aria-labelledby="epub-open-error-title">
+            <div>
+              <h2 id="epub-open-error-title">电子书未能打开</h2>
+              <p>{epubOpenFailure}</p>
+              <span>原文件和已保存的阅读位置都没有被修改。</span>
+              <nav aria-label="电子书打开失败操作">
+                <button type="button" onClick={() => setEpubOpenAttempt((attempt) => attempt + 1)}>重试</button>
+                <button type="button" onClick={onClose}>返回书架</button>
+              </nav>
+            </div>
+          </section>
+          : <div className="epub-resume-status" role="status">{epubNavigationBusy ? "正在恢复阅读位置…" : "正在准备电子书…"}</div>)}
       </>}
     </main>
 
