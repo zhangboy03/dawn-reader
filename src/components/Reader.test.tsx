@@ -180,13 +180,15 @@ describe("Reader chrome", () => {
     expect(appearance.getByRole("button", { name: "纸白" })).not.toBeNull();
     expect(appearance.getByRole("button", { name: "暖褐" })).not.toBeNull();
     expect(appearance.getByRole("button", { name: "夜读" })).not.toBeNull();
-    expect(appearance.getByText("19", { selector: "output" })).not.toBeNull();
+    expect(view.container.querySelector(".reader-settings output")).toBeNull();
     for (const retiredLabel of ["行距", "行长", "对齐", "段落", "排版", "位置"]) {
       expect(appearance.queryByText(retiredLabel)).toBeNull();
     }
 
     fireEvent.click(appearance.getByRole("button", { name: "增大字号" }));
-    expect(appearance.getByText("20", { selector: "output" })).not.toBeNull();
+    expect(view.container.querySelector<HTMLElement>(".reading-stage")?.style.getPropertyValue("--reader-font-size")).toBe("22px");
+    fireEvent.click(appearance.getByRole("button", { name: "增大字号" }));
+    expect(appearance.getByRole("button", { name: "增大字号" }).hasAttribute("disabled")).toBe(true);
 
     const night = appearance.getByRole("button", { name: "夜读" });
     fireEvent.click(night);

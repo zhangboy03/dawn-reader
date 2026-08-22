@@ -2567,7 +2567,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
         />
         <div className="reader-settings" role="dialog" aria-modal="true" aria-label="阅读设置">
           <div className="setting-font-size">
-            <small>字号 <output aria-live="polite">{settings.fontSize}</output></small>
+            <small>字号</small>
             <button aria-label="减小字号" disabled={settings.fontSize === READER_FONT_SIZES[0]} onClick={() => adjustFontSize(-1)}>A−</button>
             <button aria-label="增大字号" disabled={settings.fontSize === READER_FONT_SIZES[READER_FONT_SIZES.length - 1]} onClick={() => adjustFontSize(1)}>A+</button>
           </div>

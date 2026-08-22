@@ -6,7 +6,7 @@ export type ReaderTextAlign = "justify" | "start";
 export type ReaderParagraphStyle = "book" | "spaced";
 export type ReaderTypographyMode = "dawn" | "publisher";
 
-export const READER_FONT_SIZES = [16, 17, 18, 19, 20, 21, 22, 23, 24] as const;
+export const READER_FONT_SIZES = [16, 18, 20, 22, 24] as const;
 export type ReaderFontSize = typeof READER_FONT_SIZES[number];
 
 export type ReaderSettings = {
@@ -21,7 +21,7 @@ export type ReaderSettings = {
 };
 
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
-  fontSize: 19,
+  fontSize: 20,
   lineHeight: 1.55,
   pageWidth: 760,
   theme: "paper",
