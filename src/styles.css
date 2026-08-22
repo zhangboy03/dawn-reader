@@ -356,35 +356,12 @@ body:has(.onboarding), body:has(.test-screen) {
 .stored-shelf { margin-bottom: 54px; }
 .stored-book { width: 100%; min-height: 150px; position: relative; border-bottom: 1px solid #c4cecd; color: inherit; background: transparent; text-align: left; transition: background-color .2s ease; }
 .stored-book:hover { background: rgba(255, 255, 255, .24); }
-.book-open { width: 100%; min-height: 150px; display: grid; grid-template-columns: 92px 1fr; gap: 30px; padding: 28px 360px 28px 0; border: 0; color: inherit; background: transparent; text-align: left; }
+.book-open { width: 100%; min-height: 150px; display: grid; grid-template-columns: 92px 1fr; gap: 30px; padding: 28px 120px 28px 0; border: 0; color: inherit; background: transparent; text-align: left; }
 .book-open:active { transform: translateY(1px); }
 .book-delete { position: absolute; top: 25px; right: 8px; min-height: 38px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; color: #75858a; background: transparent; font-size: 10px; }
 .book-delete span { display: inline-block; margin-right: 4px; font-size: 15px; font-weight: 300; transform: translateY(1px); }
 .book-delete:hover { border-color: #d8c4be; color: #9d4337; background: #f5eae7; }
 .book-delete:disabled { opacity: .45; }
-.book-assistant-menu { position: absolute; z-index: 3; right: 8px; bottom: 24px; }
-.book-assistant-trigger { min-height: 44px; display: grid; grid-template-columns: 30px auto 12px; align-items: center; gap: 9px; padding: 5px 8px 5px 6px; border: 0; border-radius: 9px; color: #42535a; background: transparent; text-align: left; transition: color .18s ease, background-color .18s ease; }
-.book-assistant-trigger:hover, .book-assistant-menu.open .book-assistant-trigger { color: #26363d; background: rgba(255, 255, 255, .56); }
-.assistant-mode-mark, .assistant-option-mark { display: grid; place-items: center; border: 1px solid #aebbbb; color: #53646a; background: rgba(247, 249, 247, .72); font: 650 10px/1 "Iowan Old Style", Baskerville, Georgia, serif; }
-.assistant-mode-mark { width: 30px; height: 30px; border-radius: 50% 50% 50% 4px; }
-.assistant-mode-mark.ask, .assistant-option-mark.ask { border-color: #c79078; color: var(--accent-strong); }
-.assistant-mode-current { display: grid; gap: 2px; min-width: 72px; }
-.assistant-mode-current small { color: #849195; font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .08em; }
-.assistant-mode-current strong { font-size: 11px; font-weight: 650; white-space: nowrap; }
-.assistant-chevron { width: 7px; height: 7px; justify-self: center; border-right: 1px solid #879396; border-bottom: 1px solid #879396; transform: translateY(-2px) rotate(45deg); transition: transform .18s ease; }
-.book-assistant-menu.open .assistant-chevron { transform: translateY(2px) rotate(225deg); }
-.book-assistant-popover { width: 286px; position: absolute; right: 0; bottom: calc(100% + 9px); padding: 8px; border: 1px solid #b8c3c2; border-radius: 13px; color: #304047; background: rgba(247, 249, 247, .97); box-shadow: 0 22px 48px rgba(37, 52, 57, .2); backdrop-filter: blur(18px); animation: assistant-menu-in .16s cubic-bezier(.2, .8, .2, 1); }
-.book-assistant-popover::after { content: ""; position: absolute; right: 20px; bottom: -5px; width: 9px; height: 9px; border-right: 1px solid #b8c3c2; border-bottom: 1px solid #b8c3c2; background: #f7f9f7; transform: rotate(45deg); }
-.book-assistant-popover > p { margin: 0; padding: 6px 9px 9px; color: #7c898d; font: 8px/1 "SFMono-Regular", monospace; letter-spacing: .08em; }
-.book-assistant-popover > button { width: 100%; min-height: 58px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 20px; align-items: center; gap: 11px; padding: 8px 9px; border: 0; border-top: 1px solid #d8dfdd; color: #526269; background: transparent; text-align: left; }
-.book-assistant-popover > button:first-of-type { border-top: 0; }
-.book-assistant-popover > button:hover { background: #eef2ef; }
-.book-assistant-popover > button.selected { color: #26363d; }
-.assistant-option-mark { width: 32px; height: 32px; border-radius: 50% 50% 50% 4px; }
-.book-assistant-popover > button > span:nth-child(2) { display: grid; gap: 4px; }
-.book-assistant-popover strong { font-size: 12px; font-weight: 650; }
-.book-assistant-popover small { color: #7c898d; font-size: 9px; font-weight: 400; }
-.book-assistant-popover i { color: var(--accent-strong); font-size: 12px; font-style: normal; text-align: center; }
 .delete-dialog-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(16, 26, 36, .42); backdrop-filter: blur(7px); }
 .delete-dialog { width: min(470px, 100%); padding: 28px; border: 1px solid #b7c2c2; border-radius: var(--radius-panel); color: #2f3d43; background: #f7f8f5; box-shadow: 0 30px 80px rgba(25, 40, 47, .28); }
 .delete-dialog > small { color: #9d4337; font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
@@ -474,11 +451,6 @@ body:has(.onboarding), body:has(.test-screen) {
 .stored-spine.pdf > span { position: relative; z-index: 1; color: #748185; }
 .stored-spine.pdf > strong { position: relative; z-index: 1; color: #25353a; font: 600 23px/1 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.03em; }
 .stored-spine.pdf i { position: relative; z-index: 1; border-top-color: #9aa8aa; }
-.pdf-assistance-summary { position: absolute; right: 8px; bottom: 24px; min-height: 44px; display: grid; grid-template-columns: 30px auto; align-items: center; gap: 9px; color: #42535a; }
-.pdf-assistance-summary > span { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #c79078; border-radius: 50% 50% 50% 4px; color: var(--accent-strong); font: 600 10px/1 "Iowan Old Style", serif; }
-.pdf-assistance-summary > div { display: grid; gap: 2px; }
-.pdf-assistance-summary small { color: #849195; font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .08em; }
-.pdf-assistance-summary strong { font-size: 10px; font-weight: 650; white-space: nowrap; }
 
 /* Reader */
 .reader-shell {
@@ -551,6 +523,10 @@ body:has(.onboarding), body:has(.test-screen) {
 .pencil-switch button { min-width: 48px; height: 30px; padding: 0 9px; border: 0; border-radius: 5px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
 .pencil-switch button:hover { color: var(--reader-chrome-ink); }
 .pencil-switch button.active { color: #fff8f2; background: var(--reader-control-active); }
+.assistant-mode-toggle { width: 40px; height: 40px; display: inline-grid; place-items: center; padding: 0; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
+.assistant-mode-toggle > span { font: 650 11px/1 "Avenir Next", Avenir, sans-serif; }
+.assistant-mode-toggle:hover,
+.assistant-mode-toggle[data-mode="ask"] { border-color: var(--reader-control-active); color: var(--reader-control-active); }
 .type-button { width: 40px; height: 40px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-ink); background: var(--reader-control); font: 600 13px "Iowan Old Style", serif; }
 .type-button:hover { border-color: var(--reader-control-active); color: var(--reader-control-active); }
 .toc-button { min-width: 64px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--reader-chrome-line); border-radius: var(--radius-control); color: var(--reader-chrome-muted); background: var(--reader-control); }
@@ -730,11 +706,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .assist-retry { min-height: 38px; margin-top: 10px; padding: 0 12px; border: 1px solid var(--reader-note-line); border-radius: 6px; color: var(--reader-note-ink); background: transparent; font-size: 11px; }
 .rewrite-wait { height: 30px; margin-top: 8px; display: flex; align-items: center; gap: 10px; color: #747f7d; font: italic 12px "Iowan Old Style", serif; }
 .rewrite-wait > i { width: 18px; border-top: 1px solid var(--accent); animation: waiting-line .8s ease-in-out infinite alternate; }
-.chat-capability { color: var(--reader-chrome-muted); font: 8px/1 "SFMono-Regular", monospace; letter-spacing: 0; }
-.chat-selection { padding: 9px 11px; border-left: 2px solid color-mix(in srgb, var(--accent) 72%, transparent); background: color-mix(in srgb, var(--reader-note-line) 20%, transparent); }
-.chat-selection span { display: block; margin-bottom: 4px; color: var(--reader-chrome-muted); font: 7px/1 "SFMono-Regular", monospace; letter-spacing: .07em; text-transform: uppercase; }
-.chat-selection p { min-height: 0; max-height: 42px; margin: 0; overflow: hidden; color: var(--reader-chrome-muted); font: 400 12px/1.55 "Iowan Old Style", Baskerville, Georgia, serif; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.chat-thread { margin: 12px -2px 0 0; padding-right: 7px; }
+.chat-thread { margin: 0 -2px 0 0; padding-right: 7px; }
 .chat-message { position: relative; padding: 0 0 13px 17px; border-left: 1px solid var(--reader-note-line); }
 .chat-message::before { content: ""; position: absolute; top: 4px; left: -3px; width: 5px; height: 5px; border-radius: 50%; background: var(--reader-note-line); }
 .chat-message.assistant::before { background: var(--accent); }
@@ -756,7 +728,6 @@ body:has(.onboarding), body:has(.test-screen) {
 .chat-compose button { width: 44px; height: 44px; border: 1px solid var(--reader-control-active); border-radius: 50%; color: #fff8f2; background: var(--reader-control-active); font-size: 17px; }
 .chat-compose button:disabled { border-color: var(--reader-note-line); color: var(--reader-chrome-muted); background: transparent; opacity: .55; }
 
-@keyframes assistant-menu-in { from { opacity: 0; transform: translateY(5px) scale(.985); } }
 @keyframes waiting-line { from { width: 7px; opacity: .45; } to { width: 22px; opacity: 1; } }
 @keyframes sync-pulse { from { opacity: .38; } to { opacity: 1; } }
 @keyframes sync-backdrop-in { from { opacity: 0; } }
@@ -805,15 +776,10 @@ body:has(.onboarding), body:has(.test-screen) {
   .shelf-heading { align-items: stretch; flex-direction: column; gap: 18px; padding-bottom: 18px; }
   .shelf-heading > div { min-height: 29px; }
   .shelf-search { width: 100%; margin-bottom: 0; }
-  .stored-book { min-height: 196px; }
-  .book-open { min-height: 196px; grid-template-columns: 70px 1fr; gap: 18px; padding: 24px 48px 76px 0; }
+  .stored-book { min-height: 150px; }
+  .book-open { min-height: 150px; grid-template-columns: 70px 1fr; gap: 18px; padding: 24px 48px 24px 0; }
   .stored-cover, .stored-spine { width: 61px; height: 94px; }
   .stored-cover.pdf-paper { width: 70.5px; }
-  .book-assistant-menu { right: auto; bottom: 15px; left: -5px; }
-  .pdf-assistance-summary { right: auto; bottom: 16px; left: 0; }
-  .book-assistant-popover { right: auto; left: 0; }
-  .book-assistant-popover::after { right: auto; left: 19px; }
-
   .reader-topbar { grid-template-columns: minmax(68px, 1fr) minmax(0, 1.4fr) minmax(68px, 1fr); gap: 8px; padding-right: max(10px, env(safe-area-inset-right)); padding-left: max(10px, env(safe-area-inset-left)); }
   .reading-stage { min-height: 0; padding: 14px 10px 24px; }
   .reading-stage.epub-stage { padding: 10px; }

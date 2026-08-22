@@ -15,6 +15,7 @@ const anchor: SelectionAssistAnchor = {
   direction: "forward",
   strategy: "direction",
 };
+const emptyChat = { draft: "", messages: [], state: "idle" as const, error: "", sources: [] };
 
 class Observer {
   observe() {}
@@ -41,11 +42,16 @@ describe("PDF selection card", () => {
     const onHighlight = vi.fn();
     const { rerender } = render(<PdfSelectionCard
       anchor={anchor}
+      mode="rewrite"
       state={{ english: { phase: "loading", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
+      chat={emptyChat}
       highlightState={{ phase: "idle", message: "" }}
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
+      onChatDraftChange={() => undefined}
+      onChatSubmit={() => undefined}
+      onChatRetry={() => undefined}
       onClose={() => undefined}
     />);
     expect(screen.queryByRole("button", { name: "中文" })).not.toBeInTheDocument();
@@ -54,11 +60,16 @@ describe("PDF selection card", () => {
 
     rerender(<PdfSelectionCard
       anchor={anchor}
+      mode="rewrite"
       state={{ english: { phase: "success", text: "Clear English", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
+      chat={emptyChat}
       highlightState={{ phase: "saved", message: "高亮已保存在本机" }}
       onHighlight={onHighlight}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
+      onChatDraftChange={() => undefined}
+      onChatSubmit={() => undefined}
+      onChatRetry={() => undefined}
       onClose={() => undefined}
     />);
     expect(screen.getByText("Clear English")).toBeInTheDocument();
@@ -70,16 +81,62 @@ describe("PDF selection card", () => {
     const onChinese = vi.fn();
     render(<PdfSelectionCard
       anchor={anchor}
+      mode="rewrite"
       state={{ english: { phase: "success", text: "Clear English", error: "" }, chinese: { phase: "error", text: "", error: "中文解释暂时失败。" } }}
+      chat={emptyChat}
       highlightState={{ phase: "error", message: "标记未保存" }}
       onHighlight={() => undefined}
       onChinese={onChinese}
       onRetryEnglish={() => undefined}
+      onChatDraftChange={() => undefined}
+      onChatSubmit={() => undefined}
+      onChatRetry={() => undefined}
       onClose={() => undefined}
     />);
     expect(screen.getByText("Clear English")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重试中文" }));
     expect(onChinese).toHaveBeenCalledOnce();
     expect(screen.getByText("标记未保存")).toBeInTheDocument();
+  });
+
+  it("keeps question mode quiet until the reader types and never repeats the selected passage", () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(<PdfSelectionCard
+      anchor={anchor}
+      mode="ask"
+      state={{ english: { phase: "idle", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
+      chat={emptyChat}
+      highlightState={{ phase: "idle", message: "" }}
+      onHighlight={() => undefined}
+      onChinese={() => undefined}
+      onRetryEnglish={() => undefined}
+      onChatDraftChange={() => undefined}
+      onChatSubmit={onSubmit}
+      onChatRetry={() => undefined}
+      onClose={() => undefined}
+    />);
+
+    expect(screen.getByRole("dialog", { name: "AI 提问" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("输入你想问的问题…")).toBeInTheDocument();
+    expect(screen.queryByText("选中")).not.toBeInTheDocument();
+    expect(screen.queryByText("局部上下文")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送问题" })).toBeDisabled();
+
+    rerender(<PdfSelectionCard
+      anchor={anchor}
+      mode="ask"
+      state={{ english: { phase: "idle", text: "", error: "" }, chinese: { phase: "idle", text: "", error: "" } }}
+      chat={{ ...emptyChat, draft: "这和上一段有什么关系？" }}
+      highlightState={{ phase: "idle", message: "" }}
+      onHighlight={() => undefined}
+      onChinese={() => undefined}
+      onRetryEnglish={() => undefined}
+      onChatDraftChange={() => undefined}
+      onChatSubmit={onSubmit}
+      onChatRetry={() => undefined}
+      onClose={() => undefined}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
   });
 });

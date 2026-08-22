@@ -528,6 +528,7 @@ export function PdfReader({ source, profile, onClose }: {
       cancelled = true;
       englishControllerRef.current?.abort();
       chineseControllerRef.current?.abort();
+      chatControllerRef.current?.abort();
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
       if (supplementaryIdleId !== null) window.cancelIdleCallback(supplementaryIdleId);
@@ -590,6 +591,7 @@ export function PdfReader({ source, profile, onClose }: {
   const requestEnglish = useCallback(async (snapshot: SelectionSnapshot, version: number) => {
     englishControllerRef.current?.abort();
     chineseControllerRef.current?.abort();
+    chatControllerRef.current?.abort();
     const controller = new AbortController();
     englishControllerRef.current = controller;
     setAssistance({
@@ -693,8 +695,14 @@ export function PdfReader({ source, profile, onClose }: {
     setSelection(snapshot);
     setActiveHighlight(null);
     setHighlightState({ phase: "idle", message: "" });
-    void requestEnglish(snapshot, version);
-  }, [closeSelection, requestEnglish]);
+    setChatDraft("");
+    setChatMessages([]);
+    setChatState("idle");
+    setChatError("");
+    setChatSources([]);
+    if (assistantMode === "rewrite") void requestEnglish(snapshot, version);
+    else setAssistance(initialSelectionAssistanceState);
+  }, [assistantMode, closeSelection, requestEnglish]);
 
   function pdfAssistBoundary(): SelectionAssistVisibleBounds {
     const visual = currentPdfVisualBounds();
@@ -838,6 +846,68 @@ export function PdfReader({ source, profile, onClose }: {
       }));
     }
   }, [assistance.english.phase, profile.preset, selection]);
+
+  const sendQuestion = useCallback(async (question: string, history = chatMessages) => {
+    const trimmed = question.trim();
+    if (!selection || !trimmed || chatState === "loading") return;
+    const outgoing = [...history, { role: "user" as const, content: trimmed }];
+    const version = selectionVersionRef.current;
+    chatControllerRef.current?.abort();
+    englishControllerRef.current?.abort();
+    chineseControllerRef.current?.abort();
+    const controller = new AbortController();
+    chatControllerRef.current = controller;
+    setChatMessages(outgoing);
+    setChatDraft("");
+    setChatState("loading");
+    setChatError("");
+    setChatSources([]);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: selection.text.slice(0, 2400),
+          context: selection.context,
+          bookTitle: source.title,
+          messages: outgoing,
+        }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => null) as {
+        answer?: string;
+        error?: string;
+        sources?: SelectionChatSource[];
+      } | null;
+      if (!response.ok || !data?.answer?.trim()) throw new Error(data?.error ?? "没有收到回答。");
+      if (selectionVersionRef.current !== version) return;
+      setChatMessages([...outgoing, { role: "assistant", content: data.answer.trim() }]);
+      setChatSources(data.sources ?? []);
+      setChatState("idle");
+    } catch (error) {
+      if (controller.signal.aborted || selectionVersionRef.current !== version) return;
+      setChatError(error instanceof Error ? error.message : "对话失败，请稍后重试。");
+      setChatState("error");
+    }
+  }, [chatMessages, chatState, selection, source.title]);
+
+  const toggleAssistantMode = useCallback(() => {
+    const next: BookAssistantMode = assistantMode === "rewrite" ? "ask" : "rewrite";
+    setAssistantMode(next);
+    saveBookAssistantMode(source.id, next);
+    setAppearanceOpen(false);
+    setSearchOpen(false);
+    chatControllerRef.current?.abort();
+    englishControllerRef.current?.abort();
+    chineseControllerRef.current?.abort();
+    setChatDraft("");
+    setChatMessages([]);
+    setChatState("idle");
+    setChatError("");
+    setChatSources([]);
+    setAssistance(initialSelectionAssistanceState);
+    if (next === "rewrite" && selection) void requestEnglish(selection, selectionVersionRef.current);
+  }, [assistantMode, requestEnglish, selection, source.id]);
 
   const applyPageInput = useCallback(() => {
     const viewer = pdfViewerRef.current;
@@ -1012,6 +1082,7 @@ export function PdfReader({ source, profile, onClose }: {
           <button type="button" className="dawn-pdf-fit" title={scaleLabel} aria-label={`当前缩放：${scaleLabel}`} onClick={() => setViewerFit(fit === "width" ? "page" : "width")}>{fit === "page" ? "适合页面" : "适合宽度"}</button>
           <button type="button" aria-label="放大" disabled={scale >= MAX_SCALE && fit === "custom"} onClick={() => zoom(1.1)}>＋</button>
         </div>
+        <AssistantModeToggle mode={assistantMode} onToggle={toggleAssistantMode} className="dawn-pdf-assistant-toggle" />
         <button
           type="button"
           className="dawn-pdf-appearance-toggle"
@@ -1126,11 +1197,25 @@ export function PdfReader({ source, profile, onClose }: {
       returnFocus={() => scrollRef.current}
       layoutKey={`${selection.pageIndex}:${pageNumber}:${scale}:${fit}:${sidebarOpen ? 1 : 0}`}
       dragResetKey={selectionVersionRef.current}
+      mode={assistantMode}
       state={assistance}
+      chat={{
+        draft: chatDraft,
+        messages: chatMessages,
+        state: chatState,
+        error: chatError,
+        sources: chatSources,
+      }}
       highlightState={highlightState}
       onHighlight={addHighlight}
       onChinese={() => void requestChinese()}
       onRetryEnglish={() => void requestEnglish(selection, selectionVersionRef.current)}
+      onChatDraftChange={setChatDraft}
+      onChatSubmit={() => void sendQuestion(chatDraft)}
+      onChatRetry={() => {
+        const last = chatMessages.at(-1);
+        if (last?.role === "user") void sendQuestion(last.content, chatMessages.slice(0, -1));
+      }}
       onClose={closeSelection}
     />}
 

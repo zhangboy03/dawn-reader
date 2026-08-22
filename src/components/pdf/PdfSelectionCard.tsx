@@ -1,6 +1,14 @@
 import type { SelectionAssistAnchor, SelectionAssistVisibleBounds } from "../../lib/selectionAssistAnchor";
 import { canRequestChinese, type SelectionAssistanceState } from "../../lib/selectionAssistance";
+import type { BookAssistantMode } from "../../lib/bookAssistantMode";
 import { SelectionAssistSurface } from "../selection-assist/SelectionAssistSurface";
+import {
+  SelectionChatBody,
+  SelectionChatComposer,
+  type SelectionChatMessage,
+  type SelectionChatSource,
+  type SelectionChatState,
+} from "../selection-assist/SelectionChat";
 
 export type SelectionCardAnchor = SelectionAssistAnchor;
 
@@ -11,11 +19,16 @@ export function PdfSelectionCard({
   getEventTargets,
   getBoundaryElement,
   returnFocus,
+  mode,
   state,
+  chat,
   highlightState,
   onHighlight,
   onChinese,
   onRetryEnglish,
+  onChatDraftChange,
+  onChatSubmit,
+  onChatRetry,
   onClose,
   layoutKey = 0,
   dragResetKey = 0,
@@ -26,19 +39,33 @@ export function PdfSelectionCard({
   getEventTargets?: () => Array<EventTarget | null | undefined>;
   getBoundaryElement?: () => Element | null;
   returnFocus?: () => HTMLElement | null;
+  mode: BookAssistantMode;
   state: SelectionAssistanceState;
+  chat: {
+    draft: string;
+    messages: SelectionChatMessage[];
+    state: SelectionChatState;
+    error: string;
+    sources: SelectionChatSource[];
+  };
   highlightState: { phase: "idle" | "saving" | "saved" | "error"; message: string };
   onHighlight: () => void;
   onChinese: () => void;
   onRetryEnglish: () => void;
+  onChatDraftChange: (value: string) => void;
+  onChatSubmit: () => void;
+  onChatRetry: () => void;
   onClose: () => void;
   layoutKey?: string | number;
   dragResetKey?: string | number;
 }) {
-  const showChinese = state.english.phase === "success" || state.chinese.phase !== "idle";
-  const error = state.english.phase === "error" || state.chinese.phase === "error" || highlightState.phase === "error";
+  const showChinese = mode === "rewrite" && (state.english.phase === "success" || state.chinese.phase !== "idle");
+  const error = mode === "rewrite"
+    ? state.english.phase === "error" || state.chinese.phase === "error" || highlightState.phase === "error"
+    : chat.state === "error" || highlightState.phase === "error";
   const contentLayoutKey = [
     layoutKey,
+    mode,
     state.english.phase,
     state.english.text.length,
     state.english.error.length,
@@ -47,12 +74,17 @@ export function PdfSelectionCard({
     state.chinese.error.length,
     highlightState.phase,
     highlightState.message.length,
+    chat.state,
+    chat.messages.length,
+    chat.messages.reduce((total, message) => total + message.content.length, 0),
+    chat.sources.length,
+    chat.draft.length,
   ].join(":");
 
   return <SelectionAssistSurface
-    title="简明英文"
-    ariaLabel="所选文字辅助"
-    className={`pdf-selection-assist ${error ? "is-error" : ""}`}
+    title={mode === "ask" ? "AI 提问" : "简明英文"}
+    ariaLabel={mode === "ask" ? "AI 提问" : "所选文字辅助"}
+    className={`pdf-selection-assist ${mode === "ask" ? "ask-mode" : "rewrite-mode"} ${error ? "is-error" : ""}`}
     actions={<>
       <button
         type="button"
@@ -79,9 +111,16 @@ export function PdfSelectionCard({
     layoutKey={contentLayoutKey}
     dragResetKey={dragResetKey}
     maximumHeight={560}
-    minimumUsefulHeight={184}
+    minimumUsefulHeight={mode === "ask" ? 156 : 184}
+    footer={mode === "ask" ? <SelectionChatComposer
+      draft={chat.draft}
+      messages={chat.messages}
+      state={chat.state}
+      onDraftChange={onChatDraftChange}
+      onSubmit={onChatSubmit}
+    /> : undefined}
   >
-    <div aria-live="polite">
+    {mode === "rewrite" ? <div aria-live="polite">
       {state.english.phase === "idle" && <p className="pdf-selection-loading">正在读取所选内容…</p>}
       {state.english.phase === "loading" && <p className="pdf-selection-loading">正在生成简明英文…</p>}
       {state.english.phase === "success" && <p className="pdf-selection-result">{state.english.text}</p>}
@@ -100,6 +139,15 @@ export function PdfSelectionCard({
       </section>}
 
       {highlightState.message && <p className={`pdf-selection-feedback ${highlightState.phase}`}>{highlightState.message}</p>}
-    </div>
+    </div> : <div>
+      <SelectionChatBody
+        messages={chat.messages}
+        state={chat.state}
+        error={chat.error}
+        sources={chat.sources}
+        onRetry={onChatRetry}
+      />
+      {highlightState.message && <p className={`pdf-selection-feedback ${highlightState.phase}`}>{highlightState.message}</p>}
+    </div>}
   </SelectionAssistSurface>;
 }
