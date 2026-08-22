@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_READER_SETTINGS, READER_FONT_SIZES, normalizeReaderSettings } from "./readerSettings";
 
 describe("reader settings", () => {
-  it("migrates old settings to the Dawn typography defaults", () => {
+  it("migrates old settings to the five-step Dawn typography defaults", () => {
     expect(normalizeReaderSettings({ fontSize: 21, theme: "night" })).toEqual({
       ...DEFAULT_READER_SETTINGS,
-      fontSize: 21,
+      fontSize: 20,
       theme: "night",
     });
   });
@@ -26,8 +26,10 @@ describe("reader settings", () => {
     });
   });
 
-  it("offers fine one-pixel font steps across the readable range", () => {
-    expect(READER_FONT_SIZES).toEqual([16, 17, 18, 19, 20, 21, 22, 23, 24]);
+  it("offers five quiet font steps with the middle size as the default", () => {
+    expect(READER_FONT_SIZES).toEqual([16, 18, 20, 22, 24]);
+    expect(DEFAULT_READER_SETTINGS.fontSize).toBe(READER_FONT_SIZES[2]);
+    expect(normalizeReaderSettings({ fontSize: 19 }).fontSize).toBe(20);
     expect(normalizeReaderSettings({ fontSize: 22.4 }).fontSize).toBe(22);
     expect(normalizeReaderSettings({ fontSize: 99 }).fontSize).toBe(24);
   });

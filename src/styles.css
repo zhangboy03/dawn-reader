@@ -581,7 +581,6 @@ body:has(.onboarding), body:has(.test-screen) {
 .reader-settings > div.setting-font-size { grid-template-columns: 52px repeat(2, 1fr); }
 .reader-settings > div:last-child { border: 0; }
 .reader-settings small { color: var(--reader-chrome-muted); font-size: 9px; }
-.reader-settings output { color: var(--reader-chrome-ink); font: inherit; font-variant-numeric: tabular-nums; }
 .reader-settings button { min-height: 32px; border: 1px solid var(--reader-chrome-line); border-radius: 6px; color: var(--reader-chrome-muted); background: transparent; font-size: 10px; }
 .reader-settings button:hover, .reader-settings button.active { border-color: var(--reader-control-active); color: var(--reader-control-active); background: var(--reader-control); }
 .reader-settings button:disabled { border-color: var(--reader-chrome-line); color: var(--reader-chrome-muted); background: transparent; opacity: .38; cursor: default; }
@@ -609,7 +608,7 @@ body:has(.onboarding), body:has(.test-screen) {
 .paper h1 { margin: 0 0 34px; padding-bottom: 24px; border-bottom: 1px solid #bdc6c3; font: 500 clamp(34px, 4vw, 50px)/1.08 "Iowan Old Style", Baskerville, Georgia, serif; letter-spacing: -.04em; text-wrap: balance; }
 .paper-night h1 { border-color: #4a5d67; }
 .reading-columns { column-count: 2; column-gap: clamp(48px, 6vw, 78px); column-rule: 1px solid rgba(79, 96, 99, .2); }
-.paper p { font: 400 var(--reader-font-size, 19px)/var(--reader-line-height, 1.55) "Iowan Old Style", Baskerville, Georgia, serif; font-kerning: normal; orphans: 2; widows: 2; text-wrap: pretty; }
+.paper p { font: 400 var(--reader-font-size, 20px)/var(--reader-line-height, 1.55) "Iowan Old Style", Baskerville, Georgia, serif; font-kerning: normal; orphans: 2; widows: 2; text-wrap: pretty; }
 .paper[data-dawn-typography-mode="dawn"][data-dawn-text-align="justify"] p { text-align: justify; hyphens: auto; hyphenate-limit-chars: 6 3 3; }
 .paper[data-dawn-typography-mode="dawn"][data-dawn-text-align="start"] p { text-align: start; hyphens: none; }
 .paper[data-dawn-typography-mode="dawn"][data-dawn-paragraph-style="book"] p { margin: 0; text-indent: 1.25em; }
