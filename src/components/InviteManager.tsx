@@ -17,7 +17,8 @@ export function InviteManager({ initialOverview }: { initialOverview: OwnerInvit
 
   async function createInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setBusy(true);
     setError("");
     try {
@@ -30,8 +31,9 @@ export function InviteManager({ initialOverview }: { initialOverview: OwnerInvit
         }),
       });
       if (!response.ok) throw new Error("create failed");
-      setCreated(await response.json() as CreatedInvite);
-      event.currentTarget.reset();
+      const createdInvite = await response.json() as CreatedInvite;
+      formElement.reset();
+      setCreated(createdInvite);
     } catch {
       setError("邀请码创建失败。没有向测试者发送任何内容，请稍后重试。");
     } finally {
