@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { canSpeakWord, pronunciationWord, speakEnglishWord } from "./wordPronunciation";
+import {
+  canSpeakWord,
+  pronunciationWord,
+  speakEnglishWord,
+  wordPronunciationExperimentEnabled,
+} from "./wordPronunciation";
 
 class MockUtterance {
   lang = "";
@@ -8,6 +13,10 @@ class MockUtterance {
 }
 
 describe("word pronunciation", () => {
+  it("keeps browser pronunciation out of the current reader experience", () => {
+    expect(wordPronunciationExperimentEnabled()).toBe(false);
+  });
+
   it.each([
     ["quality", "quality"],
     ["“quality”", "quality"],

@@ -18,7 +18,11 @@ import {
 } from "../lib/readerSettings";
 import { contextFromParagraphs, type RewriteContext } from "../lib/rewriteContext";
 import { selectionKind } from "../lib/selectionKind";
-import { canSpeakWord, speakEnglishWord } from "../lib/wordPronunciation";
+import {
+  canSpeakWord,
+  speakEnglishWord,
+  wordPronunciationExperimentEnabled,
+} from "../lib/wordPronunciation";
 import {
   selectionAssistAnchorFromRange,
   type SelectionAssistAnchor,
@@ -463,6 +467,7 @@ export function Reader({ source, profile, onClose }: { source: BookSource; profi
   }
 
   useEffect(() => {
+    if (!wordPronunciationExperimentEnabled()) return;
     setWordSpeechAvailable(canSpeakWord());
   }, []);
 
