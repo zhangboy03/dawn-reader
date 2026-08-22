@@ -44,6 +44,7 @@ describe("shared selection-assistance consumers", () => {
     expect(reader).toContain("reader-pronunciation-action");
     expect(reader).toContain("reader-chinese-detail-action");
     expect(reader).toContain("播放发音");
+    expect(reader).toContain("wordPronunciationExperimentEnabled");
     expect(reader).toContain("chat-compose");
     expect(reader).toContain("chat-sources");
     expect(pdfCard).toContain("pdf-highlight-action");

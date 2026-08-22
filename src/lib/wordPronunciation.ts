@@ -5,6 +5,11 @@ type SpeechRuntime = {
   SpeechSynthesisUtterance?: typeof SpeechSynthesisUtterance;
 };
 
+// Kept dormant so the browser voice can return only as an explicit experiment.
+export function wordPronunciationExperimentEnabled() {
+  return false;
+}
+
 export function pronunciationWord(selection: string) {
   return selection.trim().match(ENGLISH_WORD)?.[0] ?? "";
 }
