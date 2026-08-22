@@ -285,7 +285,7 @@ export function PdfReader({ source, profile, onClose }: {
     const toggleBounds = toggle.getBoundingClientRect();
     setAppearanceAnchor({
       x: toggleBounds.left + toggleBounds.width / 2,
-      y: toggleBounds.bottom + 8,
+      y: toggleBounds.bottom + 4,
     });
   }, []);
 
